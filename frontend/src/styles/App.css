@@ -1,24 +1,88 @@
-/* App.css */
+/* App.css - Login Page */
 
 .container {
-  max-width: 400px;
-  margin: 50px auto;
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 40px 30px;
+  background: rgba(26, 26, 26, 0.95);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 165, 0, 0.2);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.container h2 {
+  color: orange;
+  margin-bottom: 30px;
+  font-size: 2em;
+  font-weight: 600;
   text-align: center;
 }
 
-input { 
-  padding: 10px;
-  width: 100%;
-  margin-bottom: 10px;
+.container form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
-button {
-  padding: 10px 20px;
+.container input { 
+  padding: 14px 16px;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 165, 0, 0.3);
+  border-radius: 8px;
+  color: white;
+  font-size: 15px;
+  transition: all 0.3s ease;
+  box-sizing: border-box;
+}
+
+.container input:focus {
+  outline: none;
+  border-color: orange;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 3px rgba(255, 165, 0, 0.1);
+}
+
+.container input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.container button {
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #ff8c00, #ff6600);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 10px;
+}
+
+.container button:hover {
+  background: linear-gradient(135deg, #ff9500, #ff7700);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 140, 0, 0.4);
+}
+
+.container button:active {
+  transform: translateY(0);
 }
 
 .error-message {
-  color: red;
+  color: #ff4444;
+  background: rgba(255, 68, 68, 0.1);
+  padding: 12px;
+  border-radius: 6px;
+  border-left: 3px solid #ff4444;
   margin-top: 10px;
+  font-size: 14px;
+  text-align: left;
 }
 
 .dashboard {
