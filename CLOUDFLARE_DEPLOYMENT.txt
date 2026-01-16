@@ -1,0 +1,315 @@
+================================================================================
+                DEPLOY TO CLOUDFLARE PAGES + RAILWAY
+================================================================================
+
+RECOMMENDED SETUP:
+------------------
+Frontend: Cloudflare Pages (FREE, unlimited bandwidth)
+Backend + Database: Railway (~$10/month)
+
+This gives you the best performance and lowest cost!
+
+================================================================================
+STEP 1: DEPLOY BACKEND + DATABASE ON RAILWAY (15 minutes)
+================================================================================
+
+A. Deploy Database
+------------------
+1. Go to: https://railway.com/project/54cc0d2b-2b30-4e44-a2ae-94179dce0104
+2. Click "New" → "Database" → "Add PostgreSQL"
+3. Wait for deployment
+4. Click PostgreSQL service → "Variables" tab
+5. Copy these values:
+   - PGHOST
+   - PGPORT
+   - PGUSER
+   - PGPASSWORD
+   - PGDATABASE
+
+B. Deploy Backend
+-----------------
+1. Click "New" → "GitHub Repo"
+2. Connect repository: SMOKi_web_design_3
+3. Branch: skhart
+4. Configure:
+   - Root Directory: backend
+   - Start Command: uvicorn main:app --host 0.0.0.0 --port $PORT
+
+5. Add Environment Variables (click "Variables" tab):
+   DB_HOST = (paste PGHOST)
+   DB_NAME = (paste PGDATABASE)
+   DB_USER = (paste PGUSER)
+   DB_PASSWORD = (paste PGPASSWORD)
+   DB_PORT = (paste PGPORT)
+
+6. Click "Deploy"
+7. Wait for deployment
+8. Copy your backend URL (e.g., https://smoki-backend.up.railway.app)
+
+================================================================================
+STEP 2: DEPLOY FRONTEND ON CLOUDFLARE PAGES (10 minutes)
+================================================================================
+
+A. Prepare Frontend
+-------------------
+1. Update frontend/.env.production:
+   VITE_API_URL=https://your-backend-url.railway.app
+   (Use the URL from Step 1B8)
+
+2. Commit and push to GitHub:
+   git add frontend/.env.production
+   git commit -m "Update production API URL"
+   git push origin skhart
+
+B. Deploy to Cloudflare Pages
+------------------------------
+1. Go to: https://dash.cloudflare.com
+2. Sign up / Login (free account)
+3. Click "Workers & Pages" in sidebar
+4. Click "Create application" → "Pages" → "Connect to Git"
+5. Connect GitHub account
+6. Select repository: SMOKi_web_design_3
+7. Configure:
+   - Production branch: skhart
+   - Framework preset: Vite
+   - Build command: npm run build
+   - Build output directory: dist
+   - Root directory: frontend
+
+8. Add Environment Variable:
+   Variable name: VITE_API_URL
+   Value: https://your-backend-url.railway.app
+
+9. Click "Save and Deploy"
+10. Wait for deployment (2-3 minutes)
+11. Copy your Cloudflare Pages URL (e.g., https://smoki.pages.dev)
+
+================================================================================
+STEP 3: UPDATE BACKEND CORS
+================================================================================
+
+1. Edit: backend/main.py
+
+2. Find the origins list and add your Cloudflare URL:
+
+origins = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "https://smoki.pages.dev",  # Add your Cloudflare URL
+    "https://*.pages.dev"        # Allow all Cloudflare Pages subdomains
+]
+
+3. Commit and push:
+   git add backend/main.py
+   git commit -m "Update CORS for Cloudflare Pages"
+   git push origin skhart
+
+4. Railway will auto-deploy the update
+
+================================================================================
+STEP 4: UPDATE ESP32
+================================================================================
+
+1. Open: esp32/esp32_sensor_sender.ino
+
+2. Change:
+   const char* api_url = "http://192.168.1.9:8000/api/sensors/data";
+
+   To:
+   const char* api_url = "https://your-backend-url.railway.app/api/sensors/data";
+
+3. Upload to ESP32
+
+4. Open Serial Monitor (115200 baud)
+5. Check for: ✓ Response: 200
+
+================================================================================
+STEP 5: TEST YOUR DEPLOYMENT
+================================================================================
+
+1. Open your Cloudflare Pages URL in browser
+2. Login: admin / 1234
+3. Check all pages:
+   - Dashboard: Should load
+   - Sensors: Should show live data
+   - Records: Should show historical data
+   - Graphs: Should display charts
+
+4. Verify ESP32 is sending data:
+   - Check Serial Monitor for successful posts
+   - Data should appear on website within 10 seconds
+
+================================================================================
+BENEFITS OF THIS SETUP
+================================================================================
+
+Cloudflare Pages:
+✓ FREE forever
+✓ Unlimited bandwidth
+✓ Global CDN (super fast worldwide)
+✓ Automatic HTTPS
+✓ Auto-deploy on git push
+✓ Preview deployments for branches
+
+Railway:
+✓ Easy database management
+✓ Automatic backups
+✓ Environment variables
+✓ Logs and monitoring
+✓ Auto-deploy on git push
+
+Total Cost: ~$10/month (Railway only)
+Frontend: FREE (Cloudflare)
+
+================================================================================
+CUSTOM DOMAIN (OPTIONAL)
+================================================================================
+
+Cloudflare Pages:
+1. Go to your Pages project
+2. Click "Custom domains"
+3. Add your domain (e.g., smoki.yourdomain.com)
+4. Follow DNS instructions
+5. SSL certificate auto-generated
+
+Railway Backend:
+1. Go to backend service
+2. Click "Settings" → "Domains"
+3. Add custom domain (e.g., api.yourdomain.com)
+4. Update DNS records as shown
+
+Then update:
+- frontend/.env.production with new backend domain
+- ESP32 code with new backend domain
+
+================================================================================
+MONITORING & LOGS
+================================================================================
+
+Cloudflare Pages:
+- Dashboard → Your project → "Deployments"
+- View build logs
+- Check deployment status
+
+Railway:
+- Click service → "Logs" tab
+- Real-time logs
+- Filter by level (info, error, etc.)
+
+ESP32:
+- Serial Monitor shows all requests
+- Check for HTTP 200 responses
+
+================================================================================
+UPDATING YOUR DEPLOYMENT
+================================================================================
+
+Frontend Changes:
+1. Make changes locally
+2. Test locally
+3. Commit and push to skhart branch
+4. Cloudflare auto-deploys (2-3 minutes)
+
+Backend Changes:
+1. Make changes locally
+2. Test locally
+3. Commit and push to skhart branch
+4. Railway auto-deploys (1-2 minutes)
+
+No manual deployment needed!
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Cloudflare Build Failed:
+→ Check build logs in Cloudflare dashboard
+→ Verify package.json has all dependencies
+→ Test build locally: npm run build
+
+Frontend Shows No Data:
+→ Check VITE_API_URL is correct
+→ Open browser console (F12) for errors
+→ Verify backend is running (visit /api/hello)
+
+CORS Errors:
+→ Add Cloudflare URL to backend CORS origins
+→ Redeploy backend
+→ Clear browser cache
+
+ESP32 Can't Connect:
+→ Verify backend URL is HTTPS (not HTTP)
+→ Check ESP32 has internet connection
+→ Check Serial Monitor for error messages
+
+================================================================================
+PERFORMANCE TIPS
+================================================================================
+
+1. Cloudflare automatically caches static assets
+2. Enable "Always Use HTTPS" in Cloudflare
+3. Use Cloudflare's "Speed" settings for optimization
+4. Railway backend scales automatically
+5. Database connection pooling already configured
+
+================================================================================
+SECURITY CHECKLIST
+================================================================================
+
+✓ HTTPS enabled (automatic)
+✓ Environment variables for secrets
+✓ CORS configured properly
+✓ Database password strong
+✓ .env files not committed to git
+✓ API endpoints protected
+✓ Regular backups (Railway)
+
+================================================================================
+COST BREAKDOWN
+================================================================================
+
+Cloudflare Pages: $0/month (FREE)
+Railway Database: ~$5/month
+Railway Backend: ~$5/month
+Total: ~$10/month
+
+Compare to:
+- Railway only: ~$15/month
+- Vercel + Railway: ~$10/month
+- Render: ~$14/month
+
+Cloudflare + Railway = Best value!
+
+================================================================================
+SUPPORT & RESOURCES
+================================================================================
+
+Cloudflare Pages Docs: https://developers.cloudflare.com/pages
+Railway Docs: https://docs.railway.app
+Your Railway Project: https://railway.com/project/54cc0d2b-2b30-4e44-a2ae-94179dce0104
+
+Community:
+- Cloudflare Discord
+- Railway Discord
+- Stack Overflow
+
+================================================================================
+SUMMARY
+================================================================================
+
+✓ Frontend on Cloudflare Pages (FREE, fast)
+✓ Backend + Database on Railway (~$10/month)
+✓ Auto-deploy on git push
+✓ Global CDN for frontend
+✓ HTTPS everywhere
+✓ Easy to update
+✓ Monitoring and logs
+✓ Custom domains supported
+
+Total setup time: ~25 minutes
+Total cost: ~$10/month
+
+Your SMOKi project will be live and accessible worldwide!
+
+================================================================================

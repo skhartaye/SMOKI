@@ -1,0 +1,5 @@
+{
+  "scripts": {
+    "preview": "vite preview"
+  }
+}

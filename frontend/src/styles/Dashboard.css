@@ -51,13 +51,13 @@
   padding: 20px;
   transition: all 0.3s ease;
   overflow: hidden;
-  width: 70px;
+  width: 85px;
   flex-shrink: 0;
   border-right: 1px solid rgba(255, 165, 0, 0.2);
 }
 
 .sidebar:hover {
-  width: 220px;
+  width: 224px;
 }
 
 .sidebar ul {
@@ -311,4 +311,212 @@
   font-size: 1.1em;
   text-align: center;
   margin-top: 100px;
+}
+
+/* Sensors Page */
+.sensors-page-container {
+  padding: 20px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sensors-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 16px;
+  width: 100%;
+  max-width: 1400px;
+}
+
+/* First row: 3 items centered (each takes 3 columns, starting from column 2) */
+.sensors-grid .sensor-card:nth-child(1) {
+  grid-column: 2 / 5;
+}
+
+.sensors-grid .sensor-card:nth-child(2) {
+  grid-column: 5 / 8;
+}
+
+.sensors-grid .sensor-card:nth-child(3) {
+  grid-column: 8 / 11;
+}
+
+/* Second row: 4 items (each takes 3 columns) */
+.sensors-grid .sensor-card:nth-child(4) {
+  grid-column: 1 / 4;
+}
+
+.sensors-grid .sensor-card:nth-child(5) {
+  grid-column: 4 / 7;
+}
+
+.sensors-grid .sensor-card:nth-child(6) {
+  grid-column: 7 / 10;
+}
+
+.sensors-grid .sensor-card:nth-child(7) {
+  grid-column: 10 / 13;
+}
+
+.sensor-card {
+  background: rgba(255, 255, 255, 0.9);
+  border: 2px solid rgba(255, 165, 0, 0.3);
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  text-align: center;
+}
+
+.sensor-card:hover {
+  box-shadow: 0 6px 30px rgba(255, 165, 0, 0.2);
+  border-color: orange;
+  transform: translateY(-4px);
+}
+
+.sensor-icon {
+  font-size: 2em;
+  margin-bottom: 8px;
+}
+
+.sensor-card h3 {
+  color: #333;
+  margin: 8px 0;
+  font-size: 1.1em;
+  font-weight: 600;
+}
+
+.sensor-value {
+  font-size: 1.5em;
+  font-weight: 700;
+  color: orange;
+  margin: 10px 0;
+}
+
+.sensor-status {
+  color: #666;
+  font-size: 0.85em;
+  font-style: italic;
+}
+
+/* Sidebar sub-items */
+.sidebar li.sub-item {
+  padding-left: 48px;
+  font-size: 0.95em;
+}
+
+.sidebar li .arrow {
+  margin-left: auto;
+  font-size: 0.7em;
+  transition: transform 0.3s ease;
+}
+
+/* Records Page Table */
+.records-table-container {
+  overflow-x: auto;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.records-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.records-table thead {
+  background: linear-gradient(135deg, #ff8c00, #ff6600);
+  color: white;
+}
+
+.records-table th {
+  padding: 12px 8px;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 2px solid rgba(255, 165, 0, 0.3);
+}
+
+.records-table tbody tr {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  transition: background 0.2s ease;
+}
+
+.records-table tbody tr:hover {
+  background: rgba(255, 165, 0, 0.05);
+}
+
+.records-table td {
+  padding: 10px 8px;
+  color: #333;
+}
+
+.records-table tbody tr:nth-child(even) {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.no-records {
+  text-align: center;
+  color: #666;
+  font-size: 1.1em;
+  padding: 60px 20px;
+}
+
+/* Graphs Page */
+.graphs-page-container {
+  padding: 20px;
+}
+
+.graphs-page-container h1 {
+  color: #1a1a1a;
+  margin-bottom: 24px;
+  font-size: 2em;
+}
+
+.graphs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+  gap: 24px;
+}
+
+.graph-card {
+  background: rgba(255, 255, 255, 0.95);
+  border: 2px solid rgba(255, 165, 0, 0.3);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.graph-card:hover {
+  box-shadow: 0 6px 30px rgba(255, 165, 0, 0.2);
+  border-color: orange;
+  transform: translateY(-2px);
+}
+
+.graph-card h3 {
+  color: #333;
+  margin: 0 0 16px 0;
+  font-size: 1.2em;
+  font-weight: 600;
+}
+
+.no-data {
+  text-align: center;
+  color: #666;
+  font-size: 1.1em;
+  padding: 60px 20px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 12px;
+  border: 2px solid rgba(255, 165, 0, 0.3);
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+  .graphs-grid {
+    grid-template-columns: 1fr;
+  }
 }
