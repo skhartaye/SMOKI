@@ -1,0 +1,208 @@
+================================================================================
+                        SMOKi PROJECT - START HERE
+================================================================================
+
+EVERYTHING IS READY! Here's what to do:
+
+================================================================================
+STEP 1: SETUP FIREWALL (ONE TIME ONLY)
+================================================================================
+
+Right-click on: setup_firewall.bat
+Select: "Run as administrator"
+Click: Yes
+
+This allows ESP32 to send data to your computer.
+
+================================================================================
+STEP 2: START THE SYSTEM
+================================================================================
+
+Open 2 terminals:
+
+TERMINAL 1 - Backend:
+---------------------
+cd backend
+python -m uvicorn main:app --reload
+
+Keep this running!
+
+TERMINAL 2 - Frontend:
+----------------------
+cd frontend
+npm run dev
+
+Keep this running!
+
+================================================================================
+STEP 3: PROGRAM YOUR ESP32
+================================================================================
+
+1. Open Arduino IDE
+2. Open file: esp32/esp32_sensor_sender.ino
+3. Update WiFi credentials (lines 13-14):
+   const char* ssid = "YOUR_WIFI_NAME";
+   const char* password = "YOUR_WIFI_PASSWORD";
+
+4. Install libraries (if not already):
+   - ArduinoJson
+   - Adafruit BME680
+   - Adafruit Unified Sensor
+
+5. Connect ESP32 via USB
+6. Select: Tools → Board → ESP32 Dev Module
+7. Select: Tools → Port → (your COM port)
+8. Click Upload (→)
+
+9. Open Serial Monitor (Tools → Serial Monitor)
+10. Set baud rate: 115200
+11. Watch for "Data sent successfully!"
+
+================================================================================
+STEP 4: VIEW YOUR DATA
+================================================================================
+
+1. Open browser: http://localhost:5173
+2. Login: admin / 1234
+3. Click "Dashboard" → "Sensors" to see live data
+4. Click "Records" to see all historical data
+
+Data updates automatically:
+- Sensors page: Every 5 seconds
+- Records page: Every 10 seconds
+
+================================================================================
+YOUR CONFIGURATION
+================================================================================
+
+Computer IP: 192.168.1.9
+Backend: http://192.168.1.9:8000
+Frontend: http://localhost:5173
+Database: PostgreSQL (smoki_db)
+
+ESP32 sends data to: http://192.168.1.9:8000/api/sensors/data
+Interval: Every 10 seconds
+
+================================================================================
+SENSOR WIRING
+================================================================================
+
+BME680 (Temperature, Humidity, VOCs):
+  VCC → 3.3V    GND → GND
+  SDA → GPIO 21    SCL → GPIO 22
+
+MICS6814 (NO2, CO):
+  VCC → 5V    GND → GND
+  NO2 → GPIO 34    CO → GPIO 35
+
+PMS7003 (PM2.5, PM10):
+  VCC → 5V    GND → GND
+  TX → GPIO 16    RX → GPIO 17
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+ESP32 won't connect to WiFi:
+→ Check SSID and password in code
+→ Make sure ESP32 is in WiFi range
+
+ESP32 sends but backend doesn't receive:
+→ Run setup_firewall.bat as administrator
+→ Check if backend is running
+→ Verify IP hasn't changed (run: ipconfig)
+
+No data on website:
+→ Check browser console (F12) for errors
+→ Make sure both backend and frontend are running
+→ Try refreshing the page
+
+Sensor reading errors:
+→ Check wiring connections
+→ Verify correct voltage (3.3V or 5V)
+→ Check Serial Monitor for error messages
+
+================================================================================
+QUICK REFERENCE
+================================================================================
+
+Start Backend:
+  cd backend && python -m uvicorn main:app --reload
+
+Start Frontend:
+  cd frontend && npm run dev
+
+Check Computer IP:
+  ipconfig
+
+View Serial Monitor:
+  Arduino IDE → Tools → Serial Monitor (115200 baud)
+
+View Database:
+  psql -U postgres -d smoki_db
+
+================================================================================
+FILES & DOCUMENTATION
+================================================================================
+
+ESP32 Code:
+  esp32/esp32_sensor_sender.ino - Main Arduino code
+  esp32/QUICK_START.txt - Quick setup guide
+  esp32/README.md - Detailed documentation
+
+Guides:
+  START_HERE.txt - This file
+  ESP32_SETUP_GUIDE.txt - Complete ESP32 guide
+  DEPLOYMENT_GUIDE.txt - How to deploy online
+
+Configuration:
+  postgre/.env - Database credentials
+  setup_firewall.bat - Firewall setup
+
+================================================================================
+WHAT HAPPENS AUTOMATICALLY
+================================================================================
+
+✓ ESP32 reads sensors every 10 seconds
+✓ Data sent to backend via WiFi
+✓ Backend saves to PostgreSQL with timestamp
+✓ Frontend fetches and displays data
+✓ Sensors page shows latest readings
+✓ Records page shows all historical data
+✓ Everything updates automatically!
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. Test with your ESP32 and sensors
+2. Calibrate sensors for accurate readings
+3. Adjust send interval if needed (in .ino file)
+4. Deploy online (see DEPLOYMENT_GUIDE.txt)
+5. Add more features (graphs, alerts, etc.)
+
+================================================================================
+SUPPORT
+================================================================================
+
+Check these files for help:
+- esp32/QUICK_START.txt - ESP32 setup
+- ESP32_SETUP_GUIDE.txt - Detailed guide
+- DEPLOYMENT_GUIDE.txt - Deployment help
+
+Serial Monitor shows:
+- WiFi connection status
+- Sensor readings
+- HTTP response codes
+- Error messages
+
+================================================================================
+YOU'RE ALL SET!
+================================================================================
+
+Your SMOKi sensor system is ready to go!
+Just follow the steps above and you'll be monitoring air quality in minutes.
+
+Good luck! 🚀
+
+================================================================================
