@@ -18,7 +18,7 @@ const char* ssid = "TECNO SPARK 20 Pro";
 const char* password = "tatlongtae";
 
 // FastAPI server settings - LOCAL BACKEND
-const char* api_url = "http://192.168.1.9:8000/api/sensors/data";
+const char* api_url = "http://10.26.144.68:8000/api/sensors/data";
 const char* device_id = "esp32_living_room";
 
 // BME680 SPI pins
@@ -40,6 +40,7 @@ const long postInterval = 10000; // Post data every 10 seconds
 Adafruit_BME680 bme(BME_CS);
 Adafruit_ADS1115 ads;
 HardwareSerial pmsSerial(1);
+WiFiClient wifiClient;
 HTTPClient http;
 unsigned long lastPost = 0;
 
@@ -99,7 +100,7 @@ void setupWiFi() {
   WiFi.begin(ssid, password);
   
   int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+  while (WiFi.status() != WL_CONNECTED && attempts < 30) {
     delay(500);
     Serial.print(".");
     attempts++;
@@ -204,28 +205,78 @@ void postSensorData() {
   Serial.printf("⚫ PM2.5: %.1f µg/m³\n", pm25);
   Serial.printf("⚫ PM10: %.1f µg/m³\n", pm10);
   
-  // POST request
+  // POST request - Try direct TCP connection
   Serial.println("\n📤 Sending to server...");
-  http.begin(api_url);
-  http.addHeader("Content-Type", "application/json");
-  http.setTimeout(5000);
   
-  int httpCode = http.POST(buffer);
+  WiFiClient client;
   
-  if (httpCode > 0) {
-    Serial.printf("✓ Response: %d\n", httpCode);
-    if (httpCode == HTTP_CODE_OK || httpCode == 200) {
-      String response = http.getString();
-      Serial.println("✓ Data saved to database!");
-      Serial.printf("Response: %s\n", response.c_str());
+  if (!client.connect("10.26.144.68", 8000)) {
+    Serial.println("❌ Failed to connect to server");
+    Serial.println("💡 Trying alternative method...");
+    
+    // Try with HTTPClient as fallback
+    http.begin(wifiClient, api_url);
+    http.addHeader("Content-Type", "application/json");
+    http.setTimeout(10000);
+    
+    int httpCode = http.POST(buffer);
+    
+    if (httpCode > 0) {
+      Serial.printf("✓ Response: %d\n", httpCode);
+      if (httpCode == HTTP_CODE_OK || httpCode == 200) {
+        String response = http.getString();
+        Serial.println("✓ Data saved to database!");
+        Serial.printf("Response: %s\n", response.c_str());
+      }
+    } else {
+      Serial.printf("❌ POST failed: %s\n", http.errorToString(httpCode).c_str());
+      Serial.println("💡 Connection refused - Check firewall!");
+      Serial.println("   Run: fix_firewall_for_esp32.bat as administrator");
     }
+    
+    http.end();
   } else {
-    Serial.printf("❌ POST failed: %s\n", http.errorToString(httpCode).c_str());
-    if (httpCode == -1) {
-      Serial.println("💡 Check if backend is running at: http://192.168.1.9:8000");
+    // Direct TCP connection succeeded
+    Serial.println("✓ Connected to server!");
+    
+    // Send HTTP POST request manually
+    client.print("POST /api/sensors/data HTTP/1.1\r\n");
+    client.print("Host: 10.26.144.68:8000\r\n");
+    client.print("Content-Type: application/json\r\n");
+    client.print("Connection: close\r\n");
+    client.print("Content-Length: ");
+    client.print(strlen(buffer));
+    client.print("\r\n\r\n");
+    client.print(buffer);
+    
+    // Wait for response
+    unsigned long timeout = millis();
+    while (client.available() == 0) {
+      if (millis() - timeout > 5000) {
+        Serial.println("❌ Timeout waiting for response");
+        client.stop();
+        Serial.println("========================\n");
+        return;
+      }
     }
+    
+    // Read response
+    String response = "";
+    while (client.available()) {
+      response += (char)client.read();
+    }
+    
+    if (response.indexOf("200") > 0 || response.indexOf("success") > 0) {
+      Serial.println("✓ Data saved to database!");
+      Serial.println("Response received:");
+      Serial.println(response);
+    } else {
+      Serial.println("⚠️  Unexpected response:");
+      Serial.println(response);
+    }
+    
+    client.stop();
   }
   
-  http.end();
   Serial.println("========================\n");
 }
