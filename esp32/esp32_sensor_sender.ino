@@ -5,6 +5,7 @@
 
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 #include <SPI.h>
 #include <Wire.h>
@@ -17,8 +18,8 @@
 const char* ssid = "TECNO SPARK 20 Pro";
 const char* password = "tatlongtae";
 
-// FastAPI server settings - LOCAL BACKEND
-const char* api_url = "http://10.26.144.68:8000/api/sensors/data";
+// FastAPI server settings - ONLINE BACKEND
+const char* api_url = "https://smoki-backend.onrender.com/api/sensors/data";
 const char* device_id = "esp32_living_room";
 
 // BME680 SPI pins
