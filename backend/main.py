@@ -8,16 +8,17 @@ from postgre.database import init_db_pool, insert_sensor_data, get_latest_sensor
 
 app = FastAPI()
 
-# Allow requests from React frontend
+# Allow requests from React frontend and ESP32
 origins = [
     "http://localhost:3000",
     "http://localhost:5173",
-    "http://localhost:5174"
+    "http://localhost:5174",
+    "*"  # Allow all origins (needed for ESP32)
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # Allow all origins
     allow_methods=["*"],
     allow_headers=["*"]
 )
