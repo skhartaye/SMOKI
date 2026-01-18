@@ -1,5 +1,5 @@
 import psycopg
-from psycopg import pool
+from psycopg.pool import ConnectionPool
 from datetime import datetime
 import os
 from dotenv import load_dotenv
@@ -13,7 +13,7 @@ def init_db_pool():
     """Initialize database connection pool"""
     global connection_pool
     try:
-        connection_pool = psycopg.pool.ConnectionPool(
+        connection_pool = ConnectionPool(
             conninfo=f"host={os.getenv('DB_HOST', 'localhost')} "
                     f"dbname={os.getenv('DB_NAME', 'smoki_db')} "
                     f"user={os.getenv('DB_USER', 'postgres')} "
