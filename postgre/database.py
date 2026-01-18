@@ -1,39 +1,31 @@
 import psycopg
-from psycopg.pool import ConnectionPool
 from datetime import datetime
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Database connection pool
-connection_pool = None
+# Database connection string
+def get_connection_string():
+    """Get database connection string"""
+    return (f"host={os.getenv('DB_HOST', 'localhost')} "
+            f"dbname={os.getenv('DB_NAME', 'smoki_db')} "
+            f"user={os.getenv('DB_USER', 'postgres')} "
+            f"password={os.getenv('DB_PASSWORD', 'password')} "
+            f"port={os.getenv('DB_PORT', '5432')}")
 
 def init_db_pool():
-    """Initialize database connection pool"""
-    global connection_pool
+    """Initialize database (create tables)"""
     try:
-        connection_pool = ConnectionPool(
-            conninfo=f"host={os.getenv('DB_HOST', 'localhost')} "
-                    f"dbname={os.getenv('DB_NAME', 'smoki_db')} "
-                    f"user={os.getenv('DB_USER', 'postgres')} "
-                    f"password={os.getenv('DB_PASSWORD', 'password')} "
-                    f"port={os.getenv('DB_PORT', '5432')}",
-            min_size=1,
-            max_size=20
-        )
-        print("Database connection pool created successfully")
+        print("Initializing database...")
         create_tables()
+        print("Database initialized successfully")
     except Exception as e:
-        print(f"Error creating connection pool: {e}")
-
-def get_connection():
-    """Get a connection from the pool"""
-    return connection_pool.connection()
+        print(f"Error initializing database: {e}")
 
 def create_tables():
     """Create necessary tables if they don't exist"""
-    with get_connection() as conn:
+    with psycopg.connect(get_connection_string()) as conn:
         try:
             with conn.cursor() as cursor:
                 # Create sensor_data table
@@ -68,7 +60,7 @@ def insert_sensor_data(temperature=None, humidity=None, vocs=None,
                        nitrogen_dioxide=None, carbon_monoxide=None, 
                        pm25=None, pm10=None):
     """Insert sensor data into database"""
-    with get_connection() as conn:
+    with psycopg.connect(get_connection_string()) as conn:
         try:
             with conn.cursor() as cursor:
                 cursor.execute("""
@@ -88,7 +80,7 @@ def insert_sensor_data(temperature=None, humidity=None, vocs=None,
 
 def get_latest_sensor_data(limit=10):
     """Get latest sensor readings"""
-    with get_connection() as conn:
+    with psycopg.connect(get_connection_string()) as conn:
         try:
             with conn.cursor() as cursor:
                 cursor.execute("""
@@ -111,7 +103,7 @@ def get_latest_sensor_data(limit=10):
 
 def get_sensor_data_by_timerange(start_time, end_time):
     """Get sensor data within a time range"""
-    with get_connection() as conn:
+    with psycopg.connect(get_connection_string()) as conn:
         try:
             with conn.cursor() as cursor:
                 cursor.execute("""
@@ -133,7 +125,5 @@ def get_sensor_data_by_timerange(start_time, end_time):
             return []
 
 def close_db_pool():
-    """Close all database connections"""
-    if connection_pool:
-        connection_pool.close()
-        print("Database connection pool closed")
+    """Close database connections (no-op for direct connections)"""
+    print("Database connections closed")
