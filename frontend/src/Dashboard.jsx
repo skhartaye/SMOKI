@@ -5,10 +5,56 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 
 function Dashboard() {
   const [activePage, setActivePage] = useState("dashboard");
-  const [showDashboardSub, setShowDashboardSub] = useState(false);
   const [sensorData, setSensorData] = useState(null);
   const [records, setRecords] = useState([]);
   const [graphData, setGraphData] = useState([]);
+  const [filterSensorTypes, setFilterSensorTypes] = useState({
+    temperature: true,
+    humidity: true,
+    vocs: true,
+    no2: true,
+    co: true,
+    pm25: true,
+    pm10: true
+  });
+  const [appliedSensorTypes, setAppliedSensorTypes] = useState({
+    temperature: true,
+    humidity: true,
+    vocs: true,
+    no2: true,
+    co: true,
+    pm25: true,
+    pm10: true
+  });
+  const [filterDate, setFilterDate] = useState("all");
+  const [appliedDate, setAppliedDate] = useState("all");
+  const [clearFilters, setClearFilters] = useState(false);
+  const [sensorDropdownOpen, setSensorDropdownOpen] = useState(false);
+  
+  // Graph filters
+  const [graphFilterSensorTypes, setGraphFilterSensorTypes] = useState({
+    temperature: true,
+    humidity: true,
+    vocs: true,
+    no2: true,
+    co: true,
+    pm25: true,
+    pm10: true
+  });
+  const [appliedGraphSensorTypes, setAppliedGraphSensorTypes] = useState({
+    temperature: true,
+    humidity: true,
+    vocs: true,
+    no2: true,
+    co: true,
+    pm25: true,
+    pm10: true
+  });
+  const [graphFilterDate, setGraphFilterDate] = useState("all");
+  const [appliedGraphDate, setAppliedGraphDate] = useState("all");
+  const [clearGraphFilters, setClearGraphFilters] = useState(false);
+  const [graphSensorDropdownOpen, setGraphSensorDropdownOpen] = useState(false);
+  
   const navigate = useNavigate();
 
   // Fetch latest sensor data for sensors page
@@ -95,85 +141,216 @@ function Dashboard() {
 
   const formatTimestamp = (timestamp) => {
     const date = new Date(timestamp);
-    return date.toLocaleString();
+    // Format as: YYYY-MM-DD HH:MM:SS AM/PM
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    
+    let hours = date.getHours();
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    
+    hours = hours % 12;
+    hours = hours ? hours : 12; // 0 should be 12
+    const hoursStr = String(hours).padStart(2, '0');
+    
+    return `${year}-${month}-${day} ${hoursStr}:${minutes}:${seconds} ${ampm}`;
+  };
+
+  const handleClearFilters = () => {
+    const defaultSensors = {
+      temperature: true,
+      humidity: true,
+      vocs: true,
+      no2: true,
+      co: true,
+      pm25: true,
+      pm10: true
+    };
+    setFilterSensorTypes(defaultSensors);
+    setAppliedSensorTypes(defaultSensors);
+    setFilterDate("all");
+    setAppliedDate("all");
+  };
+
+  const handleSubmit = () => {
+    if (clearFilters) {
+      handleClearFilters();
+      setClearFilters(false);
+    } else {
+      setAppliedSensorTypes(filterSensorTypes);
+      setAppliedDate(filterDate);
+    }
+    fetchRecords();
+  };
+
+  const toggleSensorType = (sensor) => {
+    setFilterSensorTypes(prev => ({
+      ...prev,
+      [sensor]: !prev[sensor]
+    }));
+  };
+
+  const toggleGraphSensorType = (sensor) => {
+    setGraphFilterSensorTypes(prev => ({
+      ...prev,
+      [sensor]: !prev[sensor]
+    }));
+  };
+
+  const handleClearGraphFilters = () => {
+    const defaultSensors = {
+      temperature: true,
+      humidity: true,
+      vocs: true,
+      no2: true,
+      co: true,
+      pm25: true,
+      pm10: true
+    };
+    setGraphFilterSensorTypes(defaultSensors);
+    setAppliedGraphSensorTypes(defaultSensors);
+    setGraphFilterDate("all");
+    setAppliedGraphDate("all");
+  };
+
+  const handleGraphSubmit = () => {
+    if (clearGraphFilters) {
+      handleClearGraphFilters();
+      setClearGraphFilters(false);
+    } else {
+      setAppliedGraphSensorTypes(graphFilterSensorTypes);
+      setAppliedGraphDate(graphFilterDate);
+    }
+    fetchGraphData();
+  };
+
+  const getFilteredGraphData = () => {
+    let filtered = [...graphData];
+
+    // Filter by date using applied date
+    if (appliedGraphDate !== "all") {
+      const now = new Date();
+      filtered = filtered.filter(item => {
+        // Parse the time string back to date
+        const itemDate = new Date();
+        const [time] = item.time.split(' ');
+        const [hours, minutes, seconds] = time.split(':');
+        itemDate.setHours(parseInt(hours), parseInt(minutes), parseInt(seconds));
+        
+        const diffTime = Math.abs(now - itemDate);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (appliedGraphDate === "today") {
+          return itemDate.toDateString() === now.toDateString();
+        } else if (appliedGraphDate === "7days") {
+          return diffDays <= 7;
+        } else if (appliedGraphDate === "30days") {
+          return diffDays <= 30;
+        }
+        return true;
+      });
+    }
+
+    return filtered;
+  };
+
+  const getFilteredRecords = () => {
+    let filtered = [...records];
+
+    // Filter by date using applied date
+    if (appliedDate !== "all") {
+      const now = new Date();
+      filtered = filtered.filter(record => {
+        const recordDate = new Date(record.timestamp);
+        const diffTime = Math.abs(now - recordDate);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (appliedDate === "today") {
+          return recordDate.toDateString() === now.toDateString();
+        } else if (appliedDate === "7days") {
+          return diffDays <= 7;
+        } else if (appliedDate === "30days") {
+          return diffDays <= 30;
+        }
+        return true;
+      });
+    }
+
+    return filtered;
   };
 
   return (
     <div className="dashboard">
-      {/* top bar */}
-      <header className="top-bar">
-        <h1>SMOKi</h1>
-        <button id="logoutBtn" onClick={handleLogout}>Logout</button>
-      </header>
+      {/* Sidebar */}
+      <aside className="sidebar">
+        <div className="sidebar-header">
+          <h1>☰ SMOKi</h1>
+        </div>
 
-      {/* main content */}
-      <main className="content">
-        {/* sidebar */}
-        <aside className="sidebar">
-          <ul>
-            <li 
-              onClick={() => {
-                setActivePage("dashboard");
-                setShowDashboardSub(!showDashboardSub);
-              }}
-              className={activePage === "dashboard" ? "active" : ""}
-            >
-              <span>🏠</span>
-              <span className="text">Dashboard</span>
-              <span className="text arrow">{showDashboardSub ? "▼" : "▶"}</span>
-            </li>
-            {showDashboardSub && (
-              <li 
-                onClick={() => setActivePage("sensors")}
-                className={`sub-item ${activePage === "sensors" ? "active" : ""}`}
-              >
-                <span>📡</span>
-                <span className="text">Sensors</span>
-              </li>
-            )}
-            <li 
-              onClick={() => setActivePage("camera")}
-              className={activePage === "camera" ? "active" : ""}
-            >
-              <span>📹</span>
-              <span className="text">Camera</span>
-            </li>
-            <li 
-              onClick={() => setActivePage("records")}
-              className={activePage === "records" ? "active" : ""}
-            >
-              <span>📋</span>
-              <span className="text">Records</span>
-            </li>
-            <li 
-              onClick={() => setActivePage("graphs")}
-              className={activePage === "graphs" ? "active" : ""}
-            >
-              <span>📊</span>
-              <span className="text">Graphs</span>
-            </li>
-          </ul>
-        </aside>
+        <nav className="sidebar-nav">
+          <button 
+            onClick={() => setActivePage("dashboard")}
+            className={`nav-item ${activePage === "dashboard" ? "active" : ""}`}
+          >
+            <span className="nav-icon">📊</span>
+            <span className="nav-text">Dashboard</span>
+          </button>
 
-        {/* main content area */}
-        <div className="main-content">
+          <button 
+            onClick={() => setActivePage("records")}
+            className={`nav-item ${activePage === "records" ? "active" : ""}`}
+          >
+            <span className="nav-icon">📋</span>
+            <span className="nav-text">Records</span>
+          </button>
+
+          <button 
+            onClick={() => setActivePage("graphs")}
+            className={`nav-item ${activePage === "graphs" ? "active" : ""}`}
+          >
+            <span className="nav-icon">📈</span>
+            <span className="nav-text">Graphs</span>
+          </button>
+
+          <button 
+            onClick={() => setActivePage("sensors")}
+            className={`nav-item ${activePage === "sensors" ? "active" : ""}`}
+          >
+            <span className="nav-icon">📡</span>
+            <span className="nav-text">Sensors</span>
+          </button>
+        </nav>
+
+        <div className="sidebar-footer">
+          <div className="user-info">
+            <span className="user-icon">👤</span>
+            <div className="user-details">
+              <div className="user-name">Admin User</div>
+              <div className="user-email">admin@smoki.local</div>
+            </div>
+          </div>
+          <button className="sign-out-btn" onClick={handleLogout}>
+            <span>↪</span> Sign out
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="main-content">
           {activePage === "dashboard" && (
-            <section className="home-page-container">
-              <div className="hp_container_1">
-                <span>Welcome to</span>
-                <h1>SMOKi</h1>
-                <p>
-                  Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-                  Morbi volutpat tempor feugiat. Sed ac nunc ligula. Quisque a tincidunt massa,
-                  at commodo orci. Donec ante mi, malesuada nec sapien at, mattis finibus ex.
-                  Curabitur nec quam neque. Quisque vel semper justo. Mauris at fermentum nibh.
-                </p>
+            <div className="camera-container">
+              <div className="camera-header">
+                <h1>Dashboard</h1>
+                <p className="content-subtitle">Smoke Emission monitoring overview</p>
               </div>
-
-              <div className="hp_container_2">
-                <h1>Device Image</h1>
+              <div className="camera-feed">
+                <div className="camera-placeholder">
+                  CAMERA FEED
+                </div>
               </div>
-            </section>
+            </div>
           )}
 
           {activePage === "sensors" && (
@@ -299,38 +476,175 @@ function Dashboard() {
 
           {activePage === "records" && (
             <section className="records-page-container">
-              <h1>Sensor Records</h1>
-              <div className="records-content">
+              <div className="records-header">
+                <h1>Sensor Records</h1>
+                <p className="records-subtitle">AeroBlend system data logs and monitoring</p>
+              </div>
+
+              {/* Filters Section */}
+              <div className="filters-container">
+                <div className="filters-header">
+                  <span className="filter-icon">▼</span> Filters
+                </div>
+                <div className="filters-content">
+                  <div className="filter-group">
+                    <label>📊 Sensor Types</label>
+                    <div className="custom-dropdown">
+                      <div 
+                        className="dropdown-header"
+                        onClick={() => setSensorDropdownOpen(!sensorDropdownOpen)}
+                      >
+                        <span>Select Sensors</span>
+                        <span className="dropdown-arrow">{sensorDropdownOpen ? '▲' : '▼'}</span>
+                      </div>
+                      {sensorDropdownOpen && (
+                        <div className="dropdown-menu">
+                          <label className="dropdown-item">
+                            <input 
+                              type="checkbox" 
+                              checked={filterSensorTypes.temperature}
+                              onChange={() => toggleSensorType('temperature')}
+                            />
+                            Temperature
+                          </label>
+                          <label className="dropdown-item">
+                            <input 
+                              type="checkbox" 
+                              checked={filterSensorTypes.humidity}
+                              onChange={() => toggleSensorType('humidity')}
+                            />
+                            Humidity
+                          </label>
+                          <label className="dropdown-item">
+                            <input 
+                              type="checkbox" 
+                              checked={filterSensorTypes.vocs}
+                              onChange={() => toggleSensorType('vocs')}
+                            />
+                            VOCs
+                          </label>
+                          <label className="dropdown-item">
+                            <input 
+                              type="checkbox" 
+                              checked={filterSensorTypes.no2}
+                              onChange={() => toggleSensorType('no2')}
+                            />
+                            NO₂
+                          </label>
+                          <label className="dropdown-item">
+                            <input 
+                              type="checkbox" 
+                              checked={filterSensorTypes.co}
+                              onChange={() => toggleSensorType('co')}
+                            />
+                            CO
+                          </label>
+                          <label className="dropdown-item">
+                            <input 
+                              type="checkbox" 
+                              checked={filterSensorTypes.pm25}
+                              onChange={() => toggleSensorType('pm25')}
+                            />
+                            PM2.5
+                          </label>
+                          <label className="dropdown-item">
+                            <input 
+                              type="checkbox" 
+                              checked={filterSensorTypes.pm10}
+                              onChange={() => toggleSensorType('pm10')}
+                            />
+                            PM10
+                          </label>
+                          <div className="dropdown-divider"></div>
+                          <label className="dropdown-item clear-item">
+                            <input 
+                              type="checkbox" 
+                              checked={clearFilters}
+                              onChange={(e) => setClearFilters(e.target.checked)}
+                            />
+                            Clear all filters
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="filter-group">
+                    <label>📅 Date</label>
+                    <select 
+                      className="filter-select"
+                      value={filterDate}
+                      onChange={(e) => setFilterDate(e.target.value)}
+                    >
+                      <option value="all">All Dates</option>
+                      <option value="today">Today</option>
+                      <option value="7days">Last 7 Days</option>
+                      <option value="30days">Last 30 Days</option>
+                    </select>
+                  </div>
+                  <button className="submit-filters-btn" onClick={handleSubmit}>Submit</button>
+                </div>
+              </div>
+
+              {/* Data Logs Section */}
+              <div className="data-logs-container">
+                <div className="data-logs-header">
+                  <h2>Data Logs</h2>
+                  <p>Real-time and historical sensor measurements</p>
+                </div>
+                
                 {records.length === 0 ? (
                   <p className="no-records">No sensor data recorded yet. Waiting for ESP32 data...</p>
+                ) : getFilteredRecords().length === 0 ? (
+                  <p className="no-records">No records match the selected filters.</p>
                 ) : (
-                  <div className="records-table-container">
+                  <div className="records-table-wrapper">
                     <table className="records-table">
                       <thead>
                         <tr>
-                          <th>Timestamp</th>
-                          <th>Temp (°C)</th>
-                          <th>Humidity (%)</th>
-                          <th>VOCs (kΩ)</th>
-                          <th>NO₂ (PPM)</th>
-                          <th>CO (PPM)</th>
-                          <th>PM2.5 (µg/m³)</th>
-                          <th>PM10 (µg/m³)</th>
+                          <th>Time Stamp</th>
+                          {appliedSensorTypes.temperature && <th>Temp (°C)</th>}
+                          {appliedSensorTypes.humidity && <th>Humidity (%)</th>}
+                          {appliedSensorTypes.vocs && <th>VOCs (kΩ)</th>}
+                          {appliedSensorTypes.no2 && <th>NO₂ (PPM)</th>}
+                          {appliedSensorTypes.co && <th>CO (PPM)</th>}
+                          {appliedSensorTypes.pm25 && <th>PM2.5 (µg/m³)</th>}
+                          {appliedSensorTypes.pm10 && <th>PM10 (µg/m³)</th>}
+                          <th>Status</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {records.map((record) => (
-                          <tr key={record.id}>
-                            <td>{formatTimestamp(record.timestamp)}</td>
-                            <td>{record.temperature?.toFixed(1) || 'N/A'}</td>
-                            <td>{record.humidity?.toFixed(1) || 'N/A'}</td>
-                            <td>{record.vocs?.toFixed(1) || 'N/A'}</td>
-                            <td>{record.nitrogen_dioxide?.toFixed(2) || 'N/A'}</td>
-                            <td>{record.carbon_monoxide?.toFixed(2) || 'N/A'}</td>
-                            <td>{record.pm25?.toFixed(1) || 'N/A'}</td>
-                            <td>{record.pm10?.toFixed(1) || 'N/A'}</td>
-                          </tr>
-                        ))}
+                        {getFilteredRecords().map((record, index) => {
+                          // Determine status based on sensor values
+                          const isDanger = 
+                            (record.temperature > 35) || 
+                            (record.carbon_monoxide > 9) || 
+                            (record.pm25 > 35) || 
+                            (record.pm10 > 50);
+                          
+                          const isWarning = 
+                            (record.temperature > 30 && record.temperature <= 35) || 
+                            (record.carbon_monoxide > 5 && record.carbon_monoxide <= 9) || 
+                            (record.pm25 > 25 && record.pm25 <= 35) || 
+                            (record.pm10 > 35 && record.pm10 <= 50);
+                          
+                          const status = isDanger ? 'danger' : isWarning ? 'warning' : 'safe';
+                          
+                          return (
+                            <tr key={record.id}>
+                              <td>{formatTimestamp(record.timestamp)}</td>
+                              {appliedSensorTypes.temperature && <td>{record.temperature?.toFixed(1) || 'N/A'}</td>}
+                              {appliedSensorTypes.humidity && <td>{record.humidity?.toFixed(1) || 'N/A'}</td>}
+                              {appliedSensorTypes.vocs && <td>{record.vocs?.toFixed(1) || 'N/A'}</td>}
+                              {appliedSensorTypes.no2 && <td>{record.nitrogen_dioxide?.toFixed(2) || 'N/A'}</td>}
+                              {appliedSensorTypes.co && <td>{record.carbon_monoxide?.toFixed(2) || 'N/A'}</td>}
+                              {appliedSensorTypes.pm25 && <td>{record.pm25?.toFixed(1) || 'N/A'}</td>}
+                              {appliedSensorTypes.pm10 && <td>{record.pm10?.toFixed(1) || 'N/A'}</td>}
+                              <td>
+                                <span className={`status-badge status-${status}`}>{status}</span>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -341,45 +655,160 @@ function Dashboard() {
 
           {activePage === "graphs" && (
             <section className="graphs-page-container">
-              <h1>Sensor Graphs</h1>
+              <div className="records-header">
+                <h1>Sensor Graphs</h1>
+                <p className="records-subtitle">Real-time and historical sensor data visualization</p>
+              </div>
+
+              {/* Filters Section */}
+              <div className="filters-container">
+                <div className="filters-header">
+                  <span className="filter-icon">▼</span> Filters
+                </div>
+                <div className="filters-content">
+                  <div className="filter-group">
+                    <label>📊 Sensor Types</label>
+                    <div className="custom-dropdown">
+                      <div 
+                        className="dropdown-header"
+                        onClick={() => setGraphSensorDropdownOpen(!graphSensorDropdownOpen)}
+                      >
+                        <span>Select Sensors</span>
+                        <span className="dropdown-arrow">{graphSensorDropdownOpen ? '▲' : '▼'}</span>
+                      </div>
+                      {graphSensorDropdownOpen && (
+                        <div className="dropdown-menu">
+                          <label className="dropdown-item">
+                            <input 
+                              type="checkbox" 
+                              checked={graphFilterSensorTypes.temperature}
+                              onChange={() => toggleGraphSensorType('temperature')}
+                            />
+                            Temperature
+                          </label>
+                          <label className="dropdown-item">
+                            <input 
+                              type="checkbox" 
+                              checked={graphFilterSensorTypes.humidity}
+                              onChange={() => toggleGraphSensorType('humidity')}
+                            />
+                            Humidity
+                          </label>
+                          <label className="dropdown-item">
+                            <input 
+                              type="checkbox" 
+                              checked={graphFilterSensorTypes.vocs}
+                              onChange={() => toggleGraphSensorType('vocs')}
+                            />
+                            VOCs
+                          </label>
+                          <label className="dropdown-item">
+                            <input 
+                              type="checkbox" 
+                              checked={graphFilterSensorTypes.no2}
+                              onChange={() => toggleGraphSensorType('no2')}
+                            />
+                            NO₂
+                          </label>
+                          <label className="dropdown-item">
+                            <input 
+                              type="checkbox" 
+                              checked={graphFilterSensorTypes.co}
+                              onChange={() => toggleGraphSensorType('co')}
+                            />
+                            CO
+                          </label>
+                          <label className="dropdown-item">
+                            <input 
+                              type="checkbox" 
+                              checked={graphFilterSensorTypes.pm25}
+                              onChange={() => toggleGraphSensorType('pm25')}
+                            />
+                            PM2.5
+                          </label>
+                          <label className="dropdown-item">
+                            <input 
+                              type="checkbox" 
+                              checked={graphFilterSensorTypes.pm10}
+                              onChange={() => toggleGraphSensorType('pm10')}
+                            />
+                            PM10
+                          </label>
+                          <div className="dropdown-divider"></div>
+                          <label className="dropdown-item clear-item">
+                            <input 
+                              type="checkbox" 
+                              checked={clearGraphFilters}
+                              onChange={(e) => setClearGraphFilters(e.target.checked)}
+                            />
+                            🔄 Clear all filters
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="filter-group">
+                    <label>📅 Date</label>
+                    <select 
+                      className="filter-select"
+                      value={graphFilterDate}
+                      onChange={(e) => setGraphFilterDate(e.target.value)}
+                    >
+                      <option value="all">All Dates</option>
+                      <option value="today">Today</option>
+                      <option value="7days">Last 7 Days</option>
+                      <option value="30days">Last 30 Days</option>
+                    </select>
+                  </div>
+                  <button className="submit-filters-btn" onClick={handleGraphSubmit}>Submit</button>
+                </div>
+              </div>
+
               <div className="graphs-content">
                 {graphData.length === 0 ? (
                   <p className="no-data">No data available yet. Waiting for sensor readings...</p>
+                ) : getFilteredGraphData().length === 0 ? (
+                  <p className="no-data">No data matches the selected filters.</p>
                 ) : (
                   <div className="graphs-grid">
                     {/* Temperature Graph */}
-                    <div className="graph-card">
-                      <h3>🌡️ Temperature (°C)</h3>
-                      <ResponsiveContainer width="100%" height={200}>
-                        <LineChart data={graphData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="time" />
-                          <YAxis />
-                          <Tooltip />
-                          <Line type="monotone" dataKey="temperature" stroke="#ff6600" strokeWidth={2} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
+                    {appliedGraphSensorTypes.temperature && (
+                      <div className="graph-card">
+                        <h3>🌡️ Temperature (°C)</h3>
+                        <ResponsiveContainer width="100%" height={200}>
+                          <LineChart data={getFilteredGraphData()}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="time" />
+                            <YAxis />
+                            <Tooltip />
+                            <Line type="monotone" dataKey="temperature" stroke="#ff6600" strokeWidth={2} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
 
                     {/* Humidity Graph */}
-                    <div className="graph-card">
-                      <h3>💧 Humidity (%)</h3>
-                      <ResponsiveContainer width="100%" height={200}>
-                        <LineChart data={graphData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="time" />
-                          <YAxis />
-                          <Tooltip />
-                          <Line type="monotone" dataKey="humidity" stroke="#2196F3" strokeWidth={2} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
+                    {appliedGraphSensorTypes.humidity && (
+                      <div className="graph-card">
+                        <h3>💧 Humidity (%)</h3>
+                        <ResponsiveContainer width="100%" height={200}>
+                          <LineChart data={getFilteredGraphData()}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="time" />
+                            <YAxis />
+                            <Tooltip />
+                            <Line type="monotone" dataKey="humidity" stroke="#2196F3" strokeWidth={2} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
 
                     {/* VOCs Graph */}
-                    <div className="graph-card">
-                      <h3>🌫️ VOCs (kΩ)</h3>
-                      <ResponsiveContainer width="100%" height={200}>
-                        <LineChart data={graphData}>
+                    {appliedGraphSensorTypes.vocs && (
+                      <div className="graph-card">
+                        <h3>🌫️ VOCs (kΩ)</h3>
+                        <ResponsiveContainer width="100%" height={200}>
+                          <LineChart data={getFilteredGraphData()}>
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis dataKey="time" />
                           <YAxis />
@@ -388,12 +817,14 @@ function Dashboard() {
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
+                    )}
 
                     {/* NO2 Graph */}
+                    {appliedGraphSensorTypes.no2 && (
                     <div className="graph-card">
                       <h3>💨 Nitrogen Dioxide (PPM)</h3>
                       <ResponsiveContainer width="100%" height={200}>
-                        <LineChart data={graphData}>
+                        <LineChart data={getFilteredGraphData()}>
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis dataKey="time" />
                           <YAxis />
@@ -402,12 +833,14 @@ function Dashboard() {
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
+                    )}
 
                     {/* CO Graph */}
+                    {appliedGraphSensorTypes.co && (
                     <div className="graph-card">
                       <h3>🔥 Carbon Monoxide (PPM)</h3>
                       <ResponsiveContainer width="100%" height={200}>
-                        <LineChart data={graphData}>
+                        <LineChart data={getFilteredGraphData()}>
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis dataKey="time" />
                           <YAxis />
@@ -416,12 +849,14 @@ function Dashboard() {
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
+                    )}
 
                     {/* PM2.5 Graph */}
+                    {appliedGraphSensorTypes.pm25 && (
                     <div className="graph-card">
                       <h3>⚫ PM 2.5 (µg/m³)</h3>
                       <ResponsiveContainer width="100%" height={200}>
-                        <LineChart data={graphData}>
+                        <LineChart data={getFilteredGraphData()}>
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis dataKey="time" />
                           <YAxis />
@@ -430,12 +865,14 @@ function Dashboard() {
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
+                    )}
 
                     {/* PM10 Graph */}
+                    {appliedGraphSensorTypes.pm10 && (
                     <div className="graph-card">
                       <h3>⚫ PM 10 (µg/m³)</h3>
                       <ResponsiveContainer width="100%" height={200}>
-                        <LineChart data={graphData}>
+                        <LineChart data={getFilteredGraphData()}>
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis dataKey="time" />
                           <YAxis />
@@ -444,12 +881,12 @@ function Dashboard() {
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
+                    )}
                   </div>
                 )}
               </div>
             </section>
           )}
-        </div>
       </main>
     </div>
   )
