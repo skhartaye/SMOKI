@@ -10,6 +10,8 @@ venv311/
 env/
 ENV/
 backend/smoki
+backend/__pycache__/
+postgre/__pycache__/
 
 # Node
 node_modules/
