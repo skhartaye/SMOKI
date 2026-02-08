@@ -28,6 +28,19 @@ def create_tables():
     with psycopg.connect(get_connection_string()) as conn:
         try:
             with conn.cursor() as cursor:
+                # Create users table
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS users (
+                        id SERIAL PRIMARY KEY,
+                        username VARCHAR(50) UNIQUE NOT NULL,
+                        hashed_password VARCHAR(255) NOT NULL,
+                        role VARCHAR(20) NOT NULL,
+                        full_name VARCHAR(100),
+                        created_at TIMESTAMPTZ DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
+                
                 # Create sensor_data table
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS sensor_data (
@@ -48,6 +61,12 @@ def create_tables():
                 cursor.execute("""
                     CREATE INDEX IF NOT EXISTS idx_sensor_timestamp 
                     ON sensor_data(timestamp);
+                """)
+                
+                # Create index on username for faster user lookups
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_users_username 
+                    ON users(username);
                 """)
                 
                 conn.commit()
