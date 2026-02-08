@@ -146,48 +146,24 @@ def get_sensor_data_by_timerange(start_time, end_time):
 def update_sensor_data(record_id, temperature=None, humidity=None, vocs=None, 
                        nitrogen_dioxide=None, carbon_monoxide=None, 
                        pm25=None, pm10=None):
-    """Update sensor data record"""
+    """Update sensor data record - updates all provided fields including NULL values"""
     with psycopg.connect(get_connection_string()) as conn:
         try:
             with conn.cursor() as cursor:
-                # Build dynamic UPDATE query to only update provided fields
-                updates = []
-                params = []
-                
-                if temperature is not None:
-                    updates.append("temperature = %s")
-                    params.append(temperature)
-                if humidity is not None:
-                    updates.append("humidity = %s")
-                    params.append(humidity)
-                if vocs is not None:
-                    updates.append("vocs = %s")
-                    params.append(vocs)
-                if nitrogen_dioxide is not None:
-                    updates.append("nitrogen_dioxide = %s")
-                    params.append(nitrogen_dioxide)
-                if carbon_monoxide is not None:
-                    updates.append("carbon_monoxide = %s")
-                    params.append(carbon_monoxide)
-                if pm25 is not None:
-                    updates.append("pm25 = %s")
-                    params.append(pm25)
-                if pm10 is not None:
-                    updates.append("pm10 = %s")
-                    params.append(pm10)
-                
-                if not updates:
-                    return None  # Nothing to update
-                
-                params.append(record_id)
-                query = f"""
+                # Update all fields - NULL values will be set to NULL in database
+                cursor.execute("""
                     UPDATE sensor_data
-                    SET {', '.join(updates)}
+                    SET temperature = %s,
+                        humidity = %s,
+                        vocs = %s,
+                        nitrogen_dioxide = %s,
+                        carbon_monoxide = %s,
+                        pm25 = %s,
+                        pm10 = %s
                     WHERE id = %s
                     RETURNING id, timestamp;
-                """
-                
-                cursor.execute(query, params)
+                """, (temperature, humidity, vocs, nitrogen_dioxide, carbon_monoxide, 
+                      pm25, pm10, record_id))
                 
                 result = cursor.fetchone()
                 if result:
