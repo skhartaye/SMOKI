@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { TbUser, TbLock, TbLogin, TbRadar } from 'react-icons/tb'
+import { User, Lock, LogIn, Zap } from 'lucide-react'
 import './styles/App.css'
 
 function App() {
@@ -24,15 +24,23 @@ function App() {
         setError('Invalid username or password')
         setIsLoading(false)
       }
-    }, 800)
+    }, 1200)
   }
 
   return (
     <div className="login-page">
+      {isLoading && (
+        <div className="login-loading-overlay">
+          <div className="loading-content">
+            <div className="loading-spinner-large"></div>
+            <p>Signing you in...</p>
+          </div>
+        </div>
+      )}
       <div className="login-container">
         <div className="login-header">
           <div className="logo-icon">
-            <TbRadar />
+            <Zap />
           </div>
           <h1>SMOKi</h1>
           <p>Smoke Emission Monitoring System</p>
@@ -41,7 +49,7 @@ function App() {
         <form onSubmit={handleLogin} className="login-form">
           <div className="input-group">
             <div className="input-icon">
-              <TbUser />
+              <User />
             </div>
             <input
               type="text"
@@ -55,7 +63,7 @@ function App() {
 
           <div className="input-group">
             <div className="input-icon">
-              <TbLock />
+              <Lock />
             </div>
             <input
               type="password"
@@ -82,7 +90,7 @@ function App() {
               </>
             ) : (
               <>
-                <TbLogin />
+                <LogIn />
                 <span>Sign In</span>
               </>
             )}

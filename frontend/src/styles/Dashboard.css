@@ -5,6 +5,7 @@
   background-color: #f5f5f5;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
   transition: background-color 0.3s ease, color 0.3s ease;
+  overflow: hidden;
 }
 
 /* Mobile Menu Button - Hidden on desktop */
@@ -49,15 +50,15 @@
 }
 
 .dashboard.dark-mode .graph-card h3 {
-  color: #e0e0e0;
-}
-
-.dashboard.dark-mode .graph-card-labels {
-  border-bottom-color: rgba(255, 255, 255, 0.1);
-}
-
-.dashboard.dark-mode .graph-card-labels span {
   color: #999;
+}
+
+.dashboard.dark-mode .current-value {
+  color: #7b8ba8;
+}
+
+.dashboard.dark-mode .value-change {
+  color: #666;
 }
 
 .dashboard.dark-mode .camera-placeholder {
@@ -128,10 +129,11 @@
   display: flex;
   flex-direction: column;
   padding: 20px 0;
-  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
   z-index: 100;
+  flex-shrink: 0;
 }
 
 .sidebar:hover {
@@ -170,7 +172,7 @@
   opacity: 0;
   max-width: 0;
   overflow: hidden;
-  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sidebar:hover .sidebar-header h1 .menu-text {
@@ -195,7 +197,7 @@
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s ease;
   color: #666;
   font-size: 15px;
   text-align: left;
@@ -230,7 +232,7 @@
   opacity: 0;
   max-width: 0;
   overflow: hidden;
-  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sidebar:hover .nav-text {
@@ -261,7 +263,7 @@
   opacity: 0;
   max-width: 0;
   overflow: hidden;
-  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
 }
 
@@ -294,7 +296,7 @@
   align-items: center;
   justify-content: center;
   gap: 0;
-  transition: all 0.2s, gap 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
   overflow: hidden;
   position: relative;
@@ -318,7 +320,7 @@
   width: 0;
   max-width: 0;
   overflow: hidden;
-  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
 }
 
@@ -345,11 +347,8 @@
   overflow: hidden;
   height: 100vh;
   position: relative;
-}
-
-/* Prevent layout shift during sidebar animation */
-.dashboard:not(.sidebar-animating) .main-content {
   transition: none;
+  will-change: auto;
 }
 
 /* Records and Graphs pages - scrollable */
@@ -538,7 +537,6 @@
   padding: 20px;
   margin-bottom: 24px;
   width: 100%;
-  max-width: 1400px;
 }
 
 .filters-header {
@@ -585,6 +583,7 @@
   justify-content: space-between;
   align-items: center;
   user-select: none;
+  transition: all 0.3s ease;
 }
 
 .dropdown-header:hover {
@@ -620,7 +619,7 @@
   color: #555;
   cursor: pointer;
   user-select: none;
-  transition: background 0.2s;
+  transition: background 0.3s ease;
 }
 
 .dropdown-item:hover {
@@ -664,6 +663,7 @@
   color: #333;
   cursor: pointer;
   outline: none;
+  transition: all 0.3s ease;
 }
 
 .filter-select:focus {
@@ -678,13 +678,15 @@
   font-size: 14px;
   color: white;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s ease;
   white-space: nowrap;
 }
 
 .submit-filters-btn:hover {
   background: #45a049;
   border-color: #45a049;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
 }
 
 /* Data Logs Container */
@@ -742,7 +744,7 @@
 
 .records-table tbody tr {
   border-bottom: 1px solid #e8e8e8;
-  transition: background 0.2s;
+  transition: background 0.3s ease;
 }
 
 .records-table tbody tr:hover {
@@ -803,24 +805,74 @@
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+
+/* Graph Loading Overlay */
+.graph-loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(245, 245, 245, 0.8);
+  backdrop-filter: blur(2px);
+  display: flex;
   align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.dashboard.dark-mode .graph-loading-overlay {
+  background: rgba(26, 26, 26, 0.8);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Loading Spinner */
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid rgba(91, 107, 141, 0.2);
+  border-top-color: #5b6b8d;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.dashboard.dark-mode .loading-spinner {
+  border-color: rgba(123, 143, 168, 0.2);
+  border-top-color: #7b8fa8;
 }
 
 .graphs-page-container h1 {
   color: #1a1a1a;
   margin-bottom: 8px;
   font-size: 2em;
-  text-align: center;
+  text-align: left;
 }
 
 .graphs-page-container .records-subtitle {
-  text-align: center;
+  text-align: left;
 }
 
 .graphs-content {
   margin-top: 24px;
   width: 100%;
-  max-width: 1400px;
+  max-width: 100%;
 }
 
 .graphs-content p {
@@ -831,12 +883,12 @@
 }
 
 .graphs-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
-  gap: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
   contain: layout;
   width: 100%;
-  justify-items: center;
+  max-width: 100%;
 }
 
 /* Sensors Page */
@@ -893,12 +945,12 @@
 
 .sensor-icon {
   font-size: 2em;
-  opacity: 0.12;
+  opacity: 0.6;
   transition: opacity 0.3s ease;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #888;
+  color: #5b6b8d;
   flex-shrink: 0;
 }
 
@@ -908,7 +960,7 @@
 }
 
 .sensor-card:hover .sensor-icon {
-  opacity: 0.25;
+  opacity: 0.8;
 }
 
 .sensor-card h3 {
@@ -933,16 +985,19 @@
   align-items: center;
   gap: 2px;
   z-index: 10;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .sensor-change.positive {
-  color: #4caf50;
-  background: rgba(76, 175, 80, 0.1);
+  color: #2e7d32;
+  background: rgba(76, 175, 80, 0.2);
+  border: 1px solid rgba(76, 175, 80, 0.3);
 }
 
 .sensor-change.negative {
-  color: #f44336;
-  background: rgba(244, 67, 54, 0.1);
+  color: #c62828;
+  background: rgba(244, 67, 54, 0.2);
+  border: 1px solid rgba(244, 67, 54, 0.3);
 }
 
 .sensor-value {
@@ -996,7 +1051,7 @@
   background: white;
   border: none;
   border-radius: 16px;
-  padding: 28px;
+  padding: 24px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   transition: box-shadow 0.3s ease, transform 0.3s ease;
   contain: layout style paint;
@@ -1007,49 +1062,67 @@
   overflow: hidden;
 }
 
-.graph-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, #d3a2ef 0%, #c3ecf7 100%);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.graph-card:hover::before {
-  opacity: 1;
-}
-
 .graph-card:hover {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  transform: translateY(-4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+.graph-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  gap: 16px;
+}
+
+.graph-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.current-value {
+  font-size: 3em;
+  font-weight: 700;
+  color: #5b6b8d;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.value-change {
+  font-size: 1em;
+  color: #999;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .graph-card h3 {
-  color: #333;
-  margin: 0 0 8px 0;
-  font-size: 0.95em;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  color: #666;
+  margin: 0;
+  font-size: 1em;
+  font-weight: 500;
+  text-align: right;
+  text-transform: none;
+  letter-spacing: normal;
+  opacity: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+
+.graph-card h3 svg {
+  color: #5b6b8d;
   opacity: 0.8;
 }
 
 .graph-card-labels {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-.graph-card-labels span {
-  color: #666;
-  font-size: 0.85em;
-  font-weight: 500;
+  display: none;
 }
 
 /* Prevent ResponsiveContainer from triggering reflows */
@@ -1059,6 +1132,23 @@
 
 .graph-card .recharts-surface {
   overflow: visible;
+}
+
+/* Brush cursor styling */
+.graph-card .recharts-brush {
+  cursor: grab;
+}
+
+.graph-card .recharts-brush:active {
+  cursor: grabbing;
+}
+
+.graph-card .recharts-brush-traveller {
+  cursor: ew-resize;
+}
+
+.graph-card .recharts-brush-slide {
+  cursor: move;
 }
 
 /* Custom tooltip styling */
@@ -1106,24 +1196,68 @@
 }
 
 /* Responsive adjustments */
-@media (min-width: 1600px) {
+
+/* Extra Large Screens (1920px+) */
+@media (min-width: 1920px) {
+  .sensor-detail-view .sensors-grid {
+    grid-template-columns: repeat(4, 1fr);
+    max-width: 1800px;
+  }
+  
+  .graphs-grid {
+    max-width: 1600px;
+  }
+}
+
+/* Large Desktop (1600px - 1919px) */
+@media (min-width: 1600px) and (max-width: 1919px) {
+  .sensor-detail-view .sensors-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
   .sensors-grid {
     grid-template-columns: repeat(4, 1fr);
   }
 }
 
+/* Desktop (1200px - 1599px) */
 @media (min-width: 1200px) and (max-width: 1599px) {
+  .sensor-detail-view .sensors-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
   .sensors-grid {
     grid-template-columns: repeat(3, 1fr);
   }
 }
 
+/* Small Desktop / Large Tablet (900px - 1199px) */
 @media (min-width: 900px) and (max-width: 1199px) {
+  .sensor-detail-view .sensors-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
   .sensors-grid {
     grid-template-columns: repeat(3, 1fr);
   }
+  
+  .graphs-grid {
+    gap: 20px;
+  }
 }
 
+/* Tablet (768px - 899px) */
+@media (min-width: 768px) and (max-width: 899px) {
+  .sensor-detail-view .sensors-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .sensors-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* General adjustments for screens below 1400px */
 @media (max-width: 1400px) {
   .sensors-grid {
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -1132,11 +1266,7 @@
 
 @media (max-width: 1200px) {
   .graphs-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .sensors-grid {
-    gap: 16px;
+    gap: 20px;
   }
 }
 
@@ -1162,6 +1292,34 @@
   .sensors-grid {
     grid-template-columns: repeat(2, 1fr);
     padding: 16px;
+  }
+  
+  .current-value {
+    font-size: 3em;
+  }
+  
+  .value-change {
+    font-size: 1.8em;
+  }
+  
+  .sensors-layout {
+    flex-direction: column;
+    height: auto;
+  }
+  
+  .sensors-camera-section {
+    height: 400px;
+    flex: none;
+  }
+  
+  .sensors-cards-column {
+    width: 100%;
+    max-height: 500px;
+  }
+  
+  .sensor-detail-view {
+    height: auto;
+    min-height: calc(100vh - 40px);
   }
 }
 
@@ -1274,22 +1432,54 @@
   }
   
   .graphs-grid {
-    grid-template-columns: 1fr;
-    gap: 20px;
+    gap: 16px;
   }
   
   .graph-card {
     padding: 20px;
   }
   
+  .current-value {
+    font-size: 2.8em;
+  }
+  
+  .value-change {
+    font-size: 1.6em;
+  }
+  
   .sensors-page-container {
     padding-top: 70px;
+  }
+  
+  .sensors-page-container-new {
+    padding: 80px 20px 20px 20px;
+  }
+  
+  .sensors-layout {
+    height: auto;
+  }
+  
+  .sensors-camera-section {
+    height: 300px;
+  }
+  
+  .sensors-cards-column {
+    max-height: 400px;
   }
   
   .sensors-grid {
     grid-template-columns: 1fr;
     gap: 16px;
     padding: 16px;
+  }
+  
+  .sensor-detail-view {
+    padding: 16px;
+  }
+  
+  .sensor-detail-view .sensors-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
   }
   
   .sensor-card {
@@ -1321,6 +1511,14 @@
     min-height: 250px;
     font-size: 18px;
   }
+  
+  .sensor-card-compact {
+    padding: 16px;
+  }
+  
+  .sensor-value-compact {
+    font-size: 1.8em;
+  }
 }
 
 @media (max-width: 480px) {
@@ -1331,6 +1529,10 @@
   }
   
   .records-page-container {
+    padding: 70px 16px 16px 16px;
+  }
+  
+  .sensors-page-container-new {
     padding: 70px 16px 16px 16px;
   }
   
@@ -1356,6 +1558,14 @@
     font-size: 0.85em;
   }
   
+  .current-value {
+    font-size: 2.5em;
+  }
+  
+  .value-change {
+    font-size: 1.4em;
+  }
+  
   .sensors-page-container {
     padding-top: 60px;
   }
@@ -1363,6 +1573,22 @@
   .sensors-grid {
     padding: 12px;
     gap: 12px;
+  }
+  
+  .sensor-detail-view {
+    padding: 12px;
+  }
+  
+  .sensor-detail-view .sensors-grid {
+    gap: 10px;
+  }
+  
+  .sensor-detail-view .sensor-card {
+    padding: 16px;
+  }
+  
+  .sensor-detail-view .sensor-value {
+    font-size: 1.8em;
   }
   
   .sensor-card {
@@ -1395,6 +1621,19 @@
     padding: 10px;
     font-size: 20px;
   }
+  
+  .back-button {
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+  
+  .sensors-camera-section {
+    height: 250px;
+  }
+  
+  .sensors-cards-column {
+    max-height: 350px;
+  }
 }
 
 /* Landscape mobile optimization */
@@ -1403,8 +1642,26 @@
     grid-template-columns: repeat(2, 1fr);
   }
   
+  .sensor-detail-view .sensors-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
   .sensor-card {
     min-height: 140px;
+  }
+  
+  .sensors-layout {
+    flex-direction: row;
+  }
+  
+  .sensors-camera-section {
+    height: auto;
+    flex: 1;
+  }
+  
+  .sensors-cards-column {
+    width: 300px;
+    max-height: calc(100vh - 120px);
   }
 }
 
@@ -1412,5 +1669,347 @@
 @media (min-width: 769px) and (max-width: 899px) {
   .sensors-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .sensor-detail-view .sensors-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Medium screens optimization */
+@media (min-width: 1024px) and (max-width: 1280px) {
+  .sensor-detail-view .sensors-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+  
+  .sensor-detail-view .sensor-card {
+    padding: 18px;
+  }
+  
+  .sensor-detail-view .sensor-value {
+    font-size: 2em;
+  }
+}
+
+/* Large screens optimization */
+@media (min-width: 1281px) and (max-width: 1599px) {
+  .sensor-detail-view .sensors-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Ultra-wide screens */
+@media (min-width: 2560px) {
+  .sensor-detail-view .sensors-grid {
+    grid-template-columns: repeat(5, 1fr);
+    max-width: 2400px;
+  }
+  
+  .graphs-grid {
+    max-width: 2000px;
+  }
+  
+  .records-page-container,
+  .graphs-page-container,
+  .dashboard-page-container {
+    padding: 50px;
+  }
+}
+
+
+/* New Sensors Page Layout */
+.sensors-page-container-new {
+  padding: 40px;
+  height: 100vh;
+  overflow: hidden;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.sensors-layout {
+  display: flex;
+  gap: 24px;
+  height: calc(100vh - 80px);
+}
+
+.sensors-camera-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.camera-feed-box {
+  flex: 1;
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sensors-cards-column {
+  width: 350px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-right: 8px;
+}
+
+.sensor-card-compact {
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sensor-card-compact:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+.sensor-card-compact-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.sensor-icon-small {
+  color: #5b6b8d;
+  opacity: 0.8;
+}
+
+.sensor-card-compact-header h3 {
+  font-size: 1em;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.sensor-value-compact {
+  font-size: 2em;
+  font-weight: 700;
+  color: #ff8c00;
+  margin: 8px 0;
+}
+
+.sensor-status-compact {
+  font-size: 0.75em;
+  color: #999;
+}
+
+/* Sensor Detail View */
+.sensor-detail-view {
+  padding: 20px;
+  height: calc(100vh - 40px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.back-button {
+  background: #5b6b8d;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 16px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.back-button:hover {
+  background: #4a5a7a;
+  transform: translateX(-4px);
+  box-shadow: 0 2px 8px rgba(91, 107, 141, 0.3);
+}
+
+.sensor-detail-view .sensors-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  max-width: 100%;
+  flex: 1;
+  align-content: start;
+}
+
+.sensor-detail-view .sensor-card {
+  min-height: auto;
+  padding: 20px;
+}
+
+.sensor-detail-view .sensor-card-header {
+  margin-bottom: 12px;
+}
+
+.sensor-detail-view .sensor-icon {
+  font-size: 1.5em;
+}
+
+.sensor-detail-view .sensor-card h3 {
+  font-size: 0.8em;
+}
+
+.sensor-detail-view .sensor-change {
+  top: 16px;
+  right: 16px;
+  font-size: 0.7em;
+  padding: 3px 6px;
+}
+
+.sensor-detail-view .sensor-value {
+  font-size: 2.2em;
+  margin: 8px 0;
+}
+
+.sensor-detail-view .sensor-status {
+  font-size: 0.6em;
+  margin: 8px 0 0 0;
+}
+
+/* Dark mode for new sensors layout */
+.dashboard.dark-mode .sensors-page-container-new {
+  background-color: #1a1a1a;
+}
+
+.dashboard.dark-mode .camera-feed-box {
+  background: #2d2d2d;
+}
+
+.dashboard.dark-mode .sensor-card-compact {
+  background: #2d2d2d;
+}
+
+.dashboard.dark-mode .sensor-card-compact-header h3 {
+  color: #e0e0e0;
+}
+
+.dashboard.dark-mode .sensor-value-compact {
+  color: #ff9800;
+}
+
+.dashboard.dark-mode .sensor-status-compact {
+  color: #777;
+}
+
+.dashboard.dark-mode .back-button {
+  background: #4a5a7a;
+}
+
+.dashboard.dark-mode .back-button:hover {
+  background: #5b6b8d;
+}
+
+/* Responsive for new sensors layout */
+@media (max-width: 1024px) {
+  .sensors-layout {
+    flex-direction: column;
+  }
+  
+  .sensors-camera-section {
+    height: 400px;
+  }
+  
+  .sensors-cards-column {
+    width: 100%;
+    max-height: calc(100vh - 520px);
+  }
+}
+
+@media (max-width: 768px) {
+  .sensors-page-container-new {
+    padding: 80px 20px 20px 20px;
+  }
+  
+  .sensors-layout {
+    height: calc(100vh - 120px);
+  }
+  
+  .sensors-camera-section {
+    height: 300px;
+  }
+  
+  .sensors-cards-column {
+    max-height: calc(100vh - 440px);
+  }
+  
+  .sensor-card-compact {
+    padding: 16px;
+  }
+  
+  .sensor-value-compact {
+    font-size: 1.8em;
+  }
+}
+
+@media (max-width: 480px) {
+  .sensors-page-container-new {
+    padding: 70px 16px 16px 16px;
+  }
+  
+  .sensors-camera-section {
+    height: 250px;
+  }
+  
+  .sensors-cards-column {
+    max-height: calc(100vh - 380px);
+  }
+  
+  .sensor-card-compact {
+    padding: 14px;
+  }
+  
+  .sensor-value-compact {
+    font-size: 1.6em;
+  }
+  
+  .sensor-status-compact {
+    font-size: 0.7em;
+  }
+}
+
+/* Landscape orientation for sensors page */
+@media (max-width: 1024px) and (orientation: landscape) {
+  .sensors-layout {
+    flex-direction: row;
+  }
+  
+  .sensors-camera-section {
+    flex: 1;
+    height: auto;
+  }
+  
+  .sensors-cards-column {
+    width: 350px;
+    max-height: calc(100vh - 120px);
+  }
+}
+
+/* Large screens for sensors page */
+@media (min-width: 1600px) {
+  .sensors-cards-column {
+    width: 400px;
+  }
+  
+  .sensor-card-compact {
+    padding: 24px;
+  }
+  
+  .sensor-value-compact {
+    font-size: 2.2em;
   }
 }

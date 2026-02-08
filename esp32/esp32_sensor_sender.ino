@@ -144,21 +144,54 @@ void readMICS6814(float &no2, float &co, float &nh3) {
 }
 
 bool readPMS7003(float &pm25, float &pm10) {
+  // Clear any old data in the buffer first
+  while (pmsSerial.available() > 32) {
+    pmsSerial.read();
+  }
+  
   byte buffer[32];
   int count = 0;
+  unsigned long startTime = millis();
   
-  while (pmsSerial.available() && count < 32) {
-    buffer[count++] = pmsSerial.read();
+  // Wait up to 2 seconds for a complete packet
+  while (count < 32 && (millis() - startTime) < 2000) {
+    if (pmsSerial.available()) {
+      byte b = pmsSerial.read();
+      
+      // Look for start bytes 0x42 0x4D
+      if (count == 0 && b != 0x42) continue;
+      if (count == 1 && b != 0x4D) {
+        count = 0;
+        continue;
+      }
+      
+      buffer[count++] = b;
+    }
   }
   
+  // Verify we have a complete packet with correct header
   if (count == 32 && buffer[0] == 0x42 && buffer[1] == 0x4D) {
-    pm25 = (buffer[12] << 8) | buffer[13];
-    pm10 = (buffer[14] << 8) | buffer[15];
-    return true;
+    // Calculate checksum
+    uint16_t sum = 0;
+    for (int i = 0; i < 30; i++) {
+      sum += buffer[i];
+    }
+    uint16_t checksum = (buffer[30] << 8) | buffer[31];
+    
+    // Verify checksum
+    if (sum == checksum) {
+      pm25 = (buffer[12] << 8) | buffer[13];
+      pm10 = (buffer[14] << 8) | buffer[15];
+      
+      // Validate readings are reasonable (not 0 and not too high)
+      if (pm25 > 0 && pm25 < 1000 && pm10 > 0 && pm10 < 1000) {
+        return true;
+      }
+    }
   }
   
-  pm25 = 0;
-  pm10 = 0;
+  // Keep previous values instead of setting to 0
+  // pm25 and pm10 are passed by reference, so they retain their previous values
   return false;
 }
 
@@ -172,7 +205,11 @@ void postSensorData() {
   // Read sensors
   float temp, humidity, pressure, voc;
   float no2, co, nh3;
-  float pm25, pm10;
+  
+  // Static variables to keep last valid PM readings
+  static float pm25 = 0;
+  static float pm10 = 0;
+  static bool pmInitialized = false;
   
   if (!readBME680(temp, humidity, pressure, voc)) {
     Serial.println("❌ Failed to read BME680");
@@ -180,7 +217,18 @@ void postSensorData() {
   }
   
   readMICS6814(no2, co, nh3);
-  readPMS7003(pm25, pm10);
+  
+  // Try to read PMS7003, keep previous values if it fails
+  bool pmSuccess = readPMS7003(pm25, pm10);
+  
+  if (pmSuccess) {
+    pmInitialized = true;
+  } else if (!pmInitialized) {
+    // If we've never gotten valid PM readings, set to 0
+    pm25 = 0;
+    pm10 = 0;
+  }
+  // else: keep the last valid readings
   
   // Create JSON in the format expected by backend
   StaticJsonDocument<256> doc;
@@ -203,8 +251,8 @@ void postSensorData() {
   Serial.printf("🌫️  VOCs: %.1f kΩ\n", voc);
   Serial.printf("💨 NO2: %.3f PPM\n", no2);
   Serial.printf("🔥 CO: %.3f PPM\n", co);
-  Serial.printf("⚫ PM2.5: %.1f µg/m³\n", pm25);
-  Serial.printf("⚫ PM10: %.1f µg/m³\n", pm10);
+  Serial.printf("⚫ PM2.5: %.1f µg/m³%s\n", pm25, pmSuccess ? "" : " (last valid)");
+  Serial.printf("⚫ PM10: %.1f µg/m³%s\n", pm10, pmSuccess ? "" : " (last valid)");
   
   // POST request - Try direct TCP connection
   Serial.println("\n📤 Sending to server...");
