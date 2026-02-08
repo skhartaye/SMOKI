@@ -1062,11 +1062,6 @@ function Dashboard() {
               <div className="records-header">
                 <h1>Sensor Records</h1>
                 <p className="records-subtitle">AeroBlend system data logs and monitoring</p>
-                {userRole === 'superadmin' && (
-                  <button className="create-record-btn" onClick={() => setShowCreateModal(true)}>
-                    ➕ Create New Record
-                  </button>
-                )}
               </div>
 
               {/* Filters Section */}
@@ -1199,7 +1194,18 @@ function Dashboard() {
                           {appliedSensorTypes.pm10 && <th>PM10 (µg/m³)</th>}
                           <th>AQI</th>
                           <th>Status</th>
-                          {userRole === 'superadmin' && <th>Actions</th>}
+                          {userRole === 'superadmin' && (
+                            <th>
+                              Actions
+                              <button 
+                                className="create-action-btn"
+                                onClick={() => setShowCreateModal(true)}
+                                title="Create new record"
+                              >
+                                ➕
+                              </button>
+                            </th>
+                          )}
                         </tr>
                       </thead>
                       <tbody>
