@@ -10,21 +10,43 @@ function App() {
   const [isLoading, setIsLoading] = useState(false)
   const navigate = useNavigate()
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault()
     setIsLoading(true)
     setError('')
 
-    // Simulate loading
-    setTimeout(() => {
-      if (username === 'admin' && password === '1234') {
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+      const response = await fetch(`${API_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Store token and user info
+        localStorage.setItem('token', data.access_token);
+        localStorage.setItem('role', data.role);
+        localStorage.setItem('username', data.username);
         localStorage.setItem('isLoggedIn', 'true');
-        navigate('/dashboard');
+        
+        // Navigate to dashboard
+        setTimeout(() => {
+          navigate('/dashboard');
+        }, 800);
       } else {
-        setError('Invalid username or password')
-        setIsLoading(false)
+        setError(data.detail || 'Invalid username or password');
+        setIsLoading(false);
       }
-    }, 1200)
+    } catch (error) {
+      console.error('Login error:', error);
+      setError('Connection error. Please try again.');
+      setIsLoading(false);
+    }
   }
 
   return (

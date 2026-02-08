@@ -122,7 +122,20 @@ function Dashboard() {
   const fetchLatestSensorData = async () => {
     try {
       const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
-      const response = await fetch(`${API_URL}/api/sensors/latest`);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/api/sensors/latest`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.status === 401) {
+        // Token expired or invalid
+        localStorage.clear();
+        navigate('/');
+        return;
+      }
+      
       const result = await response.json();
       if (result.success && result.data) {
         setPreviousSensorData(sensorData);
@@ -144,7 +157,19 @@ function Dashboard() {
   const fetchRecords = async () => {
     try {
       const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
-      const response = await fetch(`${API_URL}/api/sensors/data?limit=50`);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/api/sensors/data?limit=50`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.status === 401) {
+        localStorage.clear();
+        navigate('/');
+        return;
+      }
+      
       const result = await response.json();
       if (result.success) {
         setRecords(result.data);
@@ -157,7 +182,19 @@ function Dashboard() {
   const fetchGraphData = async () => {
     try {
       const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
-      const response = await fetch(`${API_URL}/api/sensors/data?limit=500`);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/api/sensors/data?limit=500`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.status === 401) {
+        localStorage.clear();
+        navigate('/');
+        return;
+      }
+      
       const result = await response.json();
       if (result.success) {
         // Format data for graphs (reverse to show oldest first)
@@ -569,8 +606,8 @@ function Dashboard() {
           <div className="user-info">
             <span className="user-icon">👤</span>
             <div className="user-details">
-              <div className="user-name">Admin User</div>
-              <div className="user-email">admin@smoki.local</div>
+              <div className="user-name">{localStorage.getItem('username') || 'User'}</div>
+              <div className="user-email">{localStorage.getItem('role') === 'superadmin' ? 'Super Admin' : 'Admin'}</div>
             </div>
           </div>
           <button className="sign-out-btn" onClick={handleLogout}>
