@@ -58,6 +58,7 @@ function Dashboard() {
   const [clearGraphFilters, setClearGraphFilters] = useState(false);
   const [graphSensorDropdownOpen, setGraphSensorDropdownOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   const navigate = useNavigate();
 
@@ -183,15 +184,124 @@ function Dashboard() {
   };
 
   const calculateAQI = (record) => {
-    // Simple AQI calculation based on PM2.5 (US EPA standard)
-    const pm25 = record.pm25 || 0;
+    // AQI calculation based on US EPA standard
+    // Using the formula: Ip = [(IHI - ILO) / (BPHI - BPLO)] * (Cp - BPLO) + ILO
     
-    if (pm25 <= 12) return { value: Math.round((50 / 12) * pm25), category: 'Good', color: '#4caf50' };
-    if (pm25 <= 35.4) return { value: Math.round(50 + ((100 - 50) / (35.4 - 12.1)) * (pm25 - 12.1)), category: 'Moderate', color: '#ffc107' };
-    if (pm25 <= 55.4) return { value: Math.round(100 + ((150 - 100) / (55.4 - 35.5)) * (pm25 - 35.5)), category: 'Unhealthy for Sensitive', color: '#ff9800' };
-    if (pm25 <= 150.4) return { value: Math.round(150 + ((200 - 150) / (150.4 - 55.5)) * (pm25 - 55.5)), category: 'Unhealthy', color: '#f44336' };
-    if (pm25 <= 250.4) return { value: Math.round(200 + ((300 - 200) / (250.4 - 150.5)) * (pm25 - 150.5)), category: 'Very Unhealthy', color: '#9c27b0' };
-    return { value: Math.round(300 + ((500 - 300) / (500.4 - 250.5)) * (pm25 - 250.5)), category: 'Hazardous', color: '#7b1fa2' };
+    const pollutants = [];
+    
+    // PM2.5 breakpoints (µg/m³)
+    const pm25Breakpoints = [
+      { cLow: 0, cHigh: 12.0, iLow: 0, iHigh: 50 },
+      { cLow: 12.1, cHigh: 35.4, iLow: 51, iHigh: 100 },
+      { cLow: 35.5, cHigh: 55.4, iLow: 101, iHigh: 150 },
+      { cLow: 55.5, cHigh: 150.4, iLow: 151, iHigh: 200 },
+      { cLow: 150.5, cHigh: 250.4, iLow: 201, iHigh: 300 },
+      { cLow: 250.5, cHigh: 500.4, iLow: 301, iHigh: 500 }
+    ];
+    
+    // PM10 breakpoints (µg/m³)
+    const pm10Breakpoints = [
+      { cLow: 0, cHigh: 54, iLow: 0, iHigh: 50 },
+      { cLow: 55, cHigh: 154, iLow: 51, iHigh: 100 },
+      { cLow: 155, cHigh: 254, iLow: 101, iHigh: 150 },
+      { cLow: 255, cHigh: 354, iLow: 151, iHigh: 200 },
+      { cLow: 355, cHigh: 424, iLow: 201, iHigh: 300 },
+      { cLow: 425, cHigh: 604, iLow: 301, iHigh: 500 }
+    ];
+    
+    // CO breakpoints (ppm)
+    const coBreakpoints = [
+      { cLow: 0, cHigh: 4.4, iLow: 0, iHigh: 50 },
+      { cLow: 4.5, cHigh: 9.4, iLow: 51, iHigh: 100 },
+      { cLow: 9.5, cHigh: 12.4, iLow: 101, iHigh: 150 },
+      { cLow: 12.5, cHigh: 15.4, iLow: 151, iHigh: 200 },
+      { cLow: 15.5, cHigh: 30.4, iLow: 201, iHigh: 300 },
+      { cLow: 30.5, cHigh: 50.4, iLow: 301, iHigh: 500 }
+    ];
+    
+    // NO2 breakpoints (ppb, convert from ppm)
+    const no2Breakpoints = [
+      { cLow: 0, cHigh: 53, iLow: 0, iHigh: 50 },
+      { cLow: 54, cHigh: 100, iLow: 51, iHigh: 100 },
+      { cLow: 101, cHigh: 360, iLow: 101, iHigh: 150 },
+      { cLow: 361, cHigh: 649, iLow: 151, iHigh: 200 },
+      { cLow: 650, cHigh: 1249, iLow: 201, iHigh: 300 },
+      { cLow: 1250, cHigh: 2049, iLow: 301, iHigh: 500 }
+    ];
+    
+    const calculatePollutantAQI = (concentration, breakpoints) => {
+      if (!concentration || concentration < 0) return null;
+      
+      for (let bp of breakpoints) {
+        if (concentration >= bp.cLow && concentration <= bp.cHigh) {
+          const aqi = ((bp.iHigh - bp.iLow) / (bp.cHigh - bp.cLow)) * (concentration - bp.cLow) + bp.iLow;
+          return Math.round(aqi);
+        }
+      }
+      
+      // If concentration exceeds all breakpoints, return hazardous
+      return 500;
+    };
+    
+    // Calculate AQI for each pollutant
+    if (record.pm25) {
+      const aqi = calculatePollutantAQI(record.pm25, pm25Breakpoints);
+      if (aqi !== null) pollutants.push({ name: 'PM2.5', aqi });
+    }
+    
+    if (record.pm10) {
+      const aqi = calculatePollutantAQI(record.pm10, pm10Breakpoints);
+      if (aqi !== null) pollutants.push({ name: 'PM10', aqi });
+    }
+    
+    if (record.carbon_monoxide) {
+      const aqi = calculatePollutantAQI(record.carbon_monoxide, coBreakpoints);
+      if (aqi !== null) pollutants.push({ name: 'CO', aqi });
+    }
+    
+    if (record.nitrogen_dioxide) {
+      // Convert ppm to ppb (multiply by 1000)
+      const no2Ppb = record.nitrogen_dioxide * 1000;
+      const aqi = calculatePollutantAQI(no2Ppb, no2Breakpoints);
+      if (aqi !== null) pollutants.push({ name: 'NO2', aqi });
+    }
+    
+    // Return the highest AQI (worst pollutant)
+    if (pollutants.length === 0) {
+      return { value: 0, category: 'Good', color: '#4caf50', pollutant: 'N/A' };
+    }
+    
+    const maxPollutant = pollutants.reduce((max, p) => p.aqi > max.aqi ? p : max);
+    const aqiValue = maxPollutant.aqi;
+    
+    // Determine category and color based on AQI value
+    let category, color;
+    if (aqiValue <= 50) {
+      category = 'Good';
+      color = '#4caf50'; // Green
+    } else if (aqiValue <= 100) {
+      category = 'Moderate';
+      color = '#ffc107'; // Yellow
+    } else if (aqiValue <= 150) {
+      category = 'Unhealthy for Sensitive';
+      color = '#ff9800'; // Orange
+    } else if (aqiValue <= 200) {
+      category = 'Unhealthy';
+      color = '#f44336'; // Red
+    } else if (aqiValue <= 300) {
+      category = 'Very Unhealthy';
+      color = '#9c27b0'; // Purple
+    } else {
+      category = 'Hazardous';
+      color = '#7b1fa2'; // Maroon
+    }
+    
+    return { 
+      value: aqiValue, 
+      category, 
+      color,
+      pollutant: maxPollutant.name
+    };
   };
 
   // Tooltip config for graphs
@@ -334,8 +444,19 @@ function Dashboard() {
 
   return (
     <div className={`dashboard ${darkMode ? 'dark-mode' : ''}`}>
+      {/* Mobile Menu Button */}
+      <button className="mobile-menu-btn" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+        <TbMenu2 />
+      </button>
+
+      {/* Sidebar Overlay */}
+      <div 
+        className={`sidebar-overlay ${mobileMenuOpen ? 'active' : ''}`}
+        onClick={() => setMobileMenuOpen(false)}
+      ></div>
+
       {/* Sidebar */}
-      <aside className="sidebar">
+      <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="sidebar-header">
           <h1>
             <span className="menu-icon"><TbMenu2 /></span>
@@ -345,7 +466,10 @@ function Dashboard() {
 
         <nav className="sidebar-nav">
           <button 
-            onClick={() => setActivePage("dashboard")}
+            onClick={() => {
+              setActivePage("dashboard");
+              setMobileMenuOpen(false);
+            }}
             className={`nav-item ${activePage === "dashboard" ? "active" : ""}`}
           >
             <span className="nav-icon"><TbLayoutDashboard /></span>
@@ -353,7 +477,10 @@ function Dashboard() {
           </button>
 
           <button 
-            onClick={() => setActivePage("records")}
+            onClick={() => {
+              setActivePage("records");
+              setMobileMenuOpen(false);
+            }}
             className={`nav-item ${activePage === "records" ? "active" : ""}`}
           >
             <span className="nav-icon"><TbFileText /></span>
@@ -361,7 +488,10 @@ function Dashboard() {
           </button>
 
           <button 
-            onClick={() => setActivePage("graphs")}
+            onClick={() => {
+              setActivePage("graphs");
+              setMobileMenuOpen(false);
+            }}
             className={`nav-item ${activePage === "graphs" ? "active" : ""}`}
           >
             <span className="nav-icon"><TbChartLine /></span>
@@ -369,7 +499,10 @@ function Dashboard() {
           </button>
 
           <button 
-            onClick={() => setActivePage("sensors")}
+            onClick={() => {
+              setActivePage("sensors");
+              setMobileMenuOpen(false);
+            }}
             className={`nav-item ${activePage === "sensors" ? "active" : ""}`}
           >
             <span className="nav-icon"><TbRadar /></span>
