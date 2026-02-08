@@ -2071,6 +2071,32 @@
   box-shadow: 0 4px 8px rgba(0,0,0,0.2);
 }
 
+/* Create Action Button in Table Header */
+.create-action-btn {
+  background: #4CAF50;
+  color: white;
+  border: none;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  margin-left: 10px;
+  transition: all 0.3s ease;
+}
+
+.create-action-btn:hover {
+  background: #45a049;
+  transform: scale(1.1);
+}
+
+.dashboard.dark-mode .create-action-btn {
+  background: #388E3C;
+}
+
+.dashboard.dark-mode .create-action-btn:hover {
+  background: #2E7D32;
+}
+
 /* Edit Button */
 .edit-btn {
   background: #2196F3;
