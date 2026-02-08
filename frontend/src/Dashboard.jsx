@@ -61,6 +61,7 @@ function Dashboard() {
   const [selectedSensor, setSelectedSensor] = useState(null); // For sensor detail view
   const [sidebarHovered, setSidebarHovered] = useState(false);
   const [showGraphLoading, setShowGraphLoading] = useState(false);
+  const [userRole, setUserRole] = useState(localStorage.getItem('role') || 'admin');
   
   const navigate = useNavigate();
 
@@ -220,6 +221,39 @@ function Dashboard() {
     localStorage.removeItem('isLoggedIn');
     navigate('/');
   }
+
+  const handleDeleteRecord = async (recordId) => {
+    if (!window.confirm('Are you sure you want to delete this record?')) {
+      return;
+    }
+
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/api/sensors/data/${recordId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.status === 401 || response.status === 403) {
+        alert('You do not have permission to delete records.');
+        return;
+      }
+      
+      if (response.ok) {
+        // Remove from local state
+        setRecords(records.filter(r => r.id !== recordId));
+        alert('Record deleted successfully');
+      } else {
+        alert('Failed to delete record');
+      }
+    } catch (error) {
+      console.error('Error deleting record:', error);
+      alert('Error deleting record');
+    }
+  };
 
   const formatTimestamp = (timestamp) => {
     const date = new Date(timestamp);
@@ -1050,6 +1084,7 @@ function Dashboard() {
                           {appliedSensorTypes.pm10 && <th>PM10 (µg/m³)</th>}
                           <th>AQI</th>
                           <th>Status</th>
+                          {userRole === 'superadmin' && <th>Actions</th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -1088,6 +1123,17 @@ function Dashboard() {
                               <td>
                                 <span className={`status-badge status-${status}`}>{status}</span>
                               </td>
+                              {userRole === 'superadmin' && (
+                                <td>
+                                  <button 
+                                    className="delete-btn"
+                                    onClick={() => handleDeleteRecord(record.id)}
+                                    title="Delete record"
+                                  >
+                                    🗑️
+                                  </button>
+                                </td>
+                              )}
                             </tr>
                           );
                         })}

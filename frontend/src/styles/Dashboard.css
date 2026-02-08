@@ -2021,3 +2021,32 @@
     font-size: 2.2em;
   }
 }
+
+/* Delete Button */
+.delete-btn {
+  background: #ff4444;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.3s ease;
+}
+
+.delete-btn:hover {
+  background: #cc0000;
+  transform: scale(1.1);
+}
+
+.delete-btn:active {
+  transform: scale(0.95);
+}
+
+.dashboard.dark-mode .delete-btn {
+  background: #d32f2f;
+}
+
+.dashboard.dark-mode .delete-btn:hover {
+  background: #b71c1c;
+}
