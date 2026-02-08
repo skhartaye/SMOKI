@@ -62,6 +62,18 @@ function Dashboard() {
   const [sidebarHovered, setSidebarHovered] = useState(false);
   const [showGraphLoading, setShowGraphLoading] = useState(false);
   const [userRole, setUserRole] = useState(localStorage.getItem('role') || 'admin');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingRecord, setEditingRecord] = useState(null);
+  const [formData, setFormData] = useState({
+    temperature: '',
+    humidity: '',
+    vocs: '',
+    nitrogen_dioxide: '',
+    carbon_monoxide: '',
+    pm25: '',
+    pm10: ''
+  });
   
   const navigate = useNavigate();
 
@@ -243,7 +255,6 @@ function Dashboard() {
       }
       
       if (response.ok) {
-        // Remove from local state
         setRecords(records.filter(r => r.id !== recordId));
         alert('Record deleted successfully');
       } else {
@@ -253,6 +264,105 @@ function Dashboard() {
       console.error('Error deleting record:', error);
       alert('Error deleting record');
     }
+  };
+
+  const handleCreateRecord = async (e) => {
+    e.preventDefault();
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+      const token = localStorage.getItem('token');
+      
+      const data = {
+        temperature: formData.temperature ? parseFloat(formData.temperature) : null,
+        humidity: formData.humidity ? parseFloat(formData.humidity) : null,
+        vocs: formData.vocs ? parseFloat(formData.vocs) : null,
+        nitrogen_dioxide: formData.nitrogen_dioxide ? parseFloat(formData.nitrogen_dioxide) : null,
+        carbon_monoxide: formData.carbon_monoxide ? parseFloat(formData.carbon_monoxide) : null,
+        pm25: formData.pm25 ? parseFloat(formData.pm25) : null,
+        pm10: formData.pm10 ? parseFloat(formData.pm10) : null
+      };
+
+      const response = await fetch(`${API_URL}/api/sensors/data`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      });
+      
+      if (response.ok) {
+        alert('Record created successfully');
+        setShowCreateModal(false);
+        setFormData({
+          temperature: '', humidity: '', vocs: '', nitrogen_dioxide: '',
+          carbon_monoxide: '', pm25: '', pm10: ''
+        });
+        fetchRecords();
+      } else {
+        alert('Failed to create record');
+      }
+    } catch (error) {
+      console.error('Error creating record:', error);
+      alert('Error creating record');
+    }
+  };
+
+  const handleUpdateRecord = async (e) => {
+    e.preventDefault();
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+      const token = localStorage.getItem('token');
+      
+      const data = {
+        temperature: formData.temperature ? parseFloat(formData.temperature) : null,
+        humidity: formData.humidity ? parseFloat(formData.humidity) : null,
+        vocs: formData.vocs ? parseFloat(formData.vocs) : null,
+        nitrogen_dioxide: formData.nitrogen_dioxide ? parseFloat(formData.nitrogen_dioxide) : null,
+        carbon_monoxide: formData.carbon_monoxide ? parseFloat(formData.carbon_monoxide) : null,
+        pm25: formData.pm25 ? parseFloat(formData.pm25) : null,
+        pm10: formData.pm10 ? parseFloat(formData.pm10) : null
+      };
+
+      const response = await fetch(`${API_URL}/api/sensors/data/${editingRecord.id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      });
+      
+      if (response.ok) {
+        alert('Record updated successfully');
+        setShowEditModal(false);
+        setEditingRecord(null);
+        setFormData({
+          temperature: '', humidity: '', vocs: '', nitrogen_dioxide: '',
+          carbon_monoxide: '', pm25: '', pm10: ''
+        });
+        fetchRecords();
+      } else {
+        alert('Failed to update record');
+      }
+    } catch (error) {
+      console.error('Error updating record:', error);
+      alert('Error updating record');
+    }
+  };
+
+  const openEditModal = (record) => {
+    setEditingRecord(record);
+    setFormData({
+      temperature: record.temperature || '',
+      humidity: record.humidity || '',
+      vocs: record.vocs || '',
+      nitrogen_dioxide: record.nitrogen_dioxide || '',
+      carbon_monoxide: record.carbon_monoxide || '',
+      pm25: record.pm25 || '',
+      pm10: record.pm10 || ''
+    });
+    setShowEditModal(true);
   };
 
   const formatTimestamp = (timestamp) => {
@@ -952,6 +1062,11 @@ function Dashboard() {
               <div className="records-header">
                 <h1>Sensor Records</h1>
                 <p className="records-subtitle">AeroBlend system data logs and monitoring</p>
+                {userRole === 'superadmin' && (
+                  <button className="create-record-btn" onClick={() => setShowCreateModal(true)}>
+                    ➕ Create New Record
+                  </button>
+                )}
               </div>
 
               {/* Filters Section */}
@@ -1126,6 +1241,13 @@ function Dashboard() {
                               {userRole === 'superadmin' && (
                                 <td>
                                   <button 
+                                    className="edit-btn"
+                                    onClick={() => openEditModal(record)}
+                                    title="Edit record"
+                                  >
+                                    ✏️
+                                  </button>
+                                  <button 
                                     className="delete-btn"
                                     onClick={() => handleDeleteRecord(record.id)}
                                     title="Delete record"
@@ -1142,6 +1264,110 @@ function Dashboard() {
                   </div>
                 )}
               </div>
+
+              {/* Create Modal */}
+              {showCreateModal && (
+                <div className="modal-overlay" onClick={() => setShowCreateModal(false)}>
+                  <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                    <h2>Create New Sensor Record</h2>
+                    <form onSubmit={handleCreateRecord}>
+                      <div className="form-grid">
+                        <div className="form-group">
+                          <label>Temperature (°C)</label>
+                          <input type="number" step="0.1" value={formData.temperature} 
+                            onChange={(e) => setFormData({...formData, temperature: e.target.value})} />
+                        </div>
+                        <div className="form-group">
+                          <label>Humidity (%)</label>
+                          <input type="number" step="0.1" value={formData.humidity}
+                            onChange={(e) => setFormData({...formData, humidity: e.target.value})} />
+                        </div>
+                        <div className="form-group">
+                          <label>VOCs (kΩ)</label>
+                          <input type="number" step="0.1" value={formData.vocs}
+                            onChange={(e) => setFormData({...formData, vocs: e.target.value})} />
+                        </div>
+                        <div className="form-group">
+                          <label>NO₂ (PPM)</label>
+                          <input type="number" step="0.01" value={formData.nitrogen_dioxide}
+                            onChange={(e) => setFormData({...formData, nitrogen_dioxide: e.target.value})} />
+                        </div>
+                        <div className="form-group">
+                          <label>CO (PPM)</label>
+                          <input type="number" step="0.01" value={formData.carbon_monoxide}
+                            onChange={(e) => setFormData({...formData, carbon_monoxide: e.target.value})} />
+                        </div>
+                        <div className="form-group">
+                          <label>PM2.5 (µg/m³)</label>
+                          <input type="number" step="0.1" value={formData.pm25}
+                            onChange={(e) => setFormData({...formData, pm25: e.target.value})} />
+                        </div>
+                        <div className="form-group">
+                          <label>PM10 (µg/m³)</label>
+                          <input type="number" step="0.1" value={formData.pm10}
+                            onChange={(e) => setFormData({...formData, pm10: e.target.value})} />
+                        </div>
+                      </div>
+                      <div className="modal-actions">
+                        <button type="button" className="cancel-btn" onClick={() => setShowCreateModal(false)}>Cancel</button>
+                        <button type="submit" className="submit-btn">Create</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+
+              {/* Edit Modal */}
+              {showEditModal && (
+                <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+                  <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                    <h2>Edit Sensor Record</h2>
+                    <form onSubmit={handleUpdateRecord}>
+                      <div className="form-grid">
+                        <div className="form-group">
+                          <label>Temperature (°C)</label>
+                          <input type="number" step="0.1" value={formData.temperature}
+                            onChange={(e) => setFormData({...formData, temperature: e.target.value})} />
+                        </div>
+                        <div className="form-group">
+                          <label>Humidity (%)</label>
+                          <input type="number" step="0.1" value={formData.humidity}
+                            onChange={(e) => setFormData({...formData, humidity: e.target.value})} />
+                        </div>
+                        <div className="form-group">
+                          <label>VOCs (kΩ)</label>
+                          <input type="number" step="0.1" value={formData.vocs}
+                            onChange={(e) => setFormData({...formData, vocs: e.target.value})} />
+                        </div>
+                        <div className="form-group">
+                          <label>NO₂ (PPM)</label>
+                          <input type="number" step="0.01" value={formData.nitrogen_dioxide}
+                            onChange={(e) => setFormData({...formData, nitrogen_dioxide: e.target.value})} />
+                        </div>
+                        <div className="form-group">
+                          <label>CO (PPM)</label>
+                          <input type="number" step="0.01" value={formData.carbon_monoxide}
+                            onChange={(e) => setFormData({...formData, carbon_monoxide: e.target.value})} />
+                        </div>
+                        <div className="form-group">
+                          <label>PM2.5 (µg/m³)</label>
+                          <input type="number" step="0.1" value={formData.pm25}
+                            onChange={(e) => setFormData({...formData, pm25: e.target.value})} />
+                        </div>
+                        <div className="form-group">
+                          <label>PM10 (µg/m³)</label>
+                          <input type="number" step="0.1" value={formData.pm10}
+                            onChange={(e) => setFormData({...formData, pm10: e.target.value})} />
+                        </div>
+                      </div>
+                      <div className="modal-actions">
+                        <button type="button" className="cancel-btn" onClick={() => setShowEditModal(false)}>Cancel</button>
+                        <button type="submit" className="submit-btn">Update</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
             </section>
           )}
 
