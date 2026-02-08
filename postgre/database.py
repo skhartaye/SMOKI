@@ -143,6 +143,57 @@ def get_sensor_data_by_timerange(start_time, end_time):
             print(f"Error fetching sensor data by time range: {e}")
             return []
 
+def update_sensor_data(record_id, temperature=None, humidity=None, vocs=None, 
+                       nitrogen_dioxide=None, carbon_monoxide=None, 
+                       pm25=None, pm10=None):
+    """Update sensor data record"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    UPDATE sensor_data
+                    SET temperature = COALESCE(%s, temperature),
+                        humidity = COALESCE(%s, humidity),
+                        vocs = COALESCE(%s, vocs),
+                        nitrogen_dioxide = COALESCE(%s, nitrogen_dioxide),
+                        carbon_monoxide = COALESCE(%s, carbon_monoxide),
+                        pm25 = COALESCE(%s, pm25),
+                        pm10 = COALESCE(%s, pm10)
+                    WHERE id = %s
+                    RETURNING id, timestamp;
+                """, (temperature, humidity, vocs, nitrogen_dioxide, carbon_monoxide, 
+                      pm25, pm10, record_id))
+                
+                result = cursor.fetchone()
+                if result:
+                    conn.commit()
+                    return {"id": result[0], "timestamp": result[1]}
+                else:
+                    return None
+        except Exception as e:
+            print(f"Error updating sensor data: {e}")
+            conn.rollback()
+            return None
+
+def delete_sensor_data(record_id):
+    """Delete sensor data record"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    DELETE FROM sensor_data
+                    WHERE id = %s
+                    RETURNING id;
+                """, (record_id,))
+                
+                result = cursor.fetchone()
+                conn.commit()
+                return result is not None
+        except Exception as e:
+            print(f"Error deleting sensor data: {e}")
+            conn.rollback()
+            return False
+
 def close_db_pool():
     """Close database connections (no-op for direct connections)"""
     print("Database connections closed")
