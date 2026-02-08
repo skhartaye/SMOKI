@@ -39,13 +39,13 @@ async def shutdown_event():
     close_db_pool()
 
 class SensorData(BaseModel):
-    temperature: float = None
-    humidity: float = None
-    vocs: float = None
-    nitrogen_dioxide: float = None
-    carbon_monoxide: float = None
-    pm25: float = None
-    pm10: float = None
+    temperature: float | None = None
+    humidity: float | None = None
+    vocs: float | None = None
+    nitrogen_dioxide: float | None = None
+    carbon_monoxide: float | None = None
+    pm25: float | None = None
+    pm10: float | None = None
 
 class LoginRequest(BaseModel):
     username: str
