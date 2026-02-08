@@ -1,9 +1,8 @@
 import './styles/Dashboard.css';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { TbTemperature, TbDroplet, TbWind, TbFlame, TbCircleFilled, TbLayoutDashboard, TbFileText, TbChartLine, TbRadar, TbMoon, TbSun, TbLogout, TbMenu2 } from 'react-icons/tb';
-import { MdOutlineScience } from 'react-icons/md';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Brush, ReferenceLine } from 'recharts';
+import { Thermometer, Droplet, Wind, Flame, Circle, Home, FileText, TrendingUp, Zap, Moon, Sun, LogOut, Menu, Activity } from 'lucide-react';
 
 function Dashboard() {
   const [activePage, setActivePage] = useState("dashboard");
@@ -59,6 +58,9 @@ function Dashboard() {
   const [graphSensorDropdownOpen, setGraphSensorDropdownOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [selectedSensor, setSelectedSensor] = useState(null); // For sensor detail view
+  const [sidebarHovered, setSidebarHovered] = useState(false);
+  const [showGraphLoading, setShowGraphLoading] = useState(false);
   
   const navigate = useNavigate();
 
@@ -74,6 +76,21 @@ function Dashboard() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Handle sidebar hover to show loading animation on graphs page
+  useEffect(() => {
+    let timeoutId;
+    if (activePage === "graphs") {
+      setShowGraphLoading(true);
+      // Hide loading after sidebar animation completes
+      timeoutId = setTimeout(() => {
+        setShowGraphLoading(false);
+      }, 1000);
+    }
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [sidebarHovered, activePage]);
 
   // Fetch latest sensor data for sensors page
   useEffect(() => {
@@ -117,7 +134,9 @@ function Dashboard() {
   };
 
   const calculateChange = (current, previous) => {
-    if (!previous || !current || previous === 0) return null;
+    // Always return a number - return 0 if no valid data
+    if (typeof current !== 'number' || typeof previous !== 'number') return 0;
+    if (previous === 0) return 0;
     const change = ((current - previous) / previous) * 100;
     return change;
   };
@@ -138,12 +157,13 @@ function Dashboard() {
   const fetchGraphData = async () => {
     try {
       const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
-      const response = await fetch(`${API_URL}/api/sensors/data?limit=20`);
+      const response = await fetch(`${API_URL}/api/sensors/data?limit=500`);
       const result = await response.json();
       if (result.success) {
         // Format data for graphs (reverse to show oldest first)
         const formatted = result.data.reverse().map(item => ({
           time: new Date(item.timestamp).toLocaleTimeString(),
+          fullTimestamp: new Date(item.timestamp).toLocaleString(),
           temperature: item.temperature || 0,
           humidity: item.humidity || 0,
           vocs: item.vocs || 0,
@@ -414,7 +434,30 @@ function Dashboard() {
       });
     }
 
+    // Limit to only 10 data points for better visibility
+    const maxPoints = 10;
+    if (filtered.length > maxPoints) {
+      const step = Math.ceil(filtered.length / maxPoints);
+      filtered = filtered.filter((_, index) => index % step === 0);
+    }
+
+    // Ensure we have exactly 10 points or less
+    if (filtered.length > maxPoints) {
+      filtered = filtered.slice(-maxPoints);
+    }
+
     return filtered;
+  };
+
+  // Helper function to get peak value for a sensor type
+  const getPeakValue = (sensorType) => {
+    const filtered = getFilteredGraphData();
+    if (filtered.length === 0) return null;
+    
+    const values = filtered.map(item => item[sensorType]).filter(val => val !== null && val !== undefined);
+    if (values.length === 0) return null;
+    
+    return Math.max(...values);
   };
 
   const getFilteredRecords = () => {
@@ -446,7 +489,7 @@ function Dashboard() {
     <div className={`dashboard ${darkMode ? 'dark-mode' : ''}`}>
       {/* Mobile Menu Button */}
       <button className="mobile-menu-btn" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-        <TbMenu2 />
+        <Menu />
       </button>
 
       {/* Sidebar Overlay */}
@@ -456,10 +499,14 @@ function Dashboard() {
       ></div>
 
       {/* Sidebar */}
-      <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
+      <aside 
+        className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}
+        onMouseEnter={() => setSidebarHovered(true)}
+        onMouseLeave={() => setSidebarHovered(false)}
+      >
         <div className="sidebar-header">
           <h1>
-            <span className="menu-icon"><TbMenu2 /></span>
+            <span className="menu-icon"><Menu /></span>
             <span className="menu-text">SMOKi</span>
           </h1>
         </div>
@@ -472,7 +519,7 @@ function Dashboard() {
             }}
             className={`nav-item ${activePage === "dashboard" ? "active" : ""}`}
           >
-            <span className="nav-icon"><TbLayoutDashboard /></span>
+            <span className="nav-icon"><Home /></span>
             <span className="nav-text">Dashboard</span>
           </button>
 
@@ -483,7 +530,7 @@ function Dashboard() {
             }}
             className={`nav-item ${activePage === "records" ? "active" : ""}`}
           >
-            <span className="nav-icon"><TbFileText /></span>
+            <span className="nav-icon"><FileText /></span>
             <span className="nav-text">Records</span>
           </button>
 
@@ -494,7 +541,7 @@ function Dashboard() {
             }}
             className={`nav-item ${activePage === "graphs" ? "active" : ""}`}
           >
-            <span className="nav-icon"><TbChartLine /></span>
+            <span className="nav-icon"><TrendingUp /></span>
             <span className="nav-text">Graphs</span>
           </button>
 
@@ -505,7 +552,7 @@ function Dashboard() {
             }}
             className={`nav-item ${activePage === "sensors" ? "active" : ""}`}
           >
-            <span className="nav-icon"><TbRadar /></span>
+            <span className="nav-icon"><Zap /></span>
             <span className="nav-text">Sensors</span>
           </button>
 
@@ -513,7 +560,7 @@ function Dashboard() {
             onClick={() => setDarkMode(!darkMode)}
             className="nav-item"
           >
-            <span className="nav-icon">{darkMode ? <TbSun /> : <TbMoon />}</span>
+            <span className="nav-icon">{darkMode ? <Sun /> : <Moon />}</span>
             <span className="nav-text">{darkMode ? 'Light Mode' : 'Dark Mode'}</span>
           </button>
         </nav>
@@ -527,7 +574,7 @@ function Dashboard() {
             </div>
           </div>
           <button className="sign-out-btn" onClick={handleLogout}>
-            <span><TbLogout /></span>
+            <span><LogOut /></span>
             <span>Sign out</span>
           </button>
         </div>
@@ -557,155 +604,237 @@ function Dashboard() {
           )}
 
           {activePage === "sensors" && (
-            <section className="sensors-page-container">
-              <div className="sensors-grid">
-                <div className="sensor-card">
-                  <div className="sensor-card-header">
-                    <div className="sensor-icon"><TbTemperature /></div>
-                    <h3>Temperature</h3>
-                  </div>
-                  {(() => {
-                    const change = calculateChange(sensorData?.temperature, previousSensorData?.temperature);
-                    return change !== null && (
-                      <div className={`sensor-change ${change >= 0 ? 'positive' : 'negative'}`}>
-                        {change >= 0 ? '↑' : '↓'} {Math.abs(change).toFixed(1)}%
+            <section className="sensors-page-container-new">
+              {!selectedSensor ? (
+                // Camera + Sensor Cards View
+                <div className="sensors-layout">
+                  <div className="sensors-camera-section">
+                    <div className="records-header">
+                      <h1>Sensors</h1>
+                      <p className="records-subtitle">Monitor emissions data and air quality in real-time</p>
+                    </div>
+                    <div className="camera-feed-box">
+                      <div className="camera-placeholder">
+                        CAMERA FEED
                       </div>
-                    );
-                  })()}
-                  <div className="sensor-value">
-                    {sensorData?.temperature ? `${sensorData.temperature.toFixed(1)}°C` : '--°C'}
+                    </div>
                   </div>
-                  <div className="sensor-status">
-                    {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
-                  </div>
-                </div>
-                
-                <div className="sensor-card">
-                  <div className="sensor-card-header">
-                    <div className="sensor-icon"><TbDroplet /></div>
-                    <h3>Humidity</h3>
-                  </div>
-                  {(() => {
-                    const change = calculateChange(sensorData?.humidity, previousSensorData?.humidity);
-                    return change !== null && (
-                      <div className={`sensor-change ${change >= 0 ? 'positive' : 'negative'}`}>
-                        {change >= 0 ? '↑' : '↓'} {Math.abs(change).toFixed(1)}%
+                  
+                  <div className="sensors-cards-column">
+                    <div className="sensor-card-compact" onClick={() => setSelectedSensor(true)}>
+                      <div className="sensor-card-compact-header">
+                        <div className="sensor-icon-small"><Thermometer size={24} /></div>
+                        <h3>Temperature</h3>
                       </div>
-                    );
-                  })()}
-                  <div className="sensor-value">
-                    {sensorData?.humidity ? `${sensorData.humidity.toFixed(1)}%` : '--%'}
-                  </div>
-                  <div className="sensor-status">
-                    {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
-                  </div>
-                </div>
-                
-                <div className="sensor-card">
-                  <div className="sensor-card-header">
-                    <div className="sensor-icon"><MdOutlineScience /></div>
-                    <h3>VOCs</h3>
-                  </div>
-                  {(() => {
-                    const change = calculateChange(sensorData?.vocs, previousSensorData?.vocs);
-                    return change !== null && (
-                      <div className={`sensor-change ${change >= 0 ? 'positive' : 'negative'}`}>
-                        {change >= 0 ? '↑' : '↓'} {Math.abs(change).toFixed(1)}%
+                      <div className="sensor-value-compact">
+                        {sensorData?.temperature ? `${sensorData.temperature.toFixed(1)}°C` : '--°C'}
                       </div>
-                    );
-                  })()}
-                  <div className="sensor-value">
-                    {sensorData?.vocs ? `${sensorData.vocs.toFixed(1)} kΩ` : '-- kΩ'}
-                  </div>
-                  <div className="sensor-status">
-                    {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
-                  </div>
-                </div>
+                      <div className="sensor-status-compact">
+                        {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
+                      </div>
+                    </div>
 
-                <div className="sensor-card">
-                  <div className="sensor-card-header">
-                    <div className="sensor-icon"><TbWind /></div>
-                    <h3>Nitrogen Dioxide</h3>
-                  </div>
-                  {(() => {
-                    const change = calculateChange(sensorData?.nitrogen_dioxide, previousSensorData?.nitrogen_dioxide);
-                    return change !== null && (
-                      <div className={`sensor-change ${change >= 0 ? 'positive' : 'negative'}`}>
-                        {change >= 0 ? '↑' : '↓'} {Math.abs(change).toFixed(1)}%
+                    <div className="sensor-card-compact" onClick={() => setSelectedSensor(true)}>
+                      <div className="sensor-card-compact-header">
+                        <div className="sensor-icon-small"><Droplet size={24} /></div>
+                        <h3>Humidity</h3>
                       </div>
-                    );
-                  })()}
-                  <div className="sensor-value">
-                    {sensorData?.nitrogen_dioxide ? `${sensorData.nitrogen_dioxide.toFixed(2)} PPM` : '-- PPM'}
-                  </div>
-                  <div className="sensor-status">
-                    {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
-                  </div>
-                </div>
-                
-                <div className="sensor-card">
-                  <div className="sensor-card-header">
-                    <div className="sensor-icon"><TbFlame /></div>
-                    <h3>Carbon Monoxide</h3>
-                  </div>
-                  {(() => {
-                    const change = calculateChange(sensorData?.carbon_monoxide, previousSensorData?.carbon_monoxide);
-                    return change !== null && (
-                      <div className={`sensor-change ${change >= 0 ? 'positive' : 'negative'}`}>
-                        {change >= 0 ? '↑' : '↓'} {Math.abs(change).toFixed(1)}%
+                      <div className="sensor-value-compact">
+                        {sensorData?.humidity ? `${sensorData.humidity.toFixed(1)}%` : '--%'}
                       </div>
-                    );
-                  })()}
-                  <div className="sensor-value">
-                    {sensorData?.carbon_monoxide ? `${sensorData.carbon_monoxide.toFixed(2)} PPM` : '-- PPM'}
-                  </div>
-                  <div className="sensor-status">
-                    {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
-                  </div>
-                </div>
+                      <div className="sensor-status-compact">
+                        {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
+                      </div>
+                    </div>
 
-                <div className="sensor-card">
-                  <div className="sensor-card-header">
-                    <div className="sensor-icon"><TbCircleFilled /></div>
-                    <h3>PM 2.5</h3>
-                  </div>
-                  {(() => {
-                    const change = calculateChange(sensorData?.pm25, previousSensorData?.pm25);
-                    return change !== null && (
-                      <div className={`sensor-change ${change >= 0 ? 'positive' : 'negative'}`}>
-                        {change >= 0 ? '↑' : '↓'} {Math.abs(change).toFixed(1)}%
+                    <div className="sensor-card-compact" onClick={() => setSelectedSensor(true)}>
+                      <div className="sensor-card-compact-header">
+                        <div className="sensor-icon-small"><Activity size={24} /></div>
+                        <h3>VOCs</h3>
                       </div>
-                    );
-                  })()}
-                  <div className="sensor-value">
-                    {sensorData?.pm25 ? `${sensorData.pm25.toFixed(1)} µg/m³` : '-- µg/m³'}
-                  </div>
-                  <div className="sensor-status">
-                    {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
+                      <div className="sensor-value-compact">
+                        {sensorData?.vocs ? `${sensorData.vocs.toFixed(1)} kΩ` : '-- kΩ'}
+                      </div>
+                      <div className="sensor-status-compact">
+                        {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
+                      </div>
+                    </div>
+
+                    <div className="sensor-card-compact" onClick={() => setSelectedSensor(true)}>
+                      <div className="sensor-card-compact-header">
+                        <div className="sensor-icon-small"><Wind size={24} /></div>
+                        <h3>Nitrogen Dioxide</h3>
+                      </div>
+                      <div className="sensor-value-compact">
+                        {sensorData?.nitrogen_dioxide ? `${sensorData.nitrogen_dioxide.toFixed(2)} PPM` : '-- PPM'}
+                      </div>
+                      <div className="sensor-status-compact">
+                        {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
+                      </div>
+                    </div>
+
+                    <div className="sensor-card-compact" onClick={() => setSelectedSensor(true)}>
+                      <div className="sensor-card-compact-header">
+                        <div className="sensor-icon-small"><Flame size={24} /></div>
+                        <h3>Carbon Monoxide</h3>
+                      </div>
+                      <div className="sensor-value-compact">
+                        {sensorData?.carbon_monoxide ? `${sensorData.carbon_monoxide.toFixed(2)} PPM` : '-- PPM'}
+                      </div>
+                      <div className="sensor-status-compact">
+                        {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
+                      </div>
+                    </div>
+
+                    <div className="sensor-card-compact" onClick={() => setSelectedSensor(true)}>
+                      <div className="sensor-card-compact-header">
+                        <div className="sensor-icon-small"><Circle size={24} /></div>
+                        <h3>PM 2.5</h3>
+                      </div>
+                      <div className="sensor-value-compact">
+                        {sensorData?.pm25 ? `${sensorData.pm25.toFixed(1)} µg/m³` : '-- µg/m³'}
+                      </div>
+                      <div className="sensor-status-compact">
+                        {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
+                      </div>
+                    </div>
+
+                    <div className="sensor-card-compact" onClick={() => setSelectedSensor(true)}>
+                      <div className="sensor-card-compact-header">
+                        <div className="sensor-icon-small"><Circle size={24} /></div>
+                        <h3>PM 10</h3>
+                      </div>
+                      <div className="sensor-value-compact">
+                        {sensorData?.pm10 ? `${sensorData.pm10.toFixed(1)} µg/m³` : '-- µg/m³'}
+                      </div>
+                      <div className="sensor-status-compact">
+                        {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
+                      </div>
+                    </div>
                   </div>
                 </div>
-                
-                <div className="sensor-card">
-                  <div className="sensor-card-header">
-                    <div className="sensor-icon"><TbCircleFilled /></div>
-                    <h3>PM 10</h3>
-                  </div>
-                  {(() => {
-                    const change = calculateChange(sensorData?.pm10, previousSensorData?.pm10);
-                    return change !== null && (
-                      <div className={`sensor-change ${change >= 0 ? 'positive' : 'negative'}`}>
-                        {change >= 0 ? '↑' : '↓'} {Math.abs(change).toFixed(1)}%
+              ) : (
+                // Detailed Sensor View - Show All Sensors
+                <div className="sensor-detail-view">
+                  <button className="back-button" onClick={() => setSelectedSensor(null)}>
+                    ← Back to Sensors
+                  </button>
+                  
+                  <div className="sensors-grid">
+                    <div className="sensor-card">
+                      <div className="sensor-card-header">
+                        <div className="sensor-icon"><Thermometer /></div>
+                        <h3>Temperature</h3>
                       </div>
-                    );
-                  })()}
-                  <div className="sensor-value">
-                    {sensorData?.pm10 ? `${sensorData.pm10.toFixed(1)} µg/m³` : '-- µg/m³'}
-                  </div>
-                  <div className="sensor-status">
-                    {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
+                      <div className={`sensor-change ${calculateChange(sensorData?.temperature, previousSensorData?.temperature) >= 0 ? 'positive' : 'negative'}`}>
+                        {calculateChange(sensorData?.temperature, previousSensorData?.temperature) >= 0 ? '↑' : '↓'} {Math.abs(calculateChange(sensorData?.temperature, previousSensorData?.temperature)).toFixed(1)}%
+                      </div>
+                      <div className="sensor-value">
+                        {sensorData?.temperature ? `${sensorData.temperature.toFixed(1)}°C` : '--°C'}
+                      </div>
+                      <div className="sensor-status">
+                        {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
+                      </div>
+                    </div>
+                    
+                    <div className="sensor-card">
+                      <div className="sensor-card-header">
+                        <div className="sensor-icon"><Droplet /></div>
+                        <h3>Humidity</h3>
+                      </div>
+                      <div className={`sensor-change ${calculateChange(sensorData?.humidity, previousSensorData?.humidity) >= 0 ? 'positive' : 'negative'}`}>
+                        {calculateChange(sensorData?.humidity, previousSensorData?.humidity) >= 0 ? '↑' : '↓'} {Math.abs(calculateChange(sensorData?.humidity, previousSensorData?.humidity)).toFixed(1)}%
+                      </div>
+                      <div className="sensor-value">
+                        {sensorData?.humidity ? `${sensorData.humidity.toFixed(1)}%` : '--%'}
+                      </div>
+                      <div className="sensor-status">
+                        {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
+                      </div>
+                    </div>
+                    
+                    <div className="sensor-card">
+                      <div className="sensor-card-header">
+                        <div className="sensor-icon"><Activity /></div>
+                        <h3>VOCs</h3>
+                      </div>
+                      <div className={`sensor-change ${calculateChange(sensorData?.vocs, previousSensorData?.vocs) >= 0 ? 'positive' : 'negative'}`}>
+                        {calculateChange(sensorData?.vocs, previousSensorData?.vocs) >= 0 ? '↑' : '↓'} {Math.abs(calculateChange(sensorData?.vocs, previousSensorData?.vocs)).toFixed(1)}%
+                      </div>
+                      <div className="sensor-value">
+                        {sensorData?.vocs ? `${sensorData.vocs.toFixed(1)} kΩ` : '-- kΩ'}
+                      </div>
+                      <div className="sensor-status">
+                        {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
+                      </div>
+                    </div>
+
+                    <div className="sensor-card">
+                      <div className="sensor-card-header">
+                        <div className="sensor-icon"><Wind /></div>
+                        <h3>Nitrogen Dioxide</h3>
+                      </div>
+                      <div className={`sensor-change ${calculateChange(sensorData?.nitrogen_dioxide, previousSensorData?.nitrogen_dioxide) >= 0 ? 'positive' : 'negative'}`}>
+                        {calculateChange(sensorData?.nitrogen_dioxide, previousSensorData?.nitrogen_dioxide) >= 0 ? '↑' : '↓'} {Math.abs(calculateChange(sensorData?.nitrogen_dioxide, previousSensorData?.nitrogen_dioxide)).toFixed(1)}%
+                      </div>
+                      <div className="sensor-value">
+                        {sensorData?.nitrogen_dioxide ? `${sensorData.nitrogen_dioxide.toFixed(2)} PPM` : '-- PPM'}
+                      </div>
+                      <div className="sensor-status">
+                        {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
+                      </div>
+                    </div>
+                    
+                    <div className="sensor-card">
+                      <div className="sensor-card-header">
+                        <div className="sensor-icon"><Flame /></div>
+                        <h3>Carbon Monoxide</h3>
+                      </div>
+                      <div className={`sensor-change ${calculateChange(sensorData?.carbon_monoxide, previousSensorData?.carbon_monoxide) >= 0 ? 'positive' : 'negative'}`}>
+                        {calculateChange(sensorData?.carbon_monoxide, previousSensorData?.carbon_monoxide) >= 0 ? '↑' : '↓'} {Math.abs(calculateChange(sensorData?.carbon_monoxide, previousSensorData?.carbon_monoxide)).toFixed(1)}%
+                      </div>
+                      <div className="sensor-value">
+                        {sensorData?.carbon_monoxide ? `${sensorData.carbon_monoxide.toFixed(2)} PPM` : '-- PPM'}
+                      </div>
+                      <div className="sensor-status">
+                        {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
+                      </div>
+                    </div>
+
+                    <div className="sensor-card">
+                      <div className="sensor-card-header">
+                        <div className="sensor-icon"><Circle /></div>
+                        <h3>PM 2.5</h3>
+                      </div>
+                      <div className={`sensor-change ${calculateChange(sensorData?.pm25, previousSensorData?.pm25) >= 0 ? 'positive' : 'negative'}`}>
+                        {calculateChange(sensorData?.pm25, previousSensorData?.pm25) >= 0 ? '↑' : '↓'} {Math.abs(calculateChange(sensorData?.pm25, previousSensorData?.pm25)).toFixed(1)}%
+                      </div>
+                      <div className="sensor-value">
+                        {sensorData?.pm25 ? `${sensorData.pm25.toFixed(1)} µg/m³` : '-- µg/m³'}
+                      </div>
+                      <div className="sensor-status">
+                        {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
+                      </div>
+                    </div>
+                    
+                    <div className="sensor-card">
+                      <div className="sensor-card-header">
+                        <div className="sensor-icon"><Circle /></div>
+                        <h3>PM 10</h3>
+                      </div>
+                      <div className={`sensor-change ${calculateChange(sensorData?.pm10, previousSensorData?.pm10) >= 0 ? 'positive' : 'negative'}`}>
+                        {calculateChange(sensorData?.pm10, previousSensorData?.pm10) >= 0 ? '↑' : '↓'} {Math.abs(calculateChange(sensorData?.pm10, previousSensorData?.pm10)).toFixed(1)}%
+                      </div>
+                      <div className="sensor-value">
+                        {sensorData?.pm10 ? `${sensorData.pm10.toFixed(1)} µg/m³` : '-- µg/m³'}
+                      </div>
+                      <div className="sensor-status">
+                        {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </section>
           )}
 
@@ -935,6 +1064,11 @@ function Dashboard() {
 
           {activePage === "graphs" && (
             <section className="graphs-page-container">
+              {showGraphLoading && (
+                <div className="graph-loading-overlay">
+                  <div className="loading-spinner"></div>
+                </div>
+              )}
               <div className="records-header">
                 <h1>Sensor Graphs</h1>
                 <p className="records-subtitle">Real-time and historical sensor data visualization</p>
@@ -1044,23 +1178,49 @@ function Dashboard() {
                 </div>
               </div>
 
-              <div className="graphs-content">
-                {graphData.length === 0 ? (
-                  <p className="no-data">No data available yet. Waiting for sensor readings...</p>
-                ) : getFilteredGraphData().length === 0 ? (
-                  <p className="no-data">No data matches the selected filters.</p>
-                ) : (
+              {!showGraphLoading && (
+                <div className="graphs-content">
+                  {graphData.length === 0 ? (
+                    <p className="no-data">No data available yet. Waiting for sensor readings...</p>
+                  ) : getFilteredGraphData().length === 0 ? (
+                    <p className="no-data">No data matches the selected filters.</p>
+                  ) : (
                   <div className="graphs-grid">
                     {/* Temperature Graph */}
                     {appliedGraphSensorTypes.temperature && (
                       <div className="graph-card">
-                        <h3>🌡️ Temperature (°C)</h3>
-                        <div style={{ width: '100%', height: '200px' }}>
+                        <div className="graph-header">
+                          <div className="graph-value">
+                            {(() => {
+                              const peak = getPeakValue('temperature');
+                              return peak !== null ? (
+                                <>
+                                  <span className="current-value">{peak.toFixed(1)}</span>
+                                  <span className="value-change">°C Peak</span>
+                                </>
+                              ) : '--';
+                            })()}
+                          </div>
+                          <h3><Thermometer size={20} /> Temperature</h3>
+                        </div>
+                        <div style={{ width: '100%', height: '280px' }}>
                           <ResponsiveContainer debounce={300}>
-                            <LineChart data={getFilteredGraphData()}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="#ddd" />
-                              <XAxis dataKey="time" stroke="#666" />
-                              <YAxis stroke="#666" />
+                            <LineChart data={getFilteredGraphData()} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                              <XAxis 
+                                dataKey="time" 
+                                stroke="#999" 
+                                tick={{ fontSize: 11, fill: '#999' }}
+                                axisLine={false}
+                                tickLine={false}
+                              />
+                              <YAxis 
+                                stroke="#999" 
+                                tick={{ fontSize: 11, fill: '#999' }}
+                                axisLine={false}
+                                tickLine={false}
+                                domain={['auto', 'auto']}
+                              />
                               <Tooltip 
                                 contentStyle={{ 
                                   backgroundColor: 'rgba(255,255,255,0.95)', 
@@ -1069,14 +1229,42 @@ function Dashboard() {
                                   padding: '10px'
                                 }}
                                 labelStyle={{ fontWeight: 'bold', marginBottom: '5px' }}
+                                formatter={(value) => [value.toFixed(2), 'Temperature']}
+                                labelFormatter={(label, payload) => {
+                                  if (payload && payload[0]) {
+                                    return payload[0].payload.fullTimestamp || label;
+                                  }
+                                  return label;
+                                }}
+                              />
+                              <ReferenceLine 
+                                y={18} 
+                                stroke="#4caf50" 
+                                strokeDasharray="5 5" 
+                                strokeWidth={2}
+                                label={{ value: 'Safe Min', position: 'insideBottomRight', fill: '#4caf50', fontSize: 10 }}
+                              />
+                              <ReferenceLine 
+                                y={27} 
+                                stroke="#4caf50" 
+                                strokeDasharray="5 5" 
+                                strokeWidth={2}
+                                label={{ value: 'Safe Max', position: 'insideTopRight', fill: '#4caf50', fontSize: 10 }}
+                              />
+                              <ReferenceLine 
+                                y={30} 
+                                stroke="#f44336" 
+                                strokeDasharray="5 5" 
+                                strokeWidth={2}
+                                label={{ value: 'Danger', position: 'insideTopRight', fill: '#f44336', fontSize: 10 }}
                               />
                               <Line 
                                 type="monotone" 
                                 dataKey="temperature" 
-                                stroke="#ff6600" 
-                                strokeWidth={2}
-                                dot={{ r: 4 }}
-                                activeDot={{ r: 6 }}
+                                stroke="#5b6b8d" 
+                                strokeWidth={3}
+                                dot={{ fill: '#5b6b8d', r: 5, strokeWidth: 0 }}
+                                activeDot={{ r: 8, fill: '#5b6b8d' }}
                                 isAnimationActive={false}
                               />
                             </LineChart>
@@ -1088,13 +1276,38 @@ function Dashboard() {
                     {/* Humidity Graph */}
                     {appliedGraphSensorTypes.humidity && (
                       <div className="graph-card">
-                        <h3>💧 Humidity (%)</h3>
-                        <div style={{ width: '100%', height: '200px' }}>
+                        <div className="graph-header">
+                          <div className="graph-value">
+                            {(() => {
+                              const peak = getPeakValue('humidity');
+                              return peak !== null ? (
+                                <>
+                                  <span className="current-value">{peak.toFixed(1)}</span>
+                                  <span className="value-change">% Peak</span>
+                                </>
+                              ) : '--';
+                            })()}
+                          </div>
+                          <h3><Droplet size={20} /> Humidity</h3>
+                        </div>
+                        <div style={{ width: '100%', height: '280px' }}>
                           <ResponsiveContainer debounce={300}>
-                            <LineChart data={getFilteredGraphData()}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="#ddd" />
-                              <XAxis dataKey="time" stroke="#666" />
-                              <YAxis stroke="#666" />
+                            <LineChart data={getFilteredGraphData()} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                              <XAxis 
+                                dataKey="time" 
+                                stroke="#999" 
+                                tick={{ fontSize: 11, fill: '#999' }}
+                                axisLine={false}
+                                tickLine={false}
+                              />
+                              <YAxis 
+                                stroke="#999" 
+                                tick={{ fontSize: 11, fill: '#999' }}
+                                axisLine={false}
+                                tickLine={false}
+                                domain={[0, 'auto']}
+                              />
                               <Tooltip 
                                 contentStyle={{ 
                                   backgroundColor: 'rgba(255,255,255,0.95)', 
@@ -1103,14 +1316,42 @@ function Dashboard() {
                                   padding: '10px'
                                 }}
                                 labelStyle={{ fontWeight: 'bold', marginBottom: '5px' }}
+                                formatter={(value) => [value.toFixed(2), 'Humidity']}
+                                labelFormatter={(label, payload) => {
+                                  if (payload && payload[0]) {
+                                    return payload[0].payload.fullTimestamp || label;
+                                  }
+                                  return label;
+                                }}
+                              />
+                              <ReferenceLine 
+                                y={30} 
+                                stroke="#4caf50" 
+                                strokeDasharray="5 5" 
+                                strokeWidth={2}
+                                label={{ value: 'Safe Min', position: 'insideBottomRight', fill: '#4caf50', fontSize: 12 }}
+                              />
+                              <ReferenceLine 
+                                y={60} 
+                                stroke="#4caf50" 
+                                strokeDasharray="5 5" 
+                                strokeWidth={2}
+                                label={{ value: 'Safe Max', position: 'insideTopRight', fill: '#4caf50', fontSize: 12 }}
+                              />
+                              <ReferenceLine 
+                                y={70} 
+                                stroke="#f44336" 
+                                strokeDasharray="5 5" 
+                                strokeWidth={2}
+                                label={{ value: 'Danger', position: 'insideTopRight', fill: '#f44336', fontSize: 12 }}
                               />
                               <Line 
                                 type="monotone" 
                                 dataKey="humidity" 
-                                stroke="#2196F3" 
-                                strokeWidth={2}
-                                dot={{ r: 4 }}
-                                activeDot={{ r: 6 }}
+                                stroke="#5b6b8d" 
+                                strokeWidth={3}
+                                dot={{ fill: '#5b6b8d', r: 5, strokeWidth: 0 }}
+                                activeDot={{ r: 8, fill: '#5b6b8d' }}
                                 isAnimationActive={false}
                               />
                             </LineChart>
@@ -1122,15 +1363,77 @@ function Dashboard() {
                     {/* VOCs Graph */}
                     {appliedGraphSensorTypes.vocs && (
                       <div className="graph-card">
-                        <h3>🌫️ VOCs (kΩ)</h3>
-                        <div style={{ width: '100%', height: '200px' }}>
+                        <div className="graph-header">
+                          <div className="graph-value">
+                            {(() => {
+                              const peak = getPeakValue('vocs');
+                              return peak !== null ? (
+                                <>
+                                  <span className="current-value">{peak.toFixed(1)}</span>
+                                  <span className="value-change">kΩ Peak</span>
+                                </>
+                              ) : '--';
+                            })()}
+                          </div>
+                          <h3><Activity size={20} /> VOCs</h3>
+                        </div>
+                        <div style={{ width: '100%', height: '280px' }}>
                           <ResponsiveContainer debounce={300}>
-                            <LineChart data={getFilteredGraphData()}>
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis dataKey="time" />
-                              <YAxis />
-                              <Tooltip />
-                              <Line type="monotone" dataKey="vocs" stroke="#9C27B0" strokeWidth={2} isAnimationActive={false} />
+                            <LineChart data={getFilteredGraphData()} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                              <XAxis 
+                                dataKey="time" 
+                                stroke="#999" 
+                                tick={{ fontSize: 11, fill: '#999' }}
+                                axisLine={false}
+                                tickLine={false}
+                              />
+                              <YAxis 
+                                stroke="#999" 
+                                tick={{ fontSize: 11, fill: '#999' }}
+                                axisLine={false}
+                                tickLine={false}
+                                domain={['auto', 'auto']}
+                              />
+                              <Tooltip 
+                                contentStyle={{ 
+                                  backgroundColor: 'rgba(255,255,255,0.95)', 
+                                  border: '1px solid #ddd',
+                                  borderRadius: '8px',
+                                  padding: '10px'
+                                }}
+                                labelStyle={{ fontWeight: 'bold', marginBottom: '5px' }}
+                                formatter={(value) => [value.toFixed(2), 'VOCs']}
+                                labelFormatter={(label, payload) => {
+                                  if (payload && payload[0]) {
+                                    return payload[0].payload.fullTimestamp || label;
+                                  }
+                                  return label;
+                                }}
+                              />
+                              <ReferenceLine 
+                                y={80} 
+                                stroke="#4caf50" 
+                                strokeDasharray="5 5" 
+                                strokeWidth={2}
+                                label={{ value: 'Safe', position: 'insideTopRight', fill: '#4caf50', fontSize: 10 }}
+                              />
+                              <ReferenceLine 
+                                y={40} 
+                                stroke="#f44336" 
+                                strokeDasharray="5 5" 
+                                strokeWidth={2}
+                                label={{ value: 'Danger', position: 'insideTopRight', fill: '#f44336', fontSize: 10 }}
+                              />
+                              <Line 
+                                type="monotone" 
+                                dataKey="vocs" 
+                                stroke="#5b6b8d" 
+                                strokeWidth={3}
+                                dot={{ fill: '#5b6b8d', r: 5, strokeWidth: 0 }}
+                                activeDot={{ r: 8, fill: '#5b6b8d' }}
+                                isAnimationActive={false}
+                              />
                             </LineChart>
                           </ResponsiveContainer>
                         </div>
@@ -1140,15 +1443,77 @@ function Dashboard() {
                     {/* NO2 Graph */}
                     {appliedGraphSensorTypes.no2 && (
                     <div className="graph-card">
-                      <h3>💨 Nitrogen Dioxide (PPM)</h3>
-                      <div style={{ width: '100%', height: '200px' }}>
+                      <div className="graph-header">
+                        <div className="graph-value">
+                          {(() => {
+                            const peak = getPeakValue('no2');
+                            return peak !== null ? (
+                              <>
+                                <span className="current-value">{peak.toFixed(2)}</span>
+                                <span className="value-change">PPM Peak</span>
+                              </>
+                            ) : '--';
+                          })()}
+                        </div>
+                        <h3><Wind size={20} /> Nitrogen Dioxide</h3>
+                      </div>
+                      <div style={{ width: '100%', height: '280px' }}>
                         <ResponsiveContainer debounce={300}>
-                          <LineChart data={getFilteredGraphData()}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="time" />
-                            <YAxis />
-                            <Tooltip />
-                            <Line type="monotone" dataKey="no2" stroke="#FF9800" strokeWidth={2} isAnimationActive={false} />
+                          <LineChart data={getFilteredGraphData()} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                            <XAxis 
+                              dataKey="time" 
+                              stroke="#999" 
+                              tick={{ fontSize: 11, fill: '#999' }}
+                              axisLine={false}
+                              tickLine={false}
+                            />
+                            <YAxis 
+                              stroke="#999" 
+                              tick={{ fontSize: 11, fill: '#999' }}
+                              axisLine={false}
+                              tickLine={false}
+                              domain={['auto', 'auto']}
+                            />
+                            <Tooltip 
+                              contentStyle={{ 
+                                backgroundColor: 'rgba(255,255,255,0.95)', 
+                                border: '1px solid #ddd',
+                                borderRadius: '8px',
+                                padding: '10px'
+                              }}
+                              labelStyle={{ fontWeight: 'bold', marginBottom: '5px' }}
+                              formatter={(value) => [value.toFixed(4), 'NO2']}
+                              labelFormatter={(label, payload) => {
+                                if (payload && payload[0]) {
+                                  return payload[0].payload.fullTimestamp || label;
+                                }
+                                return label;
+                              }}
+                            />
+                            <ReferenceLine 
+                              y={0.053} 
+                              stroke="#4caf50" 
+                              strokeDasharray="5 5" 
+                              strokeWidth={2}
+                              label={{ value: 'Safe', position: 'insideTopRight', fill: '#4caf50', fontSize: 10 }}
+                            />
+                            <ReferenceLine 
+                              y={0.1} 
+                              stroke="#f44336" 
+                              strokeDasharray="5 5" 
+                              strokeWidth={2}
+                              label={{ value: 'Danger', position: 'insideTopRight', fill: '#f44336', fontSize: 10 }}
+                            />
+                            <Line 
+                              type="monotone" 
+                              dataKey="no2" 
+                              stroke="#5b6b8d" 
+                              strokeWidth={3}
+                              dot={{ fill: '#5b6b8d', r: 5, strokeWidth: 0 }}
+                              activeDot={{ r: 8, fill: '#5b6b8d' }}
+                              isAnimationActive={false}
+                            />
                           </LineChart>
                         </ResponsiveContainer>
                       </div>
@@ -1158,15 +1523,71 @@ function Dashboard() {
                     {/* CO Graph */}
                     {appliedGraphSensorTypes.co && (
                     <div className="graph-card">
-                      <h3>🔥 Carbon Monoxide (PPM)</h3>
-                      <div style={{ width: '100%', height: '200px' }}>
+                      <div className="graph-header">
+                        <div className="graph-value">
+                          {(() => {
+                            const peak = getPeakValue('co');
+                            return peak !== null ? (
+                              <>
+                                <span className="current-value">{peak.toFixed(2)}</span>
+                                <span className="value-change">PPM Peak</span>
+                              </>
+                            ) : '--';
+                          })()}
+                        </div>
+                        <h3><Flame size={20} /> Carbon Monoxide</h3>
+                      </div>
+                      <div style={{ width: '100%', height: '280px' }}>
                         <ResponsiveContainer debounce={300}>
-                          <LineChart data={getFilteredGraphData()}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="time" />
-                            <YAxis />
-                            <Tooltip />
-                            <Line type="monotone" dataKey="co" stroke="#F44336" strokeWidth={2} isAnimationActive={false} />
+                          <LineChart data={getFilteredGraphData()} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                            <XAxis 
+                              dataKey="time" 
+                              stroke="#999" 
+                              tick={{ fontSize: 11, fill: '#999' }}
+                              axisLine={false}
+                              tickLine={false}
+                            />
+                            <YAxis 
+                              stroke="#999" 
+                              tick={{ fontSize: 11, fill: '#999' }}
+                              axisLine={false}
+                              tickLine={false}
+                              domain={[(dataMin) => {
+                                // Start from 80% of minimum value or 0
+                                const minValue = Math.max(0, dataMin * 0.8);
+                                return Math.floor(minValue * 1000) / 1000;
+                              }, (dataMax) => {
+                                // Add 20% padding to max value for better visibility
+                                const maxValue = dataMax * 1.2;
+                                return Math.ceil(maxValue * 1000) / 1000;
+                              }]}
+                            />
+                            <Tooltip 
+                              contentStyle={{ 
+                                backgroundColor: 'rgba(255,255,255,0.95)', 
+                                border: '1px solid #ddd',
+                                borderRadius: '8px',
+                                padding: '10px'
+                              }}
+                              labelStyle={{ fontWeight: 'bold', marginBottom: '5px' }}
+                              formatter={(value) => [value.toFixed(4), 'CO']}
+                              labelFormatter={(label, payload) => {
+                                if (payload && payload[0]) {
+                                  return payload[0].payload.fullTimestamp || label;
+                                }
+                                return label;
+                              }}
+                            />
+                            <Line 
+                              type="monotone" 
+                              dataKey="co" 
+                              stroke="#5b6b8d" 
+                              strokeWidth={3}
+                              dot={{ fill: '#5b6b8d', r: 5, strokeWidth: 0 }}
+                              activeDot={{ r: 8, fill: '#5b6b8d' }}
+                              isAnimationActive={false}
+                            />
                           </LineChart>
                         </ResponsiveContainer>
                       </div>
@@ -1176,15 +1597,77 @@ function Dashboard() {
                     {/* PM2.5 Graph */}
                     {appliedGraphSensorTypes.pm25 && (
                     <div className="graph-card">
-                      <h3>⚫ PM 2.5 (µg/m³)</h3>
-                      <div style={{ width: '100%', height: '200px' }}>
+                      <div className="graph-header">
+                        <div className="graph-value">
+                          {(() => {
+                            const peak = getPeakValue('pm25');
+                            return peak !== null ? (
+                              <>
+                                <span className="current-value">{peak.toFixed(1)}</span>
+                                <span className="value-change">µg/m³ Peak</span>
+                              </>
+                            ) : '--';
+                          })()}
+                        </div>
+                        <h3><Circle size={20} /> PM 2.5</h3>
+                      </div>
+                      <div style={{ width: '100%', height: '280px' }}>
                         <ResponsiveContainer debounce={300}>
-                          <LineChart data={getFilteredGraphData()}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="time" />
-                            <YAxis />
-                            <Tooltip />
-                            <Line type="monotone" dataKey="pm25" stroke="#607D8B" strokeWidth={2} isAnimationActive={false} />
+                          <LineChart data={getFilteredGraphData()} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                            <XAxis 
+                              dataKey="time" 
+                              stroke="#999" 
+                              tick={{ fontSize: 11, fill: '#999' }}
+                              axisLine={false}
+                              tickLine={false}
+                            />
+                            <YAxis 
+                              stroke="#999" 
+                              tick={{ fontSize: 11, fill: '#999' }}
+                              axisLine={false}
+                              tickLine={false}
+                              domain={['auto', 'auto']}
+                            />
+                            <Tooltip 
+                              contentStyle={{ 
+                                backgroundColor: 'rgba(255,255,255,0.95)', 
+                                border: '1px solid #ddd',
+                                borderRadius: '8px',
+                                padding: '10px'
+                              }}
+                              labelStyle={{ fontWeight: 'bold', marginBottom: '5px' }}
+                              formatter={(value) => [value.toFixed(2), 'PM2.5']}
+                              labelFormatter={(label, payload) => {
+                                if (payload && payload[0]) {
+                                  return payload[0].payload.fullTimestamp || label;
+                                }
+                                return label;
+                              }}
+                            />
+                            <ReferenceLine 
+                              y={12} 
+                              stroke="#4caf50" 
+                              strokeDasharray="5 5" 
+                              strokeWidth={2}
+                              label={{ value: 'Safe', position: 'insideTopRight', fill: '#4caf50', fontSize: 10 }}
+                            />
+                            <ReferenceLine 
+                              y={35} 
+                              stroke="#f44336" 
+                              strokeDasharray="5 5" 
+                              strokeWidth={2}
+                              label={{ value: 'Danger', position: 'insideTopRight', fill: '#f44336', fontSize: 10 }}
+                            />
+                            <Line 
+                              type="monotone" 
+                              dataKey="pm25" 
+                              stroke="#5b6b8d" 
+                              strokeWidth={3}
+                              dot={{ fill: '#5b6b8d', r: 5, strokeWidth: 0 }}
+                              activeDot={{ r: 8, fill: '#5b6b8d' }}
+                              isAnimationActive={false}
+                            />
                           </LineChart>
                         </ResponsiveContainer>
                       </div>
@@ -1194,15 +1677,77 @@ function Dashboard() {
                     {/* PM10 Graph */}
                     {appliedGraphSensorTypes.pm10 && (
                     <div className="graph-card">
-                      <h3>⚫ PM 10 (µg/m³)</h3>
-                      <div style={{ width: '100%', height: '200px' }}>
+                      <div className="graph-header">
+                        <div className="graph-value">
+                          {(() => {
+                            const peak = getPeakValue('pm10');
+                            return peak !== null ? (
+                              <>
+                                <span className="current-value">{peak.toFixed(1)}</span>
+                                <span className="value-change">µg/m³ Peak</span>
+                              </>
+                            ) : '--';
+                          })()}
+                        </div>
+                        <h3><Circle size={20} /> PM 10</h3>
+                      </div>
+                      <div style={{ width: '100%', height: '280px' }}>
                         <ResponsiveContainer debounce={300}>
-                          <LineChart data={getFilteredGraphData()}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="time" />
-                            <YAxis />
-                            <Tooltip />
-                            <Line type="monotone" dataKey="pm10" stroke="#795548" strokeWidth={2} isAnimationActive={false} />
+                          <LineChart data={getFilteredGraphData()} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                            <XAxis 
+                              dataKey="time" 
+                              stroke="#999" 
+                              tick={{ fontSize: 11, fill: '#999' }}
+                              axisLine={false}
+                              tickLine={false}
+                            />
+                            <YAxis 
+                              stroke="#999" 
+                              tick={{ fontSize: 11, fill: '#999' }}
+                              axisLine={false}
+                              tickLine={false}
+                              domain={[0, (dataMax) => Math.max(dataMax, 160)]}
+                            />
+                            <Tooltip 
+                              contentStyle={{ 
+                                backgroundColor: 'rgba(255,255,255,0.95)', 
+                                border: '1px solid #ddd',
+                                borderRadius: '8px',
+                                padding: '10px'
+                              }}
+                              labelStyle={{ fontWeight: 'bold', marginBottom: '5px' }}
+                              formatter={(value) => [value.toFixed(2), 'PM10']}
+                              labelFormatter={(label, payload) => {
+                                if (payload && payload[0]) {
+                                  return payload[0].payload.fullTimestamp || label;
+                                }
+                                return label;
+                              }}
+                            />
+                            <ReferenceLine 
+                              y={50} 
+                              stroke="#4caf50" 
+                              strokeDasharray="5 5" 
+                              strokeWidth={2}
+                              label={{ value: 'Safe', position: 'insideTopRight', fill: '#4caf50', fontSize: 10 }}
+                            />
+                            <ReferenceLine 
+                              y={150} 
+                              stroke="#f44336" 
+                              strokeDasharray="5 5" 
+                              strokeWidth={2}
+                              label={{ value: 'Danger', position: 'insideTopRight', fill: '#f44336', fontSize: 10 }}
+                            />
+                            <Line 
+                              type="monotone" 
+                              dataKey="pm10" 
+                              stroke="#5b6b8d" 
+                              strokeWidth={3}
+                              dot={{ fill: '#5b6b8d', r: 5, strokeWidth: 0 }}
+                              activeDot={{ r: 8, fill: '#5b6b8d' }}
+                              isAnimationActive={false}
+                            />
                           </LineChart>
                         </ResponsiveContainer>
                       </div>
@@ -1211,6 +1756,7 @@ function Dashboard() {
                   </div>
                 )}
               </div>
+              )}
             </section>
           )}
       </main>
@@ -1219,3 +1765,7 @@ function Dashboard() {
 }
 
 export default Dashboard
+
+
+
+

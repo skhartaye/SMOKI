@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 import sys
 sys.path.append('..')
 from postgre.database import init_db_pool, insert_sensor_data, get_latest_sensor_data, close_db_pool
@@ -45,6 +45,15 @@ class SensorData(BaseModel):
 @app.get("/api/hello")
 def read_root():
     return {"message": "Hello from FastAPI!"}
+
+@app.get("/api/time")
+def get_server_time():
+    """Get server time for debugging timezone issues"""
+    return {
+        "server_time_utc": datetime.now(timezone.utc).isoformat(),
+        "server_time_local": datetime.now().isoformat(),
+        "timezone": "UTC" if datetime.now().astimezone().utcoffset().total_seconds() == 0 else str(datetime.now().astimezone().tzinfo)
+    }
 
 @app.post("/api/sensors/data")
 def add_sensor_data(data: SensorData):

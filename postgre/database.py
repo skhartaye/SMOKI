@@ -32,7 +32,7 @@ def create_tables():
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS sensor_data (
                         id SERIAL PRIMARY KEY,
-                        timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                         temperature FLOAT,
                         humidity FLOAT,
                         vocs FLOAT,
@@ -40,7 +40,7 @@ def create_tables():
                         carbon_monoxide FLOAT,
                         pm25 FLOAT,
                         pm10 FLOAT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        created_at TIMESTAMPTZ DEFAULT NOW()
                     );
                 """)
                 
