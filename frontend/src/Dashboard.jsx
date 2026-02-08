@@ -2,10 +2,13 @@ import './styles/Dashboard.css';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { TbTemperature, TbDroplet, TbWind, TbFlame, TbCircleFilled, TbLayoutDashboard, TbFileText, TbChartLine, TbRadar, TbMoon, TbSun, TbLogout, TbMenu2 } from 'react-icons/tb';
+import { MdOutlineScience } from 'react-icons/md';
 
 function Dashboard() {
   const [activePage, setActivePage] = useState("dashboard");
   const [sensorData, setSensorData] = useState(null);
+  const [previousSensorData, setPreviousSensorData] = useState(null);
   const [records, setRecords] = useState([]);
   const [graphData, setGraphData] = useState([]);
   const [filterSensorTypes, setFilterSensorTypes] = useState({
@@ -54,8 +57,22 @@ function Dashboard() {
   const [appliedGraphDate, setAppliedGraphDate] = useState("all");
   const [clearGraphFilters, setClearGraphFilters] = useState(false);
   const [graphSensorDropdownOpen, setGraphSensorDropdownOpen] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
   
   const navigate = useNavigate();
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('.custom-dropdown')) {
+        setSensorDropdownOpen(false);
+        setGraphSensorDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Fetch latest sensor data for sensors page
   useEffect(() => {
@@ -90,11 +107,18 @@ function Dashboard() {
       const response = await fetch(`${API_URL}/api/sensors/latest`);
       const result = await response.json();
       if (result.success && result.data) {
+        setPreviousSensorData(sensorData);
         setSensorData(result.data);
       }
     } catch (error) {
       console.error('Error fetching sensor data:', error);
     }
+  };
+
+  const calculateChange = (current, previous) => {
+    if (!previous || !current || previous === 0) return null;
+    const change = ((current - previous) / previous) * 100;
+    return change;
   };
 
   const fetchRecords = async () => {
@@ -156,6 +180,33 @@ function Dashboard() {
     const hoursStr = String(hours).padStart(2, '0');
     
     return `${year}-${month}-${day} ${hoursStr}:${minutes}:${seconds} ${ampm}`;
+  };
+
+  const calculateAQI = (record) => {
+    // Simple AQI calculation based on PM2.5 (US EPA standard)
+    const pm25 = record.pm25 || 0;
+    
+    if (pm25 <= 12) return { value: Math.round((50 / 12) * pm25), category: 'Good', color: '#4caf50' };
+    if (pm25 <= 35.4) return { value: Math.round(50 + ((100 - 50) / (35.4 - 12.1)) * (pm25 - 12.1)), category: 'Moderate', color: '#ffc107' };
+    if (pm25 <= 55.4) return { value: Math.round(100 + ((150 - 100) / (55.4 - 35.5)) * (pm25 - 35.5)), category: 'Unhealthy for Sensitive', color: '#ff9800' };
+    if (pm25 <= 150.4) return { value: Math.round(150 + ((200 - 150) / (150.4 - 55.5)) * (pm25 - 55.5)), category: 'Unhealthy', color: '#f44336' };
+    if (pm25 <= 250.4) return { value: Math.round(200 + ((300 - 200) / (250.4 - 150.5)) * (pm25 - 150.5)), category: 'Very Unhealthy', color: '#9c27b0' };
+    return { value: Math.round(300 + ((500 - 300) / (500.4 - 250.5)) * (pm25 - 250.5)), category: 'Hazardous', color: '#7b1fa2' };
+  };
+
+  // Tooltip config for graphs
+  const tooltipStyle = {
+    backgroundColor: darkMode ? 'rgba(45,45,45,0.95)' : 'rgba(255,255,255,0.95)',
+    border: darkMode ? '1px solid #555' : '1px solid #ddd',
+    borderRadius: '8px',
+    padding: '10px',
+    color: darkMode ? '#e0e0e0' : '#333'
+  };
+
+  const tooltipLabelStyle = {
+    fontWeight: 'bold',
+    marginBottom: '5px',
+    color: darkMode ? '#e0e0e0' : '#333'
   };
 
   const handleClearFilters = () => {
@@ -282,11 +333,14 @@ function Dashboard() {
   };
 
   return (
-    <div className="dashboard">
+    <div className={`dashboard ${darkMode ? 'dark-mode' : ''}`}>
       {/* Sidebar */}
       <aside className="sidebar">
         <div className="sidebar-header">
-          <h1>☰ SMOKi</h1>
+          <h1>
+            <span className="menu-icon"><TbMenu2 /></span>
+            <span className="menu-text">SMOKi</span>
+          </h1>
         </div>
 
         <nav className="sidebar-nav">
@@ -294,7 +348,7 @@ function Dashboard() {
             onClick={() => setActivePage("dashboard")}
             className={`nav-item ${activePage === "dashboard" ? "active" : ""}`}
           >
-            <span className="nav-icon">📊</span>
+            <span className="nav-icon"><TbLayoutDashboard /></span>
             <span className="nav-text">Dashboard</span>
           </button>
 
@@ -302,7 +356,7 @@ function Dashboard() {
             onClick={() => setActivePage("records")}
             className={`nav-item ${activePage === "records" ? "active" : ""}`}
           >
-            <span className="nav-icon">📋</span>
+            <span className="nav-icon"><TbFileText /></span>
             <span className="nav-text">Records</span>
           </button>
 
@@ -310,7 +364,7 @@ function Dashboard() {
             onClick={() => setActivePage("graphs")}
             className={`nav-item ${activePage === "graphs" ? "active" : ""}`}
           >
-            <span className="nav-icon">📈</span>
+            <span className="nav-icon"><TbChartLine /></span>
             <span className="nav-text">Graphs</span>
           </button>
 
@@ -318,8 +372,16 @@ function Dashboard() {
             onClick={() => setActivePage("sensors")}
             className={`nav-item ${activePage === "sensors" ? "active" : ""}`}
           >
-            <span className="nav-icon">📡</span>
+            <span className="nav-icon"><TbRadar /></span>
             <span className="nav-text">Sensors</span>
+          </button>
+
+          <button 
+            onClick={() => setDarkMode(!darkMode)}
+            className="nav-item"
+          >
+            <span className="nav-icon">{darkMode ? <TbSun /> : <TbMoon />}</span>
+            <span className="nav-text">{darkMode ? 'Light Mode' : 'Dark Mode'}</span>
           </button>
         </nav>
 
@@ -332,7 +394,8 @@ function Dashboard() {
             </div>
           </div>
           <button className="sign-out-btn" onClick={handleLogout}>
-            <span>↪</span> Sign out
+            <span><TbLogout /></span>
+            <span>Sign out</span>
           </button>
         </div>
       </aside>
@@ -340,14 +403,21 @@ function Dashboard() {
       {/* Main Content */}
       <main className="main-content">
           {activePage === "dashboard" && (
-            <div className="camera-container">
-              <div className="camera-header">
+            <div className="dashboard-page-container">
+              <div className="records-header">
                 <h1>Dashboard</h1>
-                <p className="content-subtitle">Smoke Emission monitoring overview</p>
+                <p className="records-subtitle">Smoke Emission monitoring overview</p>
               </div>
-              <div className="camera-feed">
-                <div className="camera-placeholder">
-                  CAMERA FEED
+              
+              <div className="camera-feed-container">
+                <div className="camera-feed-header">
+                  <h2>Live Camera Feed</h2>
+                  <p>Real-time video monitoring</p>
+                </div>
+                <div className="camera-feed">
+                  <div className="camera-placeholder">
+                    CAMERA FEED
+                  </div>
                 </div>
               </div>
             </div>
@@ -357,8 +427,18 @@ function Dashboard() {
             <section className="sensors-page-container">
               <div className="sensors-grid">
                 <div className="sensor-card">
-                  <div className="sensor-icon">🌡️</div>
-                  <h3>Temperature</h3>
+                  <div className="sensor-card-header">
+                    <div className="sensor-icon"><TbTemperature /></div>
+                    <h3>Temperature</h3>
+                  </div>
+                  {(() => {
+                    const change = calculateChange(sensorData?.temperature, previousSensorData?.temperature);
+                    return change !== null && (
+                      <div className={`sensor-change ${change >= 0 ? 'positive' : 'negative'}`}>
+                        {change >= 0 ? '↑' : '↓'} {Math.abs(change).toFixed(1)}%
+                      </div>
+                    );
+                  })()}
                   <div className="sensor-value">
                     {sensorData?.temperature ? `${sensorData.temperature.toFixed(1)}°C` : '--°C'}
                   </div>
@@ -368,8 +448,18 @@ function Dashboard() {
                 </div>
                 
                 <div className="sensor-card">
-                  <div className="sensor-icon">💧</div>
-                  <h3>Humidity</h3>
+                  <div className="sensor-card-header">
+                    <div className="sensor-icon"><TbDroplet /></div>
+                    <h3>Humidity</h3>
+                  </div>
+                  {(() => {
+                    const change = calculateChange(sensorData?.humidity, previousSensorData?.humidity);
+                    return change !== null && (
+                      <div className={`sensor-change ${change >= 0 ? 'positive' : 'negative'}`}>
+                        {change >= 0 ? '↑' : '↓'} {Math.abs(change).toFixed(1)}%
+                      </div>
+                    );
+                  })()}
                   <div className="sensor-value">
                     {sensorData?.humidity ? `${sensorData.humidity.toFixed(1)}%` : '--%'}
                   </div>
@@ -379,8 +469,18 @@ function Dashboard() {
                 </div>
                 
                 <div className="sensor-card">
-                  <div className="sensor-icon">🌫️</div>
-                  <h3>VOCs</h3>
+                  <div className="sensor-card-header">
+                    <div className="sensor-icon"><MdOutlineScience /></div>
+                    <h3>VOCs</h3>
+                  </div>
+                  {(() => {
+                    const change = calculateChange(sensorData?.vocs, previousSensorData?.vocs);
+                    return change !== null && (
+                      <div className={`sensor-change ${change >= 0 ? 'positive' : 'negative'}`}>
+                        {change >= 0 ? '↑' : '↓'} {Math.abs(change).toFixed(1)}%
+                      </div>
+                    );
+                  })()}
                   <div className="sensor-value">
                     {sensorData?.vocs ? `${sensorData.vocs.toFixed(1)} kΩ` : '-- kΩ'}
                   </div>
@@ -390,8 +490,18 @@ function Dashboard() {
                 </div>
 
                 <div className="sensor-card">
-                  <div className="sensor-icon">💨</div>
-                  <h3>Nitrogen Dioxide</h3>
+                  <div className="sensor-card-header">
+                    <div className="sensor-icon"><TbWind /></div>
+                    <h3>Nitrogen Dioxide</h3>
+                  </div>
+                  {(() => {
+                    const change = calculateChange(sensorData?.nitrogen_dioxide, previousSensorData?.nitrogen_dioxide);
+                    return change !== null && (
+                      <div className={`sensor-change ${change >= 0 ? 'positive' : 'negative'}`}>
+                        {change >= 0 ? '↑' : '↓'} {Math.abs(change).toFixed(1)}%
+                      </div>
+                    );
+                  })()}
                   <div className="sensor-value">
                     {sensorData?.nitrogen_dioxide ? `${sensorData.nitrogen_dioxide.toFixed(2)} PPM` : '-- PPM'}
                   </div>
@@ -401,8 +511,18 @@ function Dashboard() {
                 </div>
                 
                 <div className="sensor-card">
-                  <div className="sensor-icon">🔥</div>
-                  <h3>Carbon Monoxide</h3>
+                  <div className="sensor-card-header">
+                    <div className="sensor-icon"><TbFlame /></div>
+                    <h3>Carbon Monoxide</h3>
+                  </div>
+                  {(() => {
+                    const change = calculateChange(sensorData?.carbon_monoxide, previousSensorData?.carbon_monoxide);
+                    return change !== null && (
+                      <div className={`sensor-change ${change >= 0 ? 'positive' : 'negative'}`}>
+                        {change >= 0 ? '↑' : '↓'} {Math.abs(change).toFixed(1)}%
+                      </div>
+                    );
+                  })()}
                   <div className="sensor-value">
                     {sensorData?.carbon_monoxide ? `${sensorData.carbon_monoxide.toFixed(2)} PPM` : '-- PPM'}
                   </div>
@@ -412,8 +532,18 @@ function Dashboard() {
                 </div>
 
                 <div className="sensor-card">
-                  <div className="sensor-icon">⚫</div>
-                  <h3>PM 2.5</h3>
+                  <div className="sensor-card-header">
+                    <div className="sensor-icon"><TbCircleFilled /></div>
+                    <h3>PM 2.5</h3>
+                  </div>
+                  {(() => {
+                    const change = calculateChange(sensorData?.pm25, previousSensorData?.pm25);
+                    return change !== null && (
+                      <div className={`sensor-change ${change >= 0 ? 'positive' : 'negative'}`}>
+                        {change >= 0 ? '↑' : '↓'} {Math.abs(change).toFixed(1)}%
+                      </div>
+                    );
+                  })()}
                   <div className="sensor-value">
                     {sensorData?.pm25 ? `${sensorData.pm25.toFixed(1)} µg/m³` : '-- µg/m³'}
                   </div>
@@ -423,8 +553,18 @@ function Dashboard() {
                 </div>
                 
                 <div className="sensor-card">
-                  <div className="sensor-icon">⚫</div>
-                  <h3>PM 10</h3>
+                  <div className="sensor-card-header">
+                    <div className="sensor-icon"><TbCircleFilled /></div>
+                    <h3>PM 10</h3>
+                  </div>
+                  {(() => {
+                    const change = calculateChange(sensorData?.pm10, previousSensorData?.pm10);
+                    return change !== null && (
+                      <div className={`sensor-change ${change >= 0 ? 'positive' : 'negative'}`}>
+                        {change >= 0 ? '↑' : '↓'} {Math.abs(change).toFixed(1)}%
+                      </div>
+                    );
+                  })()}
                   <div className="sensor-value">
                     {sensorData?.pm10 ? `${sensorData.pm10.toFixed(1)} µg/m³` : '-- µg/m³'}
                   </div>
@@ -609,6 +749,7 @@ function Dashboard() {
                           {appliedSensorTypes.co && <th>CO (PPM)</th>}
                           {appliedSensorTypes.pm25 && <th>PM2.5 (µg/m³)</th>}
                           {appliedSensorTypes.pm10 && <th>PM10 (µg/m³)</th>}
+                          <th>AQI</th>
                           <th>Status</th>
                         </tr>
                       </thead>
@@ -628,6 +769,7 @@ function Dashboard() {
                             (record.pm10 > 35 && record.pm10 <= 50);
                           
                           const status = isDanger ? 'danger' : isWarning ? 'warning' : 'safe';
+                          const aqi = calculateAQI(record);
                           
                           return (
                             <tr key={record.id}>
@@ -639,6 +781,11 @@ function Dashboard() {
                               {appliedSensorTypes.co && <td>{record.carbon_monoxide?.toFixed(2) || 'N/A'}</td>}
                               {appliedSensorTypes.pm25 && <td>{record.pm25?.toFixed(1) || 'N/A'}</td>}
                               {appliedSensorTypes.pm10 && <td>{record.pm10?.toFixed(1) || 'N/A'}</td>}
+                              <td>
+                                <span className="aqi-badge" style={{backgroundColor: aqi.color}}>
+                                  {aqi.value}
+                                </span>
+                              </td>
                               <td>
                                 <span className={`status-badge status-${status}`}>{status}</span>
                               </td>
@@ -775,15 +922,33 @@ function Dashboard() {
                     {appliedGraphSensorTypes.temperature && (
                       <div className="graph-card">
                         <h3>🌡️ Temperature (°C)</h3>
-                        <ResponsiveContainer width="100%" height={200}>
-                          <LineChart data={getFilteredGraphData()}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="time" />
-                            <YAxis />
-                            <Tooltip />
-                            <Line type="monotone" dataKey="temperature" stroke="#ff6600" strokeWidth={2} />
-                          </LineChart>
-                        </ResponsiveContainer>
+                        <div style={{ width: '100%', height: '200px' }}>
+                          <ResponsiveContainer debounce={300}>
+                            <LineChart data={getFilteredGraphData()}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#ddd" />
+                              <XAxis dataKey="time" stroke="#666" />
+                              <YAxis stroke="#666" />
+                              <Tooltip 
+                                contentStyle={{ 
+                                  backgroundColor: 'rgba(255,255,255,0.95)', 
+                                  border: '1px solid #ddd',
+                                  borderRadius: '8px',
+                                  padding: '10px'
+                                }}
+                                labelStyle={{ fontWeight: 'bold', marginBottom: '5px' }}
+                              />
+                              <Line 
+                                type="monotone" 
+                                dataKey="temperature" 
+                                stroke="#ff6600" 
+                                strokeWidth={2}
+                                dot={{ r: 4 }}
+                                activeDot={{ r: 6 }}
+                                isAnimationActive={false}
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
                       </div>
                     )}
 
@@ -791,15 +956,33 @@ function Dashboard() {
                     {appliedGraphSensorTypes.humidity && (
                       <div className="graph-card">
                         <h3>💧 Humidity (%)</h3>
-                        <ResponsiveContainer width="100%" height={200}>
-                          <LineChart data={getFilteredGraphData()}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="time" />
-                            <YAxis />
-                            <Tooltip />
-                            <Line type="monotone" dataKey="humidity" stroke="#2196F3" strokeWidth={2} />
-                          </LineChart>
-                        </ResponsiveContainer>
+                        <div style={{ width: '100%', height: '200px' }}>
+                          <ResponsiveContainer debounce={300}>
+                            <LineChart data={getFilteredGraphData()}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#ddd" />
+                              <XAxis dataKey="time" stroke="#666" />
+                              <YAxis stroke="#666" />
+                              <Tooltip 
+                                contentStyle={{ 
+                                  backgroundColor: 'rgba(255,255,255,0.95)', 
+                                  border: '1px solid #ddd',
+                                  borderRadius: '8px',
+                                  padding: '10px'
+                                }}
+                                labelStyle={{ fontWeight: 'bold', marginBottom: '5px' }}
+                              />
+                              <Line 
+                                type="monotone" 
+                                dataKey="humidity" 
+                                stroke="#2196F3" 
+                                strokeWidth={2}
+                                dot={{ r: 4 }}
+                                activeDot={{ r: 6 }}
+                                isAnimationActive={false}
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
                       </div>
                     )}
 
@@ -807,31 +990,35 @@ function Dashboard() {
                     {appliedGraphSensorTypes.vocs && (
                       <div className="graph-card">
                         <h3>🌫️ VOCs (kΩ)</h3>
-                        <ResponsiveContainer width="100%" height={200}>
-                          <LineChart data={getFilteredGraphData()}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="time" />
-                          <YAxis />
-                          <Tooltip />
-                          <Line type="monotone" dataKey="vocs" stroke="#9C27B0" strokeWidth={2} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
+                        <div style={{ width: '100%', height: '200px' }}>
+                          <ResponsiveContainer debounce={300}>
+                            <LineChart data={getFilteredGraphData()}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="time" />
+                              <YAxis />
+                              <Tooltip />
+                              <Line type="monotone" dataKey="vocs" stroke="#9C27B0" strokeWidth={2} isAnimationActive={false} />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
                     )}
 
                     {/* NO2 Graph */}
                     {appliedGraphSensorTypes.no2 && (
                     <div className="graph-card">
                       <h3>💨 Nitrogen Dioxide (PPM)</h3>
-                      <ResponsiveContainer width="100%" height={200}>
-                        <LineChart data={getFilteredGraphData()}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="time" />
-                          <YAxis />
-                          <Tooltip />
-                          <Line type="monotone" dataKey="no2" stroke="#FF9800" strokeWidth={2} />
-                        </LineChart>
-                      </ResponsiveContainer>
+                      <div style={{ width: '100%', height: '200px' }}>
+                        <ResponsiveContainer debounce={300}>
+                          <LineChart data={getFilteredGraphData()}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="time" />
+                            <YAxis />
+                            <Tooltip />
+                            <Line type="monotone" dataKey="no2" stroke="#FF9800" strokeWidth={2} isAnimationActive={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
                     </div>
                     )}
 
@@ -839,15 +1026,17 @@ function Dashboard() {
                     {appliedGraphSensorTypes.co && (
                     <div className="graph-card">
                       <h3>🔥 Carbon Monoxide (PPM)</h3>
-                      <ResponsiveContainer width="100%" height={200}>
-                        <LineChart data={getFilteredGraphData()}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="time" />
-                          <YAxis />
-                          <Tooltip />
-                          <Line type="monotone" dataKey="co" stroke="#F44336" strokeWidth={2} />
-                        </LineChart>
-                      </ResponsiveContainer>
+                      <div style={{ width: '100%', height: '200px' }}>
+                        <ResponsiveContainer debounce={300}>
+                          <LineChart data={getFilteredGraphData()}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="time" />
+                            <YAxis />
+                            <Tooltip />
+                            <Line type="monotone" dataKey="co" stroke="#F44336" strokeWidth={2} isAnimationActive={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
                     </div>
                     )}
 
@@ -855,15 +1044,17 @@ function Dashboard() {
                     {appliedGraphSensorTypes.pm25 && (
                     <div className="graph-card">
                       <h3>⚫ PM 2.5 (µg/m³)</h3>
-                      <ResponsiveContainer width="100%" height={200}>
-                        <LineChart data={getFilteredGraphData()}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="time" />
-                          <YAxis />
-                          <Tooltip />
-                          <Line type="monotone" dataKey="pm25" stroke="#607D8B" strokeWidth={2} />
-                        </LineChart>
-                      </ResponsiveContainer>
+                      <div style={{ width: '100%', height: '200px' }}>
+                        <ResponsiveContainer debounce={300}>
+                          <LineChart data={getFilteredGraphData()}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="time" />
+                            <YAxis />
+                            <Tooltip />
+                            <Line type="monotone" dataKey="pm25" stroke="#607D8B" strokeWidth={2} isAnimationActive={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
                     </div>
                     )}
 
@@ -871,15 +1062,17 @@ function Dashboard() {
                     {appliedGraphSensorTypes.pm10 && (
                     <div className="graph-card">
                       <h3>⚫ PM 10 (µg/m³)</h3>
-                      <ResponsiveContainer width="100%" height={200}>
-                        <LineChart data={getFilteredGraphData()}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="time" />
-                          <YAxis />
-                          <Tooltip />
-                          <Line type="monotone" dataKey="pm10" stroke="#795548" strokeWidth={2} />
-                        </LineChart>
-                      </ResponsiveContainer>
+                      <div style={{ width: '100%', height: '200px' }}>
+                        <ResponsiveContainer debounce={300}>
+                          <LineChart data={getFilteredGraphData()}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="time" />
+                            <YAxis />
+                            <Tooltip />
+                            <Line type="monotone" dataKey="pm10" stroke="#795548" strokeWidth={2} isAnimationActive={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
                     </div>
                     )}
                   </div>

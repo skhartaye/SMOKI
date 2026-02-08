@@ -4,19 +4,138 @@
   height: 100vh;
   background-color: #f5f5f5;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Dark Mode */
+.dashboard.dark-mode {
+  background-color: #1a1a1a;
+  color: #e0e0e0;
+}
+
+.dashboard.dark-mode .sidebar {
+  background-color: #2d2d2d;
+}
+
+.dashboard.dark-mode .sidebar-header h1,
+.dashboard.dark-mode .nav-item {
+  color: #e0e0e0;
+}
+
+.dashboard.dark-mode .nav-item.active {
+  background-color: #444;
+}
+
+.dashboard.dark-mode .main-content {
+  background-color: #1a1a1a;
+}
+
+.dashboard.dark-mode .camera-feed,
+.dashboard.dark-mode .sensor-card,
+.dashboard.dark-mode .filters-container,
+.dashboard.dark-mode .data-logs-container,
+.dashboard.dark-mode .graph-card {
+  background: #2d2d2d;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.dashboard.dark-mode .graph-card:hover {
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+
+.dashboard.dark-mode .graph-card h3 {
+  color: #e0e0e0;
+}
+
+.dashboard.dark-mode .graph-card-labels {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.dashboard.dark-mode .graph-card-labels span {
+  color: #999;
+}
+
+.dashboard.dark-mode .camera-placeholder {
+  background: linear-gradient(135deg, #2d2d2d 0%, #3d3d3d 100%);
+  color: #666;
+}
+
+.dashboard.dark-mode h1,
+.dashboard.dark-mode h2,
+.dashboard.dark-mode h3,
+.dashboard.dark-mode .sensor-card h3,
+.dashboard.dark-mode .records-header h1,
+.dashboard.dark-mode .data-logs-header h2 {
+  color: #e0e0e0;
+}
+
+.dashboard.dark-mode .records-subtitle,
+.dashboard.dark-mode .data-logs-header p,
+.dashboard.dark-mode .content-subtitle {
+  color: #999;
+}
+
+.dashboard.dark-mode .records-table {
+  background: #2d2d2d;
+}
+
+.dashboard.dark-mode .records-table thead {
+  background: #3d3d3d;
+}
+
+.dashboard.dark-mode .records-table th {
+  color: #bbb;
+}
+
+.dashboard.dark-mode .records-table td {
+  color: #e0e0e0;
+  border-bottom-color: #3d3d3d;
+}
+
+.dashboard.dark-mode .records-table tbody tr:hover {
+  background: #333;
+}
+
+.dashboard.dark-mode .dropdown-header,
+.dashboard.dark-mode .filter-select {
+  background: #3d3d3d;
+  border-color: #555;
+  color: #e0e0e0;
+}
+
+.dashboard.dark-mode .dropdown-menu {
+  background: #3d3d3d;
+  border-color: #555;
+}
+
+.dashboard.dark-mode .dropdown-item {
+  color: #e0e0e0;
+}
+
+.dashboard.dark-mode .dropdown-item:hover {
+  background: #444;
 }
 
 /* Sidebar */
 .sidebar {
-  width: 200px;
+  width: 70px;
   background-color: #d3d3d3;
   display: flex;
   flex-direction: column;
   padding: 20px 0;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  z-index: 100;
+}
+
+.sidebar:hover {
+  width: 200px;
 }
 
 .sidebar-header {
   padding: 0 20px 30px;
+  white-space: nowrap;
 }
 
 .sidebar-header h1 {
@@ -24,13 +143,41 @@
   font-weight: 600;
   color: #333;
   margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebar-header h1 .menu-icon {
+  min-width: 24px;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-header h1 .menu-icon svg {
+  width: 1em;
+  height: 1em;
+}
+
+.sidebar-header h1 .menu-text {
+  opacity: 0;
+  max-width: 0;
+  overflow: hidden;
+  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar:hover .sidebar-header h1 .menu-text {
+  opacity: 1;
+  max-width: 150px;
 }
 
 .sidebar-nav {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 8px;
   padding: 0 10px;
 }
 
@@ -38,7 +185,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 15px;
+  padding: 14px 15px;
   background: none;
   border: none;
   border-radius: 8px;
@@ -47,6 +194,8 @@
   color: #666;
   font-size: 15px;
   text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .nav-item:hover {
@@ -60,10 +209,28 @@
 
 .nav-icon {
   font-size: 18px;
+  min-width: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-icon svg {
+  width: 1em;
+  height: 1em;
 }
 
 .nav-text {
   font-weight: 500;
+  opacity: 0;
+  max-width: 0;
+  overflow: hidden;
+  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar:hover .nav-text {
+  opacity: 1;
+  max-width: 150px;
 }
 
 .sidebar-footer {
@@ -76,14 +243,26 @@
   align-items: center;
   gap: 10px;
   margin-bottom: 15px;
+  overflow: hidden;
 }
 
 .user-icon {
   font-size: 24px;
+  min-width: 24px;
 }
 
 .user-details {
   flex: 1;
+  opacity: 0;
+  max-width: 0;
+  overflow: hidden;
+  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+}
+
+.sidebar:hover .user-details {
+  opacity: 1;
+  max-width: 200px;
 }
 
 .user-name {
@@ -109,8 +288,44 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 0;
+  transition: all 0.2s, gap 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  overflow: hidden;
+  position: relative;
+}
+
+.sign-out-btn span:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sign-out-btn svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.sign-out-btn span:last-child {
+  opacity: 0;
+  width: 0;
+  max-width: 0;
+  overflow: hidden;
+  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+
+.sidebar:hover .sign-out-btn {
+  justify-content: flex-start;
   gap: 8px;
-  transition: all 0.2s;
+}
+
+.sidebar:hover .sign-out-btn span:last-child {
+  opacity: 1;
+  width: auto;
+  max-width: 100px;
 }
 
 .sign-out-btn:hover {
@@ -121,56 +336,73 @@
 /* Main Content */
 .main-content {
   flex: 1;
+  padding: 0;
+  overflow: hidden;
+  height: 100vh;
+  position: relative;
+}
+
+/* Prevent layout shift during sidebar animation */
+.dashboard:not(.sidebar-animating) .main-content {
+  transition: none;
+}
+
+/* Records and Graphs pages - scrollable */
+.records-page-container,
+.graphs-page-container {
   padding: 40px;
   overflow-y: auto;
+  height: 100vh;
+  box-sizing: border-box;
 }
 
-.content-header {
-  margin-bottom: 30px;
+/* Dashboard Page */
+.dashboard-page-container {
+  padding: 40px;
+  overflow-y: auto;
+  height: 100vh;
+  box-sizing: border-box;
 }
 
-.content-header h1 {
-  font-size: 32px;
-  font-weight: 600;
-  color: #333;
-  margin: 0 0 5px 0;
+.camera-feed-container {
+  background: #e8e8e8;
+  border-radius: 12px;
+  padding: 24px;
 }
 
-.content-subtitle {
-  font-size: 14px;
-  color: #999;
-  margin: 0;
-}
-
-/* Camera Feed */
-.camera-container {
-  width: 100%;
-  max-width: 1200px;
-}
-
-.camera-header {
+.camera-feed-header {
   margin-bottom: 20px;
-  text-align: left;
 }
 
-.camera-header h1 {
-  font-size: 32px;
+.camera-feed-header h2 {
+  font-size: 20px;
   font-weight: 600;
   color: #333;
   margin: 0 0 5px 0;
+}
+
+.camera-feed-header p {
+  font-size: 13px;
+  color: #666;
+  margin: 0;
 }
 
 .camera-feed {
   background: white;
-  border-radius: 20px;
+  border-radius: 8px;
   padding: 40px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 500px;
 }
 
 .camera-placeholder {
-  aspect-ratio: 16/9;
-  background: linear-gradient(135deg, #e0e0e0 0%, #f0f0f0 100%);
-  border-radius: 12px;
+  width: 100%;
+  height: 100%;
+  min-height: 400px;
+  background: linear-gradient(135deg, #e8e8e8 0%, #f5f5f5 100%);
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -178,6 +410,7 @@
   font-weight: 600;
   color: #999;
   letter-spacing: 2px;
+  border: 2px dashed #d0d0d0;
 }
 
 /* Sen
@@ -273,7 +506,7 @@
 
 /* Records Page */
 .records-page-container {
-  padding: 0;
+  padding: 40px 40px 40px 60px;
 }
 
 .records-header {
@@ -299,6 +532,8 @@
   border-radius: 12px;
   padding: 20px;
   margin-bottom: 24px;
+  width: 100%;
+  max-width: 1400px;
 }
 
 .filters-header {
@@ -539,6 +774,15 @@
   color: #333;
 }
 
+.aqi-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: white;
+}
+
 .no-records {
   text-align: center;
   color: #999;
@@ -548,22 +792,30 @@
 
 /* Graphs Page */
 .graphs-page-container {
-  padding: 20px;
+  padding: 40px;
+  contain: layout style;
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .graphs-page-container h1 {
   color: #1a1a1a;
-  margin-bottom: 24px;
+  margin-bottom: 8px;
   font-size: 2em;
+  text-align: center;
+}
+
+.graphs-page-container .records-subtitle {
+  text-align: center;
 }
 
 .graphs-content {
-  background: rgba(255, 255, 255, 0.9);
-  border: 2px solid rgba(255, 165, 0, 0.3);
-  border-radius: 12px;
-  padding: 32px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  min-height: 400px;
+  margin-top: 24px;
+  width: 100%;
+  max-width: 1400px;
 }
 
 .graphs-content p {
@@ -573,92 +825,192 @@
   margin-top: 100px;
 }
 
+.graphs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+  gap: 32px;
+  contain: layout;
+  width: 100%;
+  justify-items: center;
+}
+
 /* Sensors Page */
 .sensors-page-container {
-  padding: 20px;
-  height: 100%;
+  padding: 0;
+  height: 100vh;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: stretch;
+  overflow: hidden;
+  box-sizing: border-box;
+  background: #f5f5f5;
 }
 
 .sensors-grid {
   display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  gap: 16px;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 12px;
   width: 100%;
-  max-width: 1400px;
+  height: 100%;
+  padding: 12px;
+  box-sizing: border-box;
 }
 
-/* First row: 3 items centered (each takes 3 columns, starting from column 2) */
+/* Bento box layout */
 .sensors-grid .sensor-card:nth-child(1) {
-  grid-column: 2 / 5;
+  grid-column: span 1;
+  grid-row: span 1;
 }
 
 .sensors-grid .sensor-card:nth-child(2) {
-  grid-column: 5 / 8;
+  grid-column: span 1;
+  grid-row: span 1;
 }
 
 .sensors-grid .sensor-card:nth-child(3) {
-  grid-column: 8 / 11;
+  grid-column: span 1;
+  grid-row: span 2;
 }
 
-/* Second row: 4 items (each takes 3 columns) */
 .sensors-grid .sensor-card:nth-child(4) {
-  grid-column: 1 / 4;
+  grid-column: span 1;
+  grid-row: span 1;
 }
 
 .sensors-grid .sensor-card:nth-child(5) {
-  grid-column: 4 / 7;
+  grid-column: span 1;
+  grid-row: span 1;
 }
 
 .sensors-grid .sensor-card:nth-child(6) {
-  grid-column: 7 / 10;
+  grid-column: span 1;
+  grid-row: span 1;
 }
 
 .sensors-grid .sensor-card:nth-child(7) {
-  grid-column: 10 / 13;
+  grid-column: span 1;
+  grid-row: span 1;
 }
 
 .sensor-card {
-  background: rgba(255, 255, 255, 0.9);
-  border: 2px solid rgba(255, 165, 0, 0.3);
-  border-radius: 10px;
-  padding: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
-  text-align: center;
+  background: white;
+  border: none;
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: visible;
+  min-height: 0;
+}
+
+/* Larger padding for PM2.5 and PM10 cards */
+.sensors-grid .sensor-card:nth-child(6),
+.sensors-grid .sensor-card:nth-child(7) {
+  padding: 24px;
 }
 
 .sensor-card:hover {
-  box-shadow: 0 6px 30px rgba(255, 165, 0, 0.2);
-  border-color: orange;
-  transform: translateY(-4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+/* Header with icon and label */
+.sensor-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: auto;
+  position: relative;
+  z-index: 1;
 }
 
 .sensor-icon {
   font-size: 2em;
-  margin-bottom: 8px;
+  opacity: 0.12;
+  transition: opacity 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #888;
+}
+
+.sensor-icon svg {
+  width: 1em;
+  height: 1em;
+}
+
+.sensor-card:hover .sensor-icon {
+  opacity: 0.25;
 }
 
 .sensor-card h3 {
-  color: #333;
-  margin: 8px 0;
-  font-size: 1.1em;
+  color: #888;
+  margin: 0;
+  font-size: 0.85em;
+  font-weight: 500;
+  text-transform: capitalize;
+  letter-spacing: 0.3px;
+}
+
+.sensor-change {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  font-size: 0.75em;
   font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  z-index: 10;
+}
+
+.sensor-change.positive {
+  color: #4caf50;
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.sensor-change.negative {
+  color: #f44336;
+  background: rgba(244, 67, 54, 0.1);
 }
 
 .sensor-value {
-  font-size: 1.5em;
+  font-size: 2.8em;
   font-weight: 700;
-  color: orange;
-  margin: 10px 0;
+  color: #ff8c00;
+  margin: auto 0;
+  line-height: 1;
+  word-break: break-word;
+  letter-spacing: -0.5px;
+  text-align: center;
 }
 
 .sensor-status {
-  color: #666;
-  font-size: 0.85em;
-  font-style: italic;
+  color: #bbb;
+  font-size: 0.65em;
+  margin: auto 0 0 0;
+  font-weight: 400;
+  letter-spacing: 0.2px;
+  text-align: center;
+}
+
+/* Dark mode sensor cards */
+.dashboard.dark-mode .sensor-card h3 {
+  color: #aaa;
+}
+
+.dashboard.dark-mode .sensor-value {
+  color: #ff9800;
+}
+
+.dashboard.dark-mode .sensor-status {
+  color: #777;
 }
 
 /* Sidebar sub-items */
@@ -673,36 +1025,95 @@
   transition: transform 0.3s ease;
 }
 
-/* Graphs Page */
-.graphs-page-container {
-  padding: 20px;
-}
-
-.graphs-page-container h1 {
-  color: #1a1a1a;
-  margin-bottom: 24px;
-  font-size: 2em;
-}
-
-.graphs-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
-  gap: 24px;
-}
-
 .graph-card {
-  background: rgba(255, 255, 255, 0.95);
-  border: 2px solid rgba(255, 165, 0, 0.3);
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
+  background: white;
+  border: none;
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
+  contain: layout style paint;
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.graph-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #d3a2ef 0%, #c3ecf7 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.graph-card:hover::before {
+  opacity: 1;
 }
 
 .graph-card:hover {
-  box-shadow: 0 6px 30px rgba(255, 165, 0, 0.2);
-  border-color: orange;
-  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  transform: translateY(-4px);
+}
+
+.graph-card h3 {
+  color: #333;
+  margin: 0 0 8px 0;
+  font-size: 0.95em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.8;
+}
+
+.graph-card-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.graph-card-labels span {
+  color: #666;
+  font-size: 0.85em;
+  font-weight: 500;
+}
+
+/* Prevent ResponsiveContainer from triggering reflows */
+.graph-card .recharts-responsive-container {
+  position: relative !important;
+}
+
+.graph-card .recharts-surface {
+  overflow: visible;
+}
+
+/* Custom tooltip styling */
+.custom-graph-tooltip {
+  background: rgba(255, 255, 255, 0.98) !important;
+  border: 1px solid rgba(211, 162, 239, 0.3) !important;
+  border-radius: 8px !important;
+  padding: 12px 16px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+.custom-graph-tooltip .label {
+  color: #666 !important;
+  font-weight: 600 !important;
+  margin-bottom: 4px !important;
+  font-size: 0.9em !important;
+}
+
+.custom-graph-tooltip .value {
+  color: #d3a2ef !important;
+  font-size: 1.1em !important;
+  font-weight: 700 !important;
 }
 
 .graph-card h3 {
@@ -712,14 +1123,19 @@
   font-weight: 600;
 }
 
+/* Prevent ResponsiveContainer from triggering reflows */
+.graph-card .recharts-responsive-container {
+  position: relative !important;
+}
+
 .no-data {
   text-align: center;
   color: #666;
   font-size: 1.1em;
   padding: 60px 20px;
-  background: rgba(255, 255, 255, 0.9);
+  background: white;
   border-radius: 12px;
-  border: 2px solid rgba(255, 165, 0, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 /* Responsive adjustments */
