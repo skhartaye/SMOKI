@@ -150,19 +150,44 @@ def update_sensor_data(record_id, temperature=None, humidity=None, vocs=None,
     with psycopg.connect(get_connection_string()) as conn:
         try:
             with conn.cursor() as cursor:
-                cursor.execute("""
+                # Build dynamic UPDATE query to only update provided fields
+                updates = []
+                params = []
+                
+                if temperature is not None:
+                    updates.append("temperature = %s")
+                    params.append(temperature)
+                if humidity is not None:
+                    updates.append("humidity = %s")
+                    params.append(humidity)
+                if vocs is not None:
+                    updates.append("vocs = %s")
+                    params.append(vocs)
+                if nitrogen_dioxide is not None:
+                    updates.append("nitrogen_dioxide = %s")
+                    params.append(nitrogen_dioxide)
+                if carbon_monoxide is not None:
+                    updates.append("carbon_monoxide = %s")
+                    params.append(carbon_monoxide)
+                if pm25 is not None:
+                    updates.append("pm25 = %s")
+                    params.append(pm25)
+                if pm10 is not None:
+                    updates.append("pm10 = %s")
+                    params.append(pm10)
+                
+                if not updates:
+                    return None  # Nothing to update
+                
+                params.append(record_id)
+                query = f"""
                     UPDATE sensor_data
-                    SET temperature = COALESCE(%s, temperature),
-                        humidity = COALESCE(%s, humidity),
-                        vocs = COALESCE(%s, vocs),
-                        nitrogen_dioxide = COALESCE(%s, nitrogen_dioxide),
-                        carbon_monoxide = COALESCE(%s, carbon_monoxide),
-                        pm25 = COALESCE(%s, pm25),
-                        pm10 = COALESCE(%s, pm10)
+                    SET {', '.join(updates)}
                     WHERE id = %s
                     RETURNING id, timestamp;
-                """, (temperature, humidity, vocs, nitrogen_dioxide, carbon_monoxide, 
-                      pm25, pm10, record_id))
+                """
+                
+                cursor.execute(query, params)
                 
                 result = cursor.fetchone()
                 if result:
