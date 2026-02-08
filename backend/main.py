@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from datetime import datetime, timezone, timedelta
 import sys
 sys.path.append('..')
-from postgre.database import init_db_pool, insert_sensor_data, get_latest_sensor_data, close_db_pool
+from postgre.database import init_db_pool, insert_sensor_data, get_latest_sensor_data, update_sensor_data, delete_sensor_data, close_db_pool
 from auth import (
     authenticate_user, create_access_token, get_current_user, 
     get_current_superadmin, get_current_admin_or_superadmin,
@@ -130,5 +130,38 @@ def get_latest_reading(current_user: User = Depends(get_current_admin_or_superad
             return {"success": True, "data": data[0]}
         else:
             return {"success": True, "data": None}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/sensors/data/{record_id}")
+def update_sensor_record(record_id: int, data: SensorData, current_user: User = Depends(get_current_superadmin)):
+    """Update sensor reading (Superadmin only)"""
+    try:
+        result = update_sensor_data(
+            record_id=record_id,
+            temperature=data.temperature,
+            humidity=data.humidity,
+            vocs=data.vocs,
+            nitrogen_dioxide=data.nitrogen_dioxide,
+            carbon_monoxide=data.carbon_monoxide,
+            pm25=data.pm25,
+            pm10=data.pm10
+        )
+        if result:
+            return {"success": True, "message": "Record updated", "data": result}
+        else:
+            raise HTTPException(status_code=404, detail="Record not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/sensors/data/{record_id}")
+def delete_sensor_record(record_id: int, current_user: User = Depends(get_current_superadmin)):
+    """Delete sensor reading (Superadmin only)"""
+    try:
+        success = delete_sensor_data(record_id)
+        if success:
+            return {"success": True, "message": f"Record {record_id} deleted"}
+        else:
+            raise HTTPException(status_code=404, detail="Record not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
