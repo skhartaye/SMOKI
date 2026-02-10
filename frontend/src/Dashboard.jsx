@@ -65,6 +65,7 @@ function Dashboard() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const [formData, setFormData] = useState({
     temperature: '',
     humidity: '',
@@ -693,8 +694,38 @@ function Dashboard() {
 
   return (
     <div className={`dashboard ${darkMode ? 'dark-mode' : ''}`}>
-      {/* Mobile Menu Button */}
-      <button className="mobile-menu-btn" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+      {/* Top Header - Mobile Only */}
+      <header className="mobile-top-header">
+        <h1>SMOKi</h1>
+        <button className="user-btn" onClick={() => setShowUserMenu(!showUserMenu)}>
+          <span>👤</span>
+        </button>
+        
+        {/* User Menu Dropdown */}
+        {showUserMenu && (
+          <div className="user-menu-dropdown">
+            <div className="user-menu-header">
+              <div className="user-menu-icon">👤</div>
+              <div className="user-menu-info">
+                <div className="user-menu-name">{localStorage.getItem('username') || 'User'}</div>
+                <div className="user-menu-role">{localStorage.getItem('role') === 'superadmin' ? 'Super Admin' : 'Admin'}</div>
+              </div>
+            </div>
+            <button className="user-menu-logout" onClick={handleLogout}>
+              <LogOut size={18} />
+              <span>Sign out</span>
+            </button>
+          </div>
+        )}
+      </header>
+
+      {/* Overlay for user menu */}
+      {showUserMenu && (
+        <div className="user-menu-overlay" onClick={() => setShowUserMenu(false)}></div>
+      )}
+
+      {/* Mobile Menu Button - Hidden on mobile with bottom nav */}
+      <button className="mobile-menu-btn desktop-only" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
         <Menu />
       </button>
 
@@ -704,9 +735,9 @@ function Dashboard() {
         onClick={() => setMobileMenuOpen(false)}
       ></div>
 
-      {/* Sidebar */}
+      {/* Sidebar - Hidden on mobile */}
       <aside 
-        className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}
+        className={`sidebar desktop-sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}
         onMouseEnter={() => setSidebarHovered(true)}
         onMouseLeave={() => setSidebarHovered(false)}
       >
@@ -801,6 +832,11 @@ function Dashboard() {
       <main className="main-content">
           {activePage === "dashboard" && (
             <div className="dashboard-page-container">
+              <div className="dashboard-mobile-header">
+                <h1>Dashboard</h1>
+                <p className="dashboard-subtitle">Smoke Emission monitoring overview</p>
+                <p className="dashboard-date">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</p>
+              </div>
               <div className="camera-feed-container">
                 <div className="camera-feed-header">
                   <h2>Live Camera Feed</h2>
@@ -2210,6 +2246,41 @@ function Dashboard() {
             </section>
           )}
       </main>
+
+      {/* Bottom Navigation - Mobile Only */}
+      <nav className="bottom-nav">
+        <button 
+          onClick={() => setActivePage("dashboard")}
+          className={`bottom-nav-item ${activePage === "dashboard" ? "active" : ""}`}
+        >
+          <Home size={24} />
+          <span>Dashboard</span>
+        </button>
+
+        <button 
+          onClick={() => setActivePage("records")}
+          className={`bottom-nav-item ${activePage === "records" ? "active" : ""}`}
+        >
+          <FileText size={24} />
+          <span>Records</span>
+        </button>
+
+        <button 
+          onClick={() => setActivePage("graphs")}
+          className={`bottom-nav-item ${activePage === "graphs" ? "active" : ""}`}
+        >
+          <TrendingUp size={24} />
+          <span>Graphs</span>
+        </button>
+
+        <button 
+          onClick={() => setActivePage("sensors")}
+          className={`bottom-nav-item ${activePage === "sensors" ? "active" : ""}`}
+        >
+          <Zap size={24} />
+          <span>Sensors</span>
+        </button>
+      </nav>
     </div>
   )
 }
