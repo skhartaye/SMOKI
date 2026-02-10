@@ -2936,3 +2936,6 @@ chatgpt-sidebar {
 .dashboard.dark-mode .contact-note {
   color: #999;
 }
+
+
+/* Remove focus outline from bottom nav */.bottom-nav-item { outline: none !important; user-select: none; -webkit-tap-highlight-color: transparent; }
