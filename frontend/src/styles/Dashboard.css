@@ -1631,17 +1631,7 @@ chatgpt-sidebar {
     }
   }
 
-  .bottom-nav-item.clicked {
-    animation: popInClick 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-  }
-  
-  .bottom-nav-item.clicked svg {
-    animation: iconPopClick 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-  }
-  
-  .bottom-nav-item.clicked span {
-    animation: labelPulseClick 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-  }
+
   
   @keyframes popInClick {
     0% {
