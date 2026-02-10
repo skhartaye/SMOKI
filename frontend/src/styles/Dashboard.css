@@ -1572,7 +1572,7 @@ chatgpt-sidebar {
   }
   
   .bottom-nav-item.clicked {
-    animation: navItemBounce 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    animation: navItemBounce 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55), popIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
   }
   
   .bottom-nav-item.clicked svg {
