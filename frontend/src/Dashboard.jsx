@@ -561,6 +561,31 @@ function Dashboard() {
     }));
   };
 
+  // Helper function to get selected sensor names for display
+  const getSelectedSensorNames = (sensorTypes) => {
+    const sensorLabels = {
+      temperature: 'Temp',
+      humidity: 'Humidity',
+      vocs: 'VOCs',
+      no2: 'NO₂',
+      co: 'CO',
+      pm25: 'PM2.5',
+      pm10: 'PM10'
+    };
+    
+    const selected = Object.keys(sensorTypes).filter(key => sensorTypes[key]);
+    
+    if (selected.length === 0) {
+      return 'None selected';
+    } else if (selected.length === Object.keys(sensorTypes).length) {
+      return 'All sensors';
+    } else if (selected.length <= 3) {
+      return selected.map(key => sensorLabels[key]).join(', ');
+    } else {
+      return `${selected.length} sensors`;
+    }
+  };
+
   const handleClearGraphFilters = () => {
     const defaultSensors = {
       temperature: true,
@@ -738,6 +763,17 @@ function Dashboard() {
           </button>
 
           <button 
+            onClick={() => {
+              setActivePage("info");
+              setMobileMenuOpen(false);
+            }}
+            className={`nav-item ${activePage === "info" ? "active" : ""}`}
+          >
+            <span className="nav-icon"><FileText /></span>
+            <span className="nav-text">Info</span>
+          </button>
+
+          <button 
             onClick={() => setDarkMode(!darkMode)}
             className="nav-item"
           >
@@ -765,11 +801,6 @@ function Dashboard() {
       <main className="main-content">
           {activePage === "dashboard" && (
             <div className="dashboard-page-container">
-              <div className="records-header">
-                <h1>Dashboard</h1>
-                <p className="records-subtitle">Smoke Emission monitoring overview</p>
-              </div>
-              
               <div className="camera-feed-container">
                 <div className="camera-feed-header">
                   <h2>Live Camera Feed</h2>
@@ -790,10 +821,6 @@ function Dashboard() {
                 // Camera + Sensor Cards View
                 <div className="sensors-layout">
                   <div className="sensors-camera-section">
-                    <div className="records-header">
-                      <h1>Sensors</h1>
-                      <p className="records-subtitle">Monitor emissions data and air quality in real-time</p>
-                    </div>
                     <div className="camera-feed-box">
                       <div className="camera-placeholder">
                         CAMERA FEED
@@ -1059,11 +1086,6 @@ function Dashboard() {
 
           {activePage === "records" && (
             <section className="records-page-container">
-              <div className="records-header">
-                <h1>Sensor Records</h1>
-                <p className="records-subtitle">AeroBlend system data logs and monitoring</p>
-              </div>
-
               {/* Filters Section */}
               <div className="filters-container">
                 <div className="filters-header">
@@ -1077,7 +1099,7 @@ function Dashboard() {
                         className="dropdown-header"
                         onClick={() => setSensorDropdownOpen(!sensorDropdownOpen)}
                       >
-                        <span>Select Sensors</span>
+                        <span>{getSelectedSensorNames(filterSensorTypes)}</span>
                         <span className="dropdown-arrow">{sensorDropdownOpen ? '▲' : '▼'}</span>
                       </div>
                       {sensorDropdownOpen && (
@@ -1384,10 +1406,6 @@ function Dashboard() {
                   <div className="loading-spinner"></div>
                 </div>
               )}
-              <div className="records-header">
-                <h1>Sensor Graphs</h1>
-                <p className="records-subtitle">Real-time and historical sensor data visualization</p>
-              </div>
 
               {/* Filters Section */}
               <div className="filters-container">
@@ -1402,7 +1420,7 @@ function Dashboard() {
                         className="dropdown-header"
                         onClick={() => setGraphSensorDropdownOpen(!graphSensorDropdownOpen)}
                       >
-                        <span>Select Sensors</span>
+                        <span>{getSelectedSensorNames(graphFilterSensorTypes)}</span>
                         <span className="dropdown-arrow">{graphSensorDropdownOpen ? '▲' : '▼'}</span>
                       </div>
                       {graphSensorDropdownOpen && (
@@ -1510,8 +1528,8 @@ function Dashboard() {
                               const peak = getPeakValue('temperature');
                               return peak !== null ? (
                                 <>
-                                  <span className="current-value">{peak.toFixed(1)}</span>
-                                  <span className="value-change">°C Peak</span>
+                                  <span className="current-value">{peak.toFixed(1)} °C</span>
+                                  <span className="value-change">Peak</span>
                                 </>
                               ) : '--';
                             })()}
@@ -1597,8 +1615,8 @@ function Dashboard() {
                               const peak = getPeakValue('humidity');
                               return peak !== null ? (
                                 <>
-                                  <span className="current-value">{peak.toFixed(1)}</span>
-                                  <span className="value-change">% Peak</span>
+                                  <span className="current-value">{peak.toFixed(1)} %</span>
+                                  <span className="value-change">Peak</span>
                                 </>
                               ) : '--';
                             })()}
@@ -1684,8 +1702,8 @@ function Dashboard() {
                               const peak = getPeakValue('vocs');
                               return peak !== null ? (
                                 <>
-                                  <span className="current-value">{peak.toFixed(1)}</span>
-                                  <span className="value-change">kΩ Peak</span>
+                                  <span className="current-value">{peak.toFixed(1)} kΩ</span>
+                                  <span className="value-change">Peak</span>
                                 </>
                               ) : '--';
                             })()}
@@ -1764,8 +1782,8 @@ function Dashboard() {
                             const peak = getPeakValue('no2');
                             return peak !== null ? (
                               <>
-                                <span className="current-value">{peak.toFixed(2)}</span>
-                                <span className="value-change">PPM Peak</span>
+                                <span className="current-value">{peak.toFixed(2)} PPM</span>
+                                <span className="value-change">Peak</span>
                               </>
                             ) : '--';
                           })()}
@@ -1844,8 +1862,8 @@ function Dashboard() {
                             const peak = getPeakValue('co');
                             return peak !== null ? (
                               <>
-                                <span className="current-value">{peak.toFixed(2)}</span>
-                                <span className="value-change">PPM Peak</span>
+                                <span className="current-value">{peak.toFixed(2)} PPM</span>
+                                <span className="value-change">Peak</span>
                               </>
                             ) : '--';
                           })()}
@@ -1918,8 +1936,8 @@ function Dashboard() {
                             const peak = getPeakValue('pm25');
                             return peak !== null ? (
                               <>
-                                <span className="current-value">{peak.toFixed(1)}</span>
-                                <span className="value-change">µg/m³ Peak</span>
+                                <span className="current-value">{peak.toFixed(1)} µg/m³</span>
+                                <span className="value-change">Peak</span>
                               </>
                             ) : '--';
                           })()}
@@ -1998,8 +2016,8 @@ function Dashboard() {
                             const peak = getPeakValue('pm10');
                             return peak !== null ? (
                               <>
-                                <span className="current-value">{peak.toFixed(1)}</span>
-                                <span className="value-change">µg/m³ Peak</span>
+                                <span className="current-value">{peak.toFixed(1)} µg/m³</span>
+                                <span className="value-change">Peak</span>
                               </>
                             ) : '--';
                           })()}
@@ -2072,6 +2090,123 @@ function Dashboard() {
                 )}
               </div>
               )}
+            </section>
+          )}
+
+          {activePage === "info" && (
+            <section className="info-page-container">
+              <div className="info-content">
+                <h1 className="info-title">About SMOKi Air Quality Monitor</h1>
+              
+                <div className="info-section">
+                  <h2>Monitored Parameters</h2>
+                  
+                  <div className="parameter-card">
+                    <div className="parameter-header">
+                      <Thermometer size={24} />
+                      <h3>Temperature</h3>
+                    </div>
+                    <p>Measures ambient temperature in degrees Celsius. Optimal indoor temperature ranges from 20-24°C for comfort and health.</p>
+                  </div>
+
+                  <div className="parameter-card">
+                    <div className="parameter-header">
+                      <Droplet size={24} />
+                      <h3>Humidity</h3>
+                    </div>
+                    <p>Tracks relative humidity percentage. Ideal indoor humidity should be between 30-50% to prevent mold growth and respiratory issues.</p>
+                  </div>
+
+                  <div className="parameter-card">
+                    <div className="parameter-header">
+                      <Activity size={24} />
+                      <h3>VOCs (Volatile Organic Compounds)</h3>
+                    </div>
+                    <p>Detects harmful organic chemicals in the air from paints, cleaners, and building materials. Lower resistance values indicate higher VOC concentrations.</p>
+                  </div>
+
+                  <div className="parameter-card">
+                    <div className="parameter-header">
+                      <Wind size={24} />
+                      <h3>Nitrogen Dioxide (NO₂)</h3>
+                    </div>
+                    <p>Monitors NO₂ levels in PPM. This gas comes from combustion processes. Safe levels are below 0.053 PPM; levels above 0.1 PPM are hazardous.</p>
+                  </div>
+
+                  <div className="parameter-card">
+                    <div className="parameter-header">
+                      <Flame size={24} />
+                      <h3>Carbon Monoxide (CO)</h3>
+                    </div>
+                    <p>Tracks CO concentration in PPM. This odorless, colorless gas is deadly at high concentrations. Safe levels are below 4.4 PPM.</p>
+                  </div>
+
+                  <div className="parameter-card">
+                    <div className="parameter-header">
+                      <Circle size={24} />
+                      <h3>PM2.5 (Fine Particulate Matter)</h3>
+                    </div>
+                    <p>Measures particles smaller than 2.5 micrometers. These can penetrate deep into lungs. Safe levels are below 12 µg/m³; above 35 µg/m³ is unhealthy.</p>
+                  </div>
+
+                  <div className="parameter-card">
+                    <div className="parameter-header">
+                      <Circle size={24} />
+                      <h3>PM10 (Coarse Particulate Matter)</h3>
+                    </div>
+                    <p>Tracks particles smaller than 10 micrometers from dust, pollen, and mold. Safe levels are below 54 µg/m³; above 154 µg/m³ is unhealthy.</p>
+                  </div>
+                </div>
+
+                <div className="info-section">
+                  <h2>Air Quality Index (AQI)</h2>
+                  <p>
+                    The system calculates AQI based on US EPA standards. AQI is a standardized indicator 
+                    of air quality that considers all monitored pollutants and reports the worst value:
+                  </p>
+                  <div className="aqi-legend">
+                    <div className="aqi-item" style={{ backgroundColor: '#4caf50' }}>
+                      <strong>0-50: Good</strong>
+                      <span>Air quality is satisfactory</span>
+                    </div>
+                    <div className="aqi-item" style={{ backgroundColor: '#ffc107' }}>
+                      <strong>51-100: Moderate</strong>
+                      <span>Acceptable for most people</span>
+                    </div>
+                    <div className="aqi-item" style={{ backgroundColor: '#ff9800' }}>
+                      <strong>101-150: Unhealthy for Sensitive</strong>
+                      <span>May affect sensitive groups</span>
+                    </div>
+                    <div className="aqi-item" style={{ backgroundColor: '#f44336', color: 'white' }}>
+                      <strong>151-200: Unhealthy</strong>
+                      <span>Everyone may experience effects</span>
+                    </div>
+                    <div className="aqi-item" style={{ backgroundColor: '#9c27b0', color: 'white' }}>
+                      <strong>201-300: Very Unhealthy</strong>
+                      <span>Health alert for everyone</span>
+                    </div>
+                    <div className="aqi-item" style={{ backgroundColor: '#7b1fa2', color: 'white' }}>
+                      <strong>301-500: Hazardous</strong>
+                      <span>Emergency conditions</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="info-section">
+                  <h2>Need Help?</h2>
+                  <p>
+                    If you have any questions, issues, or need technical support with your SMOKi air quality 
+                    monitoring system, our team is here to help.
+                  </p>
+                  <a href="mailto:support@smoki.com?subject=SMOKi Support Request" className="contact-button">
+                    <span>📧</span>
+                    <span>Email Us for Support</span>
+                  </a>
+                  <p className="contact-note">
+                    Please include details about your issue and any error messages you're seeing.
+                  </p>
+                </div>
+              </div>
             </section>
           )}
       </main>
