@@ -1813,7 +1813,7 @@ chatgpt-sidebar {
   .records-page-container,
   .graphs-page-container,
   .dashboard-page-container {
-    padding: 80px 20px 120px 20px;
+    padding: 80px 20px 150px 20px;
   }
   
   /* Mobile Dashboard Header */
@@ -1869,7 +1869,7 @@ chatgpt-sidebar {
   }
   
   .records-page-container {
-    padding: 80px 20px 120px 20px;
+    padding: 80px 20px 150px 20px;
   }
   
   .records-header h1,
@@ -1918,7 +1918,7 @@ chatgpt-sidebar {
   }
   
   .sensors-page-container-new {
-    padding: 80px 20px 120px 20px;
+    padding: 80px 20px 150px 20px;
   }
   
   .sensors-layout {
@@ -2415,7 +2415,7 @@ chatgpt-sidebar {
 
 @media (max-width: 768px) {
   .sensors-page-container-new {
-    padding: 80px 20px 120px 20px;
+    padding: 80px 20px 150px 20px;
   }
   
   .sensors-layout {
