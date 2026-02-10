@@ -2276,13 +2276,15 @@ function Dashboard() {
       <nav className="bottom-nav">
         <button 
           onClick={(e) => {
-            // Force animation restart by removing and re-adding class
+            // Remove class first
             e.currentTarget.classList.remove('clicked');
-            void e.currentTarget.offsetWidth; // Trigger reflow
-            e.currentTarget.classList.add('clicked');
+            // Use setTimeout to ensure class removal is processed
             setTimeout(() => {
-              e.currentTarget.classList.remove('clicked');
-            }, 600);
+              e.currentTarget.classList.add('clicked');
+              setTimeout(() => {
+                e.currentTarget.classList.remove('clicked');
+              }, 600);
+            }, 10);
             setActivePage("dashboard");
           }}
           className={`bottom-nav-item ${activePage === "dashboard" ? "active" : ""}`}
@@ -2294,11 +2296,12 @@ function Dashboard() {
         <button 
           onClick={(e) => {
             e.currentTarget.classList.remove('clicked');
-            void e.currentTarget.offsetWidth;
-            e.currentTarget.classList.add('clicked');
             setTimeout(() => {
-              e.currentTarget.classList.remove('clicked');
-            }, 600);
+              e.currentTarget.classList.add('clicked');
+              setTimeout(() => {
+                e.currentTarget.classList.remove('clicked');
+              }, 600);
+            }, 10);
             setActivePage("records");
           }}
           className={`bottom-nav-item ${activePage === "records" ? "active" : ""}`}
@@ -2310,11 +2313,12 @@ function Dashboard() {
         <button 
           onClick={(e) => {
             e.currentTarget.classList.remove('clicked');
-            void e.currentTarget.offsetWidth;
-            e.currentTarget.classList.add('clicked');
             setTimeout(() => {
-              e.currentTarget.classList.remove('clicked');
-            }, 600);
+              e.currentTarget.classList.add('clicked');
+              setTimeout(() => {
+                e.currentTarget.classList.remove('clicked');
+              }, 600);
+            }, 10);
             setActivePage("graphs");
           }}
           className={`bottom-nav-item ${activePage === "graphs" ? "active" : ""}`}
@@ -2326,11 +2330,12 @@ function Dashboard() {
         <button 
           onClick={(e) => {
             e.currentTarget.classList.remove('clicked');
-            void e.currentTarget.offsetWidth;
-            e.currentTarget.classList.add('clicked');
             setTimeout(() => {
-              e.currentTarget.classList.remove('clicked');
-            }, 600);
+              e.currentTarget.classList.add('clicked');
+              setTimeout(() => {
+                e.currentTarget.classList.remove('clicked');
+              }, 600);
+            }, 10);
             setActivePage("sensors");
           }}
           className={`bottom-nav-item ${activePage === "sensors" ? "active" : ""}`}
