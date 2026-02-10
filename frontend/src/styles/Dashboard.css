@@ -1612,6 +1612,11 @@ chatgpt-sidebar {
   .dashboard.dark-mode .bottom-nav-item.active {
     color: #e0e0e0;
     background: rgba(255, 255, 255, 0.08);
+    transform: scale(1.1);
+  }
+  
+  .dashboard.dark-mode .bottom-nav-item.active svg {
+    transform: scale(1.15);
   }
   
   /* Adjust main content for top and bottom bars */
