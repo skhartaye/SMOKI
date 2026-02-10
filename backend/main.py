@@ -93,8 +93,8 @@ def get_server_time():
     }
 
 @app.post("/api/sensors/data")
-def add_sensor_data(data: SensorData, current_user: User = Depends(get_current_superadmin)):
-    """Add new sensor reading to database (Superadmin only)"""
+def add_sensor_data(data: SensorData):
+    """Add new sensor reading to database (No auth required for ESP32)"""
     try:
         result = insert_sensor_data(
             temperature=data.temperature,
