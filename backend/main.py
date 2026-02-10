@@ -113,8 +113,8 @@ def add_sensor_data(data: SensorData):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/sensors/data")
-def get_sensor_data(limit: int = 10, current_user: User = Depends(get_current_admin_or_superadmin)):
-    """Get latest sensor readings (Admin and Superadmin)"""
+def get_sensor_data(limit: int = 10):
+    """Get latest sensor readings (Public access for debugging)"""
     try:
         data = get_latest_sensor_data(limit=limit)
         return {"success": True, "data": data}
@@ -122,8 +122,8 @@ def get_sensor_data(limit: int = 10, current_user: User = Depends(get_current_ad
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/sensors/latest")
-def get_latest_reading(current_user: User = Depends(get_current_admin_or_superadmin)):
-    """Get the most recent sensor reading (Admin and Superadmin)"""
+def get_latest_reading():
+    """Get the most recent sensor reading (Public access)"""
     try:
         data = get_latest_sensor_data(limit=1)
         if data:
