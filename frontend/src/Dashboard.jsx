@@ -66,6 +66,8 @@ function Dashboard() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [clickedNavItem, setClickedNavItem] = useState(null);
   const [formData, setFormData] = useState({
     temperature: '',
     humidity: '',
@@ -77,6 +79,16 @@ function Dashboard() {
   });
   
   const navigate = useNavigate();
+
+  // Handle window resize to detect mobile
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -696,6 +708,11 @@ function Dashboard() {
     <div className={`dashboard ${darkMode ? 'dark-mode' : ''}`}>
       {/* Top Header - Mobile Only */}
       <header className="mobile-top-header">
+        <button className="back-btn-header" onClick={() => window.history.back()}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
         <h1>SMOKi</h1>
         <button className="user-btn" onClick={() => setShowUserMenu(!showUserMenu)}>
           <span>👤</span>
@@ -832,16 +849,24 @@ function Dashboard() {
       <main className="main-content">
           {activePage === "dashboard" && (
             <div className="dashboard-page-container">
-              <div className="dashboard-mobile-header">
-                <h1>Dashboard</h1>
-                <p className="dashboard-subtitle">Smoke Emission monitoring overview</p>
-                <p className="dashboard-date">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</p>
-              </div>
-              <div className="camera-feed-container">
-                <div className="camera-feed-header">
-                  <h2>Live Camera Feed</h2>
-                  <p>Real-time video monitoring</p>
+              {/* Conditionally render mobile OR desktop header */}
+              {isMobile ? (
+                <div className="dashboard-mobile-header">
+                  <p className="dashboard-date">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                  <h1>Dashboard</h1>
+                  <p className="dashboard-subtitle">Smoke Emission monitoring overview</p>
                 </div>
+              ) : (
+                <div className="dashboard-header-section">
+                  <div className="dashboard-header-left">
+                    <h1>Dashboard</h1>
+                    <p className="dashboard-subtitle">Smoke Emission monitoring overview</p>
+                  </div>
+                  <p className="dashboard-date">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                </div>
+              )}
+              
+              <div className="camera-feed-container">
                 <div className="camera-feed">
                   <div className="camera-placeholder">
                     CAMERA FEED
@@ -2250,7 +2275,15 @@ function Dashboard() {
       {/* Bottom Navigation - Mobile Only */}
       <nav className="bottom-nav">
         <button 
-          onClick={() => setActivePage("dashboard")}
+          onClick={(e) => {
+            console.log('Dashboard clicked - adding class');
+            e.currentTarget.classList.add('clicked');
+            console.log('Classes:', e.currentTarget.className);
+            setTimeout(() => {
+              e.currentTarget.classList.remove('clicked');
+            }, 600);
+            setActivePage("dashboard");
+          }}
           className={`bottom-nav-item ${activePage === "dashboard" ? "active" : ""}`}
         >
           <Home size={24} />
@@ -2258,7 +2291,14 @@ function Dashboard() {
         </button>
 
         <button 
-          onClick={() => setActivePage("records")}
+          onClick={(e) => {
+            console.log('Records clicked - adding class');
+            e.currentTarget.classList.add('clicked');
+            setTimeout(() => {
+              e.currentTarget.classList.remove('clicked');
+            }, 600);
+            setActivePage("records");
+          }}
           className={`bottom-nav-item ${activePage === "records" ? "active" : ""}`}
         >
           <FileText size={24} />
@@ -2266,7 +2306,14 @@ function Dashboard() {
         </button>
 
         <button 
-          onClick={() => setActivePage("graphs")}
+          onClick={(e) => {
+            console.log('Graphs clicked - adding class');
+            e.currentTarget.classList.add('clicked');
+            setTimeout(() => {
+              e.currentTarget.classList.remove('clicked');
+            }, 600);
+            setActivePage("graphs");
+          }}
           className={`bottom-nav-item ${activePage === "graphs" ? "active" : ""}`}
         >
           <TrendingUp size={24} />
@@ -2274,7 +2321,14 @@ function Dashboard() {
         </button>
 
         <button 
-          onClick={() => setActivePage("sensors")}
+          onClick={(e) => {
+            console.log('Sensors clicked - adding class');
+            e.currentTarget.classList.add('clicked');
+            setTimeout(() => {
+              e.currentTarget.classList.remove('clicked');
+            }, 600);
+            setActivePage("sensors");
+          }}
           className={`bottom-nav-item ${activePage === "sensors" ? "active" : ""}`}
         >
           <Zap size={24} />
