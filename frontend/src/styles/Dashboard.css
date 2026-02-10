@@ -1671,18 +1671,21 @@ chatgpt-sidebar {
   
   .dashboard.dark-mode .bottom-nav-item.active {
     color: #e0e0e0;
-    background: rgba(255, 255, 255, 0.12);
-    transform: scale(1.15);
+    background: transparent;
+    transform: scale(1);
   }
   
   .dashboard.dark-mode .bottom-nav-item.active svg {
-    transform: scale(1.2);
+    background: #3d3d3d;
+    padding: 12px;
+    border-radius: 50%;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transform: scale(1);
   }
   
   .dashboard.dark-mode .bottom-nav-item.active span {
-    font-weight: 700;
-    color: #7b8fa8;
-    letter-spacing: 0.3px;
+    font-weight: 600;
+    color: #e0e0e0;
   }
   
   /* Adjust main content for top and bottom bars */
