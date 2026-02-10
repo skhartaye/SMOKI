@@ -2276,14 +2276,17 @@ function Dashboard() {
       <nav className="bottom-nav">
         <button 
           onClick={(e) => {
-            // Remove class first
-            e.currentTarget.classList.remove('clicked');
-            // Use setTimeout to ensure class removal is processed
+            const target = e.currentTarget;
+            target.classList.remove('clicked', 'loading');
+            void target.offsetWidth;
+            
+            target.classList.add('loading');
             setTimeout(() => {
-              e.currentTarget.classList.add('clicked');
+              target.classList.remove('loading');
+              target.classList.add('clicked');
               setTimeout(() => {
-                e.currentTarget.classList.remove('clicked');
-              }, 600);
+                target.classList.remove('clicked');
+              }, 400);
             }, 10);
             setActivePage("dashboard");
           }}
@@ -2295,12 +2298,17 @@ function Dashboard() {
 
         <button 
           onClick={(e) => {
-            e.currentTarget.classList.remove('clicked');
+            const target = e.currentTarget;
+            target.classList.remove('clicked', 'loading');
+            void target.offsetWidth;
+            
+            target.classList.add('loading');
             setTimeout(() => {
-              e.currentTarget.classList.add('clicked');
+              target.classList.remove('loading');
+              target.classList.add('clicked');
               setTimeout(() => {
-                e.currentTarget.classList.remove('clicked');
-              }, 600);
+                target.classList.remove('clicked');
+              }, 400);
             }, 10);
             setActivePage("records");
           }}
@@ -2312,12 +2320,17 @@ function Dashboard() {
 
         <button 
           onClick={(e) => {
-            e.currentTarget.classList.remove('clicked');
+            const target = e.currentTarget;
+            target.classList.remove('clicked', 'loading');
+            void target.offsetWidth;
+            
+            target.classList.add('loading');
             setTimeout(() => {
-              e.currentTarget.classList.add('clicked');
+              target.classList.remove('loading');
+              target.classList.add('clicked');
               setTimeout(() => {
-                e.currentTarget.classList.remove('clicked');
-              }, 600);
+                target.classList.remove('clicked');
+              }, 400);
             }, 10);
             setActivePage("graphs");
           }}
@@ -2329,12 +2342,17 @@ function Dashboard() {
 
         <button 
           onClick={(e) => {
-            e.currentTarget.classList.remove('clicked');
+            const target = e.currentTarget;
+            target.classList.remove('clicked', 'loading');
+            void target.offsetWidth;
+            
+            target.classList.add('loading');
             setTimeout(() => {
-              e.currentTarget.classList.add('clicked');
+              target.classList.remove('loading');
+              target.classList.add('clicked');
               setTimeout(() => {
-                e.currentTarget.classList.remove('clicked');
-              }, 600);
+                target.classList.remove('clicked');
+              }, 400);
             }, 10);
             setActivePage("sensors");
           }}
