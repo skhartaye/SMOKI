@@ -1572,15 +1572,53 @@ chatgpt-sidebar {
   }
   
   .bottom-nav-item.clicked {
-    animation: navItemBounce 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55), popIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    animation: popInClick 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
   }
   
   .bottom-nav-item.clicked svg {
-    animation: iconPop 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    animation: iconPopClick 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
   }
   
   .bottom-nav-item.clicked span {
-    animation: labelPulse 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    animation: labelPulseClick 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  }
+  
+  @keyframes popInClick {
+    0% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.35);
+      background: rgba(91, 107, 141, 0.2);
+    }
+    100% {
+      transform: scale(1);
+      background: transparent;
+    }
+  }
+  
+  @keyframes iconPopClick {
+    0% {
+      transform: scale(1);
+    }
+    50% {
+      transform: translateY(-8px) scale(1.4);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  
+  @keyframes labelPulseClick {
+    0% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.2);
+    }
+    100% {
+      transform: scale(1);
+    }
   }
   
   @keyframes navItemBounce {
@@ -1611,12 +1649,12 @@ chatgpt-sidebar {
   
   .dashboard.dark-mode .bottom-nav-item.active {
     color: #e0e0e0;
-    background: rgba(255, 255, 255, 0.08);
-    transform: scale(1.25);
+    background: rgba(255, 255, 255, 0.12);
+    transform: scale(1.15);
   }
   
   .dashboard.dark-mode .bottom-nav-item.active svg {
-    transform: scale(1.35);
+    transform: scale(1.2);
   }
   
   /* Adjust main content for top and bottom bars */
