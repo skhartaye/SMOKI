@@ -2276,9 +2276,10 @@ function Dashboard() {
       <nav className="bottom-nav">
         <button 
           onClick={(e) => {
-            console.log('Dashboard clicked - adding class');
+            // Force animation restart by removing and re-adding class
+            e.currentTarget.classList.remove('clicked');
+            void e.currentTarget.offsetWidth; // Trigger reflow
             e.currentTarget.classList.add('clicked');
-            console.log('Classes:', e.currentTarget.className);
             setTimeout(() => {
               e.currentTarget.classList.remove('clicked');
             }, 600);
@@ -2292,7 +2293,8 @@ function Dashboard() {
 
         <button 
           onClick={(e) => {
-            console.log('Records clicked - adding class');
+            e.currentTarget.classList.remove('clicked');
+            void e.currentTarget.offsetWidth;
             e.currentTarget.classList.add('clicked');
             setTimeout(() => {
               e.currentTarget.classList.remove('clicked');
@@ -2307,7 +2309,8 @@ function Dashboard() {
 
         <button 
           onClick={(e) => {
-            console.log('Graphs clicked - adding class');
+            e.currentTarget.classList.remove('clicked');
+            void e.currentTarget.offsetWidth;
             e.currentTarget.classList.add('clicked');
             setTimeout(() => {
               e.currentTarget.classList.remove('clicked');
@@ -2322,7 +2325,8 @@ function Dashboard() {
 
         <button 
           onClick={(e) => {
-            console.log('Sensors clicked - adding class');
+            e.currentTarget.classList.remove('clicked');
+            void e.currentTarget.offsetWidth;
             e.currentTarget.classList.add('clicked');
             setTimeout(() => {
               e.currentTarget.classList.remove('clicked');
