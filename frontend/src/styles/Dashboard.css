@@ -1568,7 +1568,9 @@ chatgpt-sidebar {
   }
   
   .bottom-nav-item.active span {
-    font-weight: 600;
+    font-weight: 700;
+    color: #5b6b8d;
+    letter-spacing: 0.3px;
   }
   
   
@@ -1630,12 +1632,14 @@ chatgpt-sidebar {
   @keyframes labelPulseClick {
     0% {
       transform: scale(1);
+      font-weight: 500;
     }
     50% {
-      transform: scale(1.2);
+      transform: scale(1.1);
     }
     100% {
       transform: scale(1);
+      font-weight: 600;
     }
   }
   
@@ -1673,6 +1677,12 @@ chatgpt-sidebar {
   
   .dashboard.dark-mode .bottom-nav-item.active svg {
     transform: scale(1.2);
+  }
+  
+  .dashboard.dark-mode .bottom-nav-item.active span {
+    font-weight: 700;
+    color: #7b8fa8;
+    letter-spacing: 0.3px;
   }
   
   /* Adjust main content for top and bottom bars */
