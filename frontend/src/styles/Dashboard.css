@@ -1562,15 +1562,54 @@ chatgpt-sidebar {
     transition: all 0.2s ease;
   }
   
-  .bottom-nav-item.active {
+.bottom-nav-item.active {
     color: #333;
-    background: rgba(0, 0, 0, 0.05);
+    background: transparent;
+    transform: translateY(-25px);
+    flex-direction: column;
+    position: relative;
   }
   
+  .bottom-nav-item.active::before {
+    content: '';
+    position: absolute;
+    width: 72px;
+    height: 72px;
+    background: white;
+    border-radius: 50%;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: -1;
+  }
+  
+  .bottom-nav-item.active svg {
+    transform: scale(1.2);
+    z-index: 1;
+  }
+
   .bottom-nav-item.active span {
-    font-weight: 700;
-    color: #5b6b8d;
-    letter-spacing: 0.3px;
+    position: absolute;
+    bottom: -28px;
+    font-weight: 600;
+    color: #333;
+    font-size: 11px;
+  }
+  
+  .dashboard.dark-mode .bottom-nav-item.active {
+    color: #e0e0e0;
+    background: transparent;
+    transform: translateY(-25px);
+  }
+  
+  .dashboard.dark-mode .bottom-nav-item.active::before {
+    background: #3d3d3d;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+  
+  .dashboard.dark-mode .bottom-nav-item.active span {
+    color: #e0e0e0;
   }
   
   
