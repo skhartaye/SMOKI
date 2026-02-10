@@ -1571,6 +1571,24 @@ chatgpt-sidebar {
     font-weight: 600;
   }
   
+  
+  .bottom-nav-item.loading {
+    animation: loadingPulse 0.01s ease-in-out;
+  }
+  
+  @keyframes loadingPulse {
+    0% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.7;
+      transform: scale(0.98);
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+
   .bottom-nav-item.clicked {
     animation: popInClick 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
   }
