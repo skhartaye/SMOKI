@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Brush, ReferenceLine } from 'recharts';
 import { Thermometer, Droplet, Wind, Flame, Circle, Home, FileText, TrendingUp, Zap, Moon, Sun, LogOut, Menu, Activity } from 'lucide-react';
+import NotificationRibbon from './component/NotificationRibbon';
 
 function Dashboard() {
   const [activePage, setActivePage] = useState("dashboard");
@@ -77,6 +78,8 @@ function Dashboard() {
     pm25: '',
     pm10: ''
   });
+  const [topViolators, setTopViolators] = useState([]);
+  const [vehicleRanking, setVehicleRanking] = useState([]);
   
   const navigate = useNavigate();
 
@@ -241,6 +244,69 @@ function Dashboard() {
       console.error('Error fetching graph data:', error);
     }
   };
+
+  const fetchTopViolators = async () => {
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/api/vehicles/top-violators?limit=3`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.status === 401) {
+        localStorage.clear();
+        navigate('/');
+        return;
+      }
+      
+      const result = await response.json();
+      if (result.success && result.data) {
+        setTopViolators(result.data);
+      }
+    } catch (error) {
+      console.error('Error fetching top violators:', error);
+    }
+  };
+
+  const fetchVehicleRanking = async () => {
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/api/vehicles/ranking`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.status === 401) {
+        localStorage.clear();
+        navigate('/');
+        return;
+      }
+      
+      const result = await response.json();
+      if (result.success && result.data) {
+        setVehicleRanking(result.data);
+      }
+    } catch (error) {
+      console.error('Error fetching vehicle ranking:', error);
+    }
+  };
+
+  // Fetch violators data when dashboard page is active
+  useEffect(() => {
+    if (activePage === "dashboard") {
+      fetchTopViolators();
+      fetchVehicleRanking();
+      const interval = setInterval(() => {
+        fetchTopViolators();
+        fetchVehicleRanking();
+      }, 15000); // Update every 15 seconds
+      return () => clearInterval(interval);
+    }
+  }, [activePage]);
 
   function handleLogout() {
     localStorage.removeItem('isLoggedIn');
@@ -706,6 +772,8 @@ function Dashboard() {
 
   return (
     <div className={`dashboard ${darkMode ? 'dark-mode' : ''}`}>
+      <NotificationRibbon />
+      
       {/* Top Header - Mobile Only */}
       <header className="mobile-top-header">
         <button className="back-btn-header" onClick={() => window.history.back()}>
@@ -881,30 +949,27 @@ function Dashboard() {
                   <p className="section-subtitle">Vehicles with highest emissions</p>
                 </div>
                 <div className="violators-list">
-                  <div className="violator-item">
-                    <div className="violator-rank">1</div>
-                    <div className="violator-info">
-                      <div className="violator-name">Vehicle ABC-123</div>
-                      <div className="violator-value">PM2.5: 185 µg/m³</div>
+                  {topViolators.length > 0 ? (
+                    topViolators.map((violator, index) => (
+                      <div key={violator.id} className="violator-item">
+                        <div className="violator-rank">{index + 1}</div>
+                        <div className="violator-info">
+                          <div className="violator-name">{violator.license_plate}</div>
+                          <div className="violator-value">
+                            {violator.emission_level ? `Emission: ${violator.emission_level}` : 'No data'}
+                            {violator.smoke_detected && ' • Smoke Detected'}
+                          </div>
+                        </div>
+                        <div className={`violator-status ${violator.violations > 15 ? 'danger' : violator.violations > 5 ? 'warning' : 'safe'}`}>
+                          {violator.violations > 15 ? 'Critical' : violator.violations > 5 ? 'Warning' : 'Safe'}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ textAlign: 'center', color: '#999', padding: '20px' }}>
+                      No violations recorded yet
                     </div>
-                    <div className="violator-status danger">Critical</div>
-                  </div>
-                  <div className="violator-item">
-                    <div className="violator-rank">2</div>
-                    <div className="violator-info">
-                      <div className="violator-name">Vehicle XYZ-789</div>
-                      <div className="violator-value">NO₂: 0.45 PPM</div>
-                    </div>
-                    <div className="violator-status warning">Warning</div>
-                  </div>
-                  <div className="violator-item">
-                    <div className="violator-rank">3</div>
-                    <div className="violator-info">
-                      <div className="violator-name">Vehicle DEF-456</div>
-                      <div className="violator-value">CO: 8.2 PPM</div>
-                    </div>
-                    <div className="violator-status warning">Warning</div>
-                  </div>
+                  )}
                 </div>
               </div>
 
@@ -921,30 +986,24 @@ function Dashboard() {
                     <div className="ranking-col violations">Violations</div>
                     <div className="ranking-col status">Status</div>
                   </div>
-                  <div className="ranking-row">
-                    <div className="ranking-col rank">1</div>
-                    <div className="ranking-col name">ABC-123</div>
-                    <div className="ranking-col violations">24</div>
-                    <div className="ranking-col status"><span className="badge critical">Critical</span></div>
-                  </div>
-                  <div className="ranking-row">
-                    <div className="ranking-col rank">2</div>
-                    <div className="ranking-col name">XYZ-789</div>
-                    <div className="ranking-col violations">18</div>
-                    <div className="ranking-col status"><span className="badge warning">Warning</span></div>
-                  </div>
-                  <div className="ranking-row">
-                    <div className="ranking-col rank">3</div>
-                    <div className="ranking-col name">DEF-456</div>
-                    <div className="ranking-col violations">12</div>
-                    <div className="ranking-col status"><span className="badge warning">Warning</span></div>
-                  </div>
-                  <div className="ranking-row">
-                    <div className="ranking-col rank">4</div>
-                    <div className="ranking-col name">GHI-321</div>
-                    <div className="ranking-col violations">8</div>
-                    <div className="ranking-col status"><span className="badge safe">Safe</span></div>
-                  </div>
+                  {vehicleRanking.length > 0 ? (
+                    vehicleRanking.map((vehicle, index) => (
+                      <div key={vehicle.id} className="ranking-row">
+                        <div className="ranking-col rank">{index + 1}</div>
+                        <div className="ranking-col name">{vehicle.license_plate}</div>
+                        <div className="ranking-col violations">{vehicle.violations}</div>
+                        <div className="ranking-col status">
+                          <span className={`badge ${vehicle.violations > 15 ? 'critical' : vehicle.violations > 5 ? 'warning' : 'safe'}`}>
+                            {vehicle.violations > 15 ? 'Critical' : vehicle.violations > 5 ? 'Warning' : 'Safe'}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ textAlign: 'center', color: '#999', padding: '20px' }}>
+                      No vehicles registered yet
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

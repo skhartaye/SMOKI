@@ -10,6 +10,7 @@ from auth import (
     get_current_superadmin, get_current_admin_or_superadmin,
     Token, User, ACCESS_TOKEN_EXPIRE_MINUTES
 )
+from vehicles import router as vehicles_router
 
 app = FastAPI()
 
@@ -27,6 +28,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
+
+# Include routers
+app.include_router(vehicles_router)
 
 # Initialize database on startup
 @app.on_event("startup")
