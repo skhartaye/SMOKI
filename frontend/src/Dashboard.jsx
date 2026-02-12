@@ -873,6 +873,80 @@ function Dashboard() {
                   </div>
                 </div>
               </div>
+
+              {/* Top Violators Section */}
+              <div className="dashboard-section">
+                <div className="section-header">
+                  <h2>Top Violators</h2>
+                  <p className="section-subtitle">Highest emission readings</p>
+                </div>
+                <div className="violators-list">
+                  <div className="violator-item">
+                    <div className="violator-rank">1</div>
+                    <div className="violator-info">
+                      <div className="violator-name">Sensor A</div>
+                      <div className="violator-value">PM2.5: 185 µg/m³</div>
+                    </div>
+                    <div className="violator-status danger">Critical</div>
+                  </div>
+                  <div className="violator-item">
+                    <div className="violator-rank">2</div>
+                    <div className="violator-info">
+                      <div className="violator-name">Sensor B</div>
+                      <div className="violator-value">NO₂: 0.45 PPM</div>
+                    </div>
+                    <div className="violator-status warning">Warning</div>
+                  </div>
+                  <div className="violator-item">
+                    <div className="violator-rank">3</div>
+                    <div className="violator-info">
+                      <div className="violator-name">Sensor C</div>
+                      <div className="violator-value">CO: 8.2 PPM</div>
+                    </div>
+                    <div className="violator-status warning">Warning</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Violators Ranking Section */}
+              <div className="dashboard-section">
+                <div className="section-header">
+                  <h2>Violators Ranking</h2>
+                  <p className="section-subtitle">Overall emission violations</p>
+                </div>
+                <div className="ranking-table">
+                  <div className="ranking-header">
+                    <div className="ranking-col rank">Rank</div>
+                    <div className="ranking-col name">Location</div>
+                    <div className="ranking-col violations">Violations</div>
+                    <div className="ranking-col status">Status</div>
+                  </div>
+                  <div className="ranking-row">
+                    <div className="ranking-col rank">1</div>
+                    <div className="ranking-col name">Industrial Zone A</div>
+                    <div className="ranking-col violations">24</div>
+                    <div className="ranking-col status"><span className="badge critical">Critical</span></div>
+                  </div>
+                  <div className="ranking-row">
+                    <div className="ranking-col rank">2</div>
+                    <div className="ranking-col name">Factory B</div>
+                    <div className="ranking-col violations">18</div>
+                    <div className="ranking-col status"><span className="badge warning">Warning</span></div>
+                  </div>
+                  <div className="ranking-row">
+                    <div className="ranking-col rank">3</div>
+                    <div className="ranking-col name">Plant C</div>
+                    <div className="ranking-col violations">12</div>
+                    <div className="ranking-col status"><span className="badge warning">Warning</span></div>
+                  </div>
+                  <div className="ranking-row">
+                    <div className="ranking-col rank">4</div>
+                    <div className="ranking-col name">Facility D</div>
+                    <div className="ranking-col violations">8</div>
+                    <div className="ranking-col status"><span className="badge safe">Safe</span></div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

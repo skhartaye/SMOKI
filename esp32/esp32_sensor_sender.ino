@@ -1,6 +1,7 @@
-/*
+/** 
  * ESP32 Sensor Data Sender for SMOKi Project
  * Sensors: BME680, MICS6814, PMS7003
+ * Fixed: Continuous PMS7003 reading to prevent data loss
  */
 
 #include <WiFi.h>
@@ -14,9 +15,8 @@
 #include <Adafruit_ADS1X15.h>
 
 // ============ CONFIGURATION ============
-// WiFi credentials
-const char* ssid = "TECNO SPARK 20 Pro";
-const char* password = "tatlongtae";
+const char* ssid = "SMOKi";
+const char* password = "smoki1234";
 
 // FastAPI server settings - ONLINE BACKEND
 const char* api_url = "https://smoki-backend.onrender.com/api/sensors/data";
@@ -35,20 +35,30 @@ const char* device_id = "esp32_living_room";
 #define MICS_NH3_CH   2   // NH3 sensor
 
 // Timing
-const long postInterval = 10000; // Post data every 10 seconds
+const long postInterval = 5000; // Post data every 5 seconds
 
 // ============ OBJECTS ============
 Adafruit_BME680 bme(BME_CS);
 Adafruit_ADS1115 ads;
 HardwareSerial pmsSerial(1);
-WiFiClient wifiClient;
+WiFiClientSecure wifiClient;
 HTTPClient http;
+
 unsigned long lastPost = 0;
+
+// PMS7003 data storage
+struct PMSData {
+  float pm25 = 0;
+  float pm10 = 0;
+  bool valid = false;
+  unsigned long lastUpdate = 0;
+} pmsData;
 
 // ============ SETUP ============
 void setup() {
   Serial.begin(115200);
   delay(1000);
+  
   Serial.println("\n\n=== SMOKi ESP32 Sensor System ===");
   
   // Initialize I2C for ADS1115
@@ -78,10 +88,13 @@ void setup() {
   pmsSerial.begin(9600, SERIAL_8N1, PMS7003_RX, PMS7003_TX);
   Serial.println("✓ PMS7003 initialized");
   
+  // Setup WiFi client for HTTPS
+  wifiClient.setInsecure(); // Skip certificate verification
+  
   // Connect to WiFi
   setupWiFi();
   
-  Serial.println("\n🚀 System ready! Posting data every 10 seconds...");
+  Serial.println("\n🚀 System ready! Posting data every 5 seconds...");
   Serial.printf("📡 Sending to: %s\n\n", api_url);
 }
 
@@ -89,10 +102,16 @@ void setup() {
 void loop() {
   unsigned long now = millis();
   
+  // ALWAYS read PMS7003 (non-blocking, continuous)
+  readPMS7003Continuous();
+  
+  // Post data at intervals
   if (now - lastPost >= postInterval) {
     lastPost = now;
     postSensorData();
   }
+  
+  delay(10); // Small delay to prevent watchdog issues
 }
 
 // ============ WIFI SETUP ============
@@ -116,13 +135,52 @@ void setupWiFi() {
   }
 }
 
+// ============ READ PMS7003 CONTINUOUSLY ============
+void readPMS7003Continuous() {
+  static byte buffer[32];
+  static int count = 0;
+  static unsigned long lastByte = 0;
+  
+  // Reset buffer if no data for 2 seconds
+  if (millis() - lastByte > 2000 && count > 0) {
+    count = 0;
+  }
+  
+  // Read available bytes
+  while (pmsSerial.available()) {
+    byte data = pmsSerial.read();
+    lastByte = millis();
+    
+    if (count < 32) {
+      buffer[count++] = data;
+    }
+  }
+  
+  // Parse complete packet
+  if (count == 32 && buffer[0] == 0x42 && buffer[1] == 0x4D) {
+    pmsData.pm25 = (buffer[12] << 8) | buffer[13];
+    pmsData.pm10 = (buffer[14] << 8) | buffer[15];
+    pmsData.valid = true;
+    pmsData.lastUpdate = millis();
+    
+    count = 0; // Reset for next packet
+  }
+  
+  // Mark data as stale if no update for 30 seconds
+  if (millis() - pmsData.lastUpdate > 30000) {
+    pmsData.valid = false;
+  }
+}
+
 // ============ READ SENSORS ============
 bool readBME680(float &temp, float &humidity, float &pressure, float &voc) {
   if (!bme.performReading()) return false;
+  
   temp = bme.temperature;
   humidity = bme.humidity;
   pressure = bme.pressure / 100.0;
   voc = bme.gas_resistance / 1000.0;
+  
   return true;
 }
 
@@ -143,58 +201,6 @@ void readMICS6814(float &no2, float &co, float &nh3) {
   nh3 = nh3_v * 100.0;
 }
 
-bool readPMS7003(float &pm25, float &pm10) {
-  // Clear any old data in the buffer first
-  while (pmsSerial.available() > 32) {
-    pmsSerial.read();
-  }
-  
-  byte buffer[32];
-  int count = 0;
-  unsigned long startTime = millis();
-  
-  // Wait up to 2 seconds for a complete packet
-  while (count < 32 && (millis() - startTime) < 2000) {
-    if (pmsSerial.available()) {
-      byte b = pmsSerial.read();
-      
-      // Look for start bytes 0x42 0x4D
-      if (count == 0 && b != 0x42) continue;
-      if (count == 1 && b != 0x4D) {
-        count = 0;
-        continue;
-      }
-      
-      buffer[count++] = b;
-    }
-  }
-  
-  // Verify we have a complete packet with correct header
-  if (count == 32 && buffer[0] == 0x42 && buffer[1] == 0x4D) {
-    // Calculate checksum
-    uint16_t sum = 0;
-    for (int i = 0; i < 30; i++) {
-      sum += buffer[i];
-    }
-    uint16_t checksum = (buffer[30] << 8) | buffer[31];
-    
-    // Verify checksum
-    if (sum == checksum) {
-      pm25 = (buffer[12] << 8) | buffer[13];
-      pm10 = (buffer[14] << 8) | buffer[15];
-      
-      // Validate readings are reasonable (not 0 and not too high)
-      if (pm25 > 0 && pm25 < 1000 && pm10 > 0 && pm10 < 1000) {
-        return true;
-      }
-    }
-  }
-  
-  // Keep previous values instead of setting to 0
-  // pm25 and pm10 are passed by reference, so they retain their previous values
-  return false;
-}
-
 // ============ POST SENSOR DATA ============
 void postSensorData() {
   if (WiFi.status() != WL_CONNECTED) {
@@ -206,11 +212,6 @@ void postSensorData() {
   float temp, humidity, pressure, voc;
   float no2, co, nh3;
   
-  // Static variables to keep last valid PM readings
-  static float pm25 = 0;
-  static float pm10 = 0;
-  static bool pmInitialized = false;
-  
   if (!readBME680(temp, humidity, pressure, voc)) {
     Serial.println("❌ Failed to read BME680");
     return;
@@ -218,17 +219,10 @@ void postSensorData() {
   
   readMICS6814(no2, co, nh3);
   
-  // Try to read PMS7003, keep previous values if it fails
-  bool pmSuccess = readPMS7003(pm25, pm10);
-  
-  if (pmSuccess) {
-    pmInitialized = true;
-  } else if (!pmInitialized) {
-    // If we've never gotten valid PM readings, set to 0
-    pm25 = 0;
-    pm10 = 0;
+  // Check if PM data is valid
+  if (!pmsData.valid) {
+    Serial.println("⚠️  Waiting for valid PM sensor data...");
   }
-  // else: keep the last valid readings
   
   // Create JSON in the format expected by backend
   StaticJsonDocument<256> doc;
@@ -237,8 +231,8 @@ void postSensorData() {
   doc["vocs"] = round(voc * 100) / 100.0;
   doc["nitrogen_dioxide"] = round(no2 * 1000) / 1000.0;
   doc["carbon_monoxide"] = round(co * 1000) / 1000.0;
-  doc["pm25"] = round(pm25 * 10) / 10.0;
-  doc["pm10"] = round(pm10 * 10) / 10.0;
+  doc["pm25"] = pmsData.valid ? round(pmsData.pm25 * 10) / 10.0 : 0;
+  doc["pm10"] = pmsData.valid ? round(pmsData.pm10 * 10) / 10.0 : 0;
   
   // Serialize
   char buffer[256];
@@ -251,81 +245,30 @@ void postSensorData() {
   Serial.printf("🌫️  VOCs: %.1f kΩ\n", voc);
   Serial.printf("💨 NO2: %.3f PPM\n", no2);
   Serial.printf("🔥 CO: %.3f PPM\n", co);
-  Serial.printf("⚫ PM2.5: %.1f µg/m³%s\n", pm25, pmSuccess ? "" : " (last valid)");
-  Serial.printf("⚫ PM10: %.1f µg/m³%s\n", pm10, pmSuccess ? "" : " (last valid)");
+  Serial.printf("⚫ PM2.5: %.1f µg/m³ %s\n", pmsData.pm25, pmsData.valid ? "✓" : "⚠️");
+  Serial.printf("⚫ PM10: %.1f µg/m³ %s\n", pmsData.pm10, pmsData.valid ? "✓" : "⚠️");
   
-  // POST request - Try direct TCP connection
+  // POST request
   Serial.println("\n📤 Sending to server...");
+  http.begin(wifiClient, api_url);
+  http.addHeader("Content-Type", "application/json");
+  http.setTimeout(30000); // 30 second timeout for online backend
   
-  WiFiClient client;
+  int httpCode = http.POST(buffer);
   
-  if (!client.connect("10.26.144.68", 8000)) {
-    Serial.println("❌ Failed to connect to server");
-    Serial.println("💡 Trying alternative method...");
-    
-    // Try with HTTPClient as fallback
-    http.begin(wifiClient, api_url);
-    http.addHeader("Content-Type", "application/json");
-    http.setTimeout(10000);
-    
-    int httpCode = http.POST(buffer);
-    
-    if (httpCode > 0) {
-      Serial.printf("✓ Response: %d\n", httpCode);
-      if (httpCode == HTTP_CODE_OK || httpCode == 200) {
-        String response = http.getString();
-        Serial.println("✓ Data saved to database!");
-        Serial.printf("Response: %s\n", response.c_str());
-      }
-    } else {
-      Serial.printf("❌ POST failed: %s\n", http.errorToString(httpCode).c_str());
-      Serial.println("💡 Connection refused - Check firewall!");
-      Serial.println("   Run: fix_firewall_for_esp32.bat as administrator");
+  if (httpCode > 0) {
+    Serial.printf("✓ Response: %d\n", httpCode);
+    if (httpCode == HTTP_CODE_OK || httpCode == 200) {
+      String response = http.getString();
+      Serial.println("✓ Data saved to online database!");
+      Serial.printf("Response: %s\n", response.c_str());
     }
-    
-    http.end();
   } else {
-    // Direct TCP connection succeeded
-    Serial.println("✓ Connected to server!");
-    
-    // Send HTTP POST request manually
-    client.print("POST /api/sensors/data HTTP/1.1\r\n");
-    client.print("Host: 10.26.144.68:8000\r\n");
-    client.print("Content-Type: application/json\r\n");
-    client.print("Connection: close\r\n");
-    client.print("Content-Length: ");
-    client.print(strlen(buffer));
-    client.print("\r\n\r\n");
-    client.print(buffer);
-    
-    // Wait for response
-    unsigned long timeout = millis();
-    while (client.available() == 0) {
-      if (millis() - timeout > 5000) {
-        Serial.println("❌ Timeout waiting for response");
-        client.stop();
-        Serial.println("========================\n");
-        return;
-      }
-    }
-    
-    // Read response
-    String response = "";
-    while (client.available()) {
-      response += (char)client.read();
-    }
-    
-    if (response.indexOf("200") > 0 || response.indexOf("success") > 0) {
-      Serial.println("✓ Data saved to database!");
-      Serial.println("Response received:");
-      Serial.println(response);
-    } else {
-      Serial.println("⚠️  Unexpected response:");
-      Serial.println(response);
-    }
-    
-    client.stop();
+    Serial.printf("❌ POST failed: %s\n", http.errorToString(httpCode).c_str());
+    Serial.println("💡 Backend might be sleeping (Render free tier)");
+    Serial.println("   Wait 30 seconds and it will wake up");
   }
   
+  http.end();
   Serial.println("========================\n");
 }
