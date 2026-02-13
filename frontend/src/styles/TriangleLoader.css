@@ -1,0 +1,146 @@
+.triangle-loader {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.triangle {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-bottom: 18px solid #5b6b8d;
+  opacity: 0.8;
+}
+
+/* Triangle 1 - Center, Large */
+.triangle-1 {
+  border-left: 12px solid transparent;
+  border-right: 12px solid transparent;
+  border-bottom: 22px solid #5b6b8d;
+  animation: float 2s ease-in-out infinite;
+  z-index: 5;
+}
+
+/* Triangle 2 - Top Right */
+.triangle-2 {
+  top: 10px;
+  right: 15px;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 14px solid #5b6b8d;
+  opacity: 0.7;
+  animation: float 2.2s ease-in-out infinite 0.1s;
+}
+
+/* Triangle 3 - Top Left */
+.triangle-3 {
+  top: 10px;
+  left: 15px;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 14px solid #5b6b8d;
+  opacity: 0.7;
+  animation: float 2.2s ease-in-out infinite 0.2s;
+}
+
+/* Triangle 4 - Right */
+.triangle-4 {
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-bottom: 16px solid #5b6b8d;
+  opacity: 0.65;
+  animation: float 2.4s ease-in-out infinite 0.15s;
+}
+
+/* Triangle 5 - Left */
+.triangle-5 {
+  left: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-bottom: 16px solid #5b6b8d;
+  opacity: 0.65;
+  animation: float 2.4s ease-in-out infinite 0.25s;
+}
+
+/* Triangle 6 - Bottom Right */
+.triangle-6 {
+  bottom: 10px;
+  right: 15px;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 12px solid #5b6b8d;
+  opacity: 0.6;
+  animation: float 2.6s ease-in-out infinite 0.3s;
+}
+
+/* Triangle 7 - Bottom Left */
+.triangle-7 {
+  bottom: 10px;
+  left: 15px;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 12px solid #5b6b8d;
+  opacity: 0.6;
+  animation: float 2.6s ease-in-out infinite 0.35s;
+}
+
+/* Triangle 8 - Top Center */
+.triangle-8 {
+  top: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 10px solid #5b6b8d;
+  opacity: 0.55;
+  animation: float 2.3s ease-in-out infinite 0.1s;
+}
+
+/* Triangle 9 - Bottom Center */
+.triangle-9 {
+  bottom: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 10px solid #5b6b8d;
+  opacity: 0.55;
+  animation: float 2.3s ease-in-out infinite 0.2s;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    opacity: inherit;
+  }
+  50% {
+    transform: translateY(-20px) scale(1.1);
+    opacity: calc(inherit * 0.5);
+  }
+}
+
+/* Dark mode */
+.dashboard.dark-mode .triangle {
+  border-bottom-color: #7b8fa8;
+}
+
+.dashboard.dark-mode .triangle-1 {
+  border-bottom-color: #7b8fa8;
+}
+
+.dashboard.dark-mode .triangle-2,
+.dashboard.dark-mode .triangle-3,
+.dashboard.dark-mode .triangle-4,
+.dashboard.dark-mode .triangle-5,
+.dashboard.dark-mode .triangle-6,
+.dashboard.dark-mode .triangle-7,
+.dashboard.dark-mode .triangle-8,
+.dashboard.dark-mode .triangle-9 {
+  border-bottom-color: #7b8fa8;
+}

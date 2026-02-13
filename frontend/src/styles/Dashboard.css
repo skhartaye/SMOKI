@@ -35,12 +35,12 @@ chatgpt-sidebar {
 
 /* Dark Mode */
 .dashboard.dark-mode {
-  background-color: #1a1a1a;
+  background-color: #0f0f0f;
   color: #e0e0e0;
 }
 
 .dashboard.dark-mode .sidebar {
-  background-color: #2d2d2d;
+  background-color: #1a1a1a;
 }
 
 .dashboard.dark-mode .sidebar-header h1,
@@ -49,11 +49,12 @@ chatgpt-sidebar {
 }
 
 .dashboard.dark-mode .nav-item.active {
-  background-color: #444;
+  background-color: linear-gradient(135deg, #42a5f5 0%, #2196f3 100%);
+  color: white;
 }
 
 .dashboard.dark-mode .main-content {
-  background-color: #1a1a1a;
+  background-color: #0f0f0f;
 }
 
 .dashboard.dark-mode .camera-feed,
@@ -61,34 +62,34 @@ chatgpt-sidebar {
 .dashboard.dark-mode .filters-container,
 .dashboard.dark-mode .data-logs-container,
 .dashboard.dark-mode .graph-card {
-  background: #2d2d2d;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  background: linear-gradient(135deg, #1e1e1e 0%, #252525 100%);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
 }
 
 .dashboard.dark-mode .graph-card:hover {
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 30px rgba(100, 181, 246, 0.15);
 }
 
 .dashboard.dark-mode .graph-card h3 {
-  color: #999;
+  color: #b0b0b0;
 }
 
 .dashboard.dark-mode .current-value {
-  color: #7b8ba8;
+  color: #64b5f6;
 }
 
 .dashboard.dark-mode .value-change {
-  color: #666;
+  color: #888;
 }
 
 .dashboard.dark-mode .camera-placeholder {
-  background: linear-gradient(135deg, #2d2d2d 0%, #3d3d3d 100%);
+  background: linear-gradient(135deg, #1e1e1e 0%, #252525 100%);
   color: #666;
 }
 
 /* Dark mode for dashboard sections */
 .dashboard.dark-mode .dashboard-section {
-  background: #2d2d2d;
+  background: linear-gradient(135deg, #1e1e1e 0%, #252525 100%);
 }
 
 .dashboard.dark-mode .section-header h2 {
@@ -96,11 +97,11 @@ chatgpt-sidebar {
 }
 
 .dashboard.dark-mode .section-subtitle {
-  color: #999;
+  color: #a0a0a0;
 }
 
 .dashboard.dark-mode .violator-item {
-  background: #3d3d3d;
+  background: linear-gradient(135deg, #242424 0%, #2a2a2a 100%);
 }
 
 .dashboard.dark-mode .violator-name {
@@ -108,25 +109,25 @@ chatgpt-sidebar {
 }
 
 .dashboard.dark-mode .violator-value {
-  color: #999;
+  color: #a0a0a0;
 }
 
 .dashboard.dark-mode .ranking-table {
-  background: #3d3d3d;
+  background: linear-gradient(135deg, #242424 0%, #2a2a2a 100%);
 }
 
 .dashboard.dark-mode .ranking-header {
-  background: #2d2d2d;
-  border-bottom-color: #555;
-  color: #bbb;
+  background: #1e1e1e;
+  border-bottom-color: #444;
+  color: #b0b0b0;
 }
 
 .dashboard.dark-mode .ranking-row {
-  border-bottom-color: #444;
+  border-bottom-color: #333;
 }
 
 .dashboard.dark-mode .ranking-row:hover {
-  background: #444;
+  background: #2a2a2a;
 }
 
 .dashboard.dark-mode .ranking-col {
@@ -145,40 +146,40 @@ chatgpt-sidebar {
 .dashboard.dark-mode .records-subtitle,
 .dashboard.dark-mode .data-logs-header p,
 .dashboard.dark-mode .content-subtitle {
-  color: #999;
+  color: #a0a0a0;
 }
 
 .dashboard.dark-mode .records-table {
-  background: #2d2d2d;
+  background: linear-gradient(135deg, #1e1e1e 0%, #252525 100%);
 }
 
 .dashboard.dark-mode .records-table thead {
-  background: #3d3d3d;
+  background: #242424;
 }
 
 .dashboard.dark-mode .records-table th {
-  color: #bbb;
+  color: #b0b0b0;
 }
 
 .dashboard.dark-mode .records-table td {
   color: #e0e0e0;
-  border-bottom-color: #3d3d3d;
+  border-bottom-color: #2a2a2a;
 }
 
 .dashboard.dark-mode .records-table tbody tr:hover {
-  background: #333;
+  background: #2a2a2a;
 }
 
 .dashboard.dark-mode .dropdown-header,
 .dashboard.dark-mode .filter-select {
-  background: #3d3d3d;
-  border-color: #555;
+  background: #242424;
+  border-color: #444;
   color: #e0e0e0;
 }
 
 .dashboard.dark-mode .dropdown-menu {
-  background: #3d3d3d;
-  border-color: #555;
+  background: #242424;
+  border-color: #444;
 }
 
 .dashboard.dark-mode .dropdown-item {
@@ -186,7 +187,7 @@ chatgpt-sidebar {
 }
 
 .dashboard.dark-mode .dropdown-item:hover {
-  background: #444;
+  background: #2a2a2a;
 }
 
 /* Sidebar */
@@ -1100,35 +1101,98 @@ chatgpt-sidebar {
   }
 }
 
-/* Loading Spinner */
+/* Loading Spinner - Multiple Triangles */
 .loading-spinner {
-  width: 50px;
-  height: 50px;
+  width: 80px;
+  height: 80px;
   position: relative;
-  animation: spin 1.2s linear infinite;
+  animation: spinContainer 4s linear infinite;
+}
+
+.loading-spinner::before,
+.loading-spinner::after {
+  content: '';
+  position: absolute;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 14px solid #5b6b8d;
 }
 
 .loading-spinner::before {
-  content: '';
-  position: absolute;
   width: 0;
   height: 0;
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
-  border-bottom: 12px solid #5b6b8d;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 10px;
+  left: 32px;
+  animation: float1 2s ease-in-out infinite;
 }
 
-@keyframes spin {
+.loading-spinner::after {
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 10px solid #5b6b8d;
+  top: 35px;
+  left: 15px;
+  animation: float2 2.5s ease-in-out infinite;
+  opacity: 0.7;
+}
+
+/* Additional triangles using pseudo-elements on parent */
+.loading-spinner {
+  --triangle-color: #5b6b8d;
+}
+
+.loading-spinner::before {
+  box-shadow: 
+    35px 25px 0 -8px rgba(91, 107, 141, 0.6),
+    -35px 25px 0 -8px rgba(91, 107, 141, 0.5),
+    50px 45px 0 -10px rgba(91, 107, 141, 0.4),
+    -50px 45px 0 -10px rgba(91, 107, 141, 0.45);
+}
+
+@keyframes float1 {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(-15px) scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+@keyframes float2 {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translateY(-20px) scale(0.9);
+    opacity: 0.5;
+  }
+}
+
+@keyframes spinContainer {
+  from {
+    transform: rotate(0deg);
+  }
   to {
     transform: rotate(360deg);
   }
 }
 
-.dashboard.dark-mode .loading-spinner::before {
+.dashboard.dark-mode .loading-spinner::before,
+.dashboard.dark-mode .loading-spinner::after {
   border-bottom-color: #7b8fa8;
+}
+
+.dashboard.dark-mode .loading-spinner::before {
+  box-shadow: 
+    35px 25px 0 -8px rgba(123, 143, 168, 0.6),
+    -35px 25px 0 -8px rgba(123, 143, 168, 0.5),
+    50px 45px 0 -10px rgba(123, 143, 168, 0.4),
+    -50px 45px 0 -10px rgba(123, 143, 168, 0.45);
 }
 
 .graphs-page-container h1 {
@@ -1193,17 +1257,18 @@ chatgpt-sidebar {
   border-radius: 24px;
   padding: 28px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
   display: flex;
   flex-direction: column;
   position: relative;
   overflow: visible;
   min-height: 200px;
+  cursor: pointer;
 }
 
 .sensor-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  transform: translateY(-4px);
 }
 
 /* Header with icon and label */
@@ -1297,15 +1362,15 @@ chatgpt-sidebar {
 
 /* Dark mode sensor cards */
 .dashboard.dark-mode .sensor-card h3 {
-  color: #aaa;
+  color: #b0b0b0;
 }
 
 .dashboard.dark-mode .sensor-value {
-  color: #ff9800;
+  color: #64b5f6;
 }
 
 .dashboard.dark-mode .sensor-status {
-  color: #777;
+  color: #888;
 }
 
 /* Sidebar sub-items */
