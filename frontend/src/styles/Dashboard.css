@@ -35,7 +35,7 @@ chatgpt-sidebar {
 
 /* Dark Mode */
 .dashboard.dark-mode {
-  background-color: #0f0f0f;
+  background-color: #0a0a0a;
   color: #e0e0e0;
 }
 
@@ -54,7 +54,7 @@ chatgpt-sidebar {
 }
 
 .dashboard.dark-mode .main-content {
-  background-color: #0f0f0f;
+  background-color: #0a0a0a;
 }
 
 .dashboard.dark-mode .camera-feed,

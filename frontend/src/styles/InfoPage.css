@@ -166,7 +166,7 @@
 
 /* Dark Mode */
 .dashboard.dark-mode .info-page-container {
-  background: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 100%);
+  background: #0a0a0a;
 }
 
 .dashboard.dark-mode .info-title {
