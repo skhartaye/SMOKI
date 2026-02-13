@@ -1,9 +1,16 @@
 import './styles/Dashboard.css';
+import './styles/ActionButtons.css';
+import './styles/InfoPage.css';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Brush, ReferenceLine } from 'recharts';
 import { Thermometer, Droplet, Wind, Flame, Circle, Home, FileText, TrendingUp, Zap, Moon, Sun, LogOut, Menu, Activity } from 'lucide-react';
 import NotificationRibbon from './component/NotificationRibbon';
+import Toast, { showToast } from './component/Toast';
+import { EditIcon, DeleteIcon, PlusIcon } from './component/IOSIcons';
+import ConfirmModal from './component/ConfirmModal';
+import SensorDetailModal from './component/SensorDetailModal';
+import TriangleLoader from './component/TriangleLoader';
 
 function Dashboard() {
   const [activePage, setActivePage] = useState("dashboard");
@@ -80,6 +87,10 @@ function Dashboard() {
   });
   const [topViolators, setTopViolators] = useState([]);
   const [vehicleRanking, setVehicleRanking] = useState([]);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [recordToDelete, setRecordToDelete] = useState(null);
+  const [showSensorDetailModal, setShowSensorDetailModal] = useState(false);
+  const [selectedSensorType, setSelectedSensorType] = useState(null);
   
   const navigate = useNavigate();
 
@@ -314,14 +325,17 @@ function Dashboard() {
   }
 
   const handleDeleteRecord = async (recordId) => {
-    if (!window.confirm('Are you sure you want to delete this record?')) {
-      return;
-    }
+    setRecordToDelete(recordId);
+    setShowConfirmModal(true);
+  };
+
+  const confirmDeleteRecord = async () => {
+    if (!recordToDelete) return;
 
     try {
       const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/sensors/data/${recordId}`, {
+      const response = await fetch(`${API_URL}/api/sensors/data/${recordToDelete}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -329,19 +343,27 @@ function Dashboard() {
       });
       
       if (response.status === 401 || response.status === 403) {
-        alert('You do not have permission to delete records.');
+        showToast('error', 'You do not have permission to delete records.');
+        setShowConfirmModal(false);
+        setRecordToDelete(null);
         return;
       }
       
       if (response.ok) {
-        setRecords(records.filter(r => r.id !== recordId));
-        alert('Record deleted successfully');
+        setRecords(records.filter(r => r.id !== recordToDelete));
+        showToast('success', 'Record deleted successfully');
+        setShowConfirmModal(false);
+        setRecordToDelete(null);
       } else {
-        alert('Failed to delete record');
+        showToast('error', 'Failed to delete record');
+        setShowConfirmModal(false);
+        setRecordToDelete(null);
       }
     } catch (error) {
       console.error('Error deleting record:', error);
-      alert('Error deleting record');
+      showToast('error', 'Error deleting record');
+      setShowConfirmModal(false);
+      setRecordToDelete(null);
     }
   };
 
@@ -371,7 +393,7 @@ function Dashboard() {
       });
       
       if (response.ok) {
-        alert('Record created successfully');
+        showToast('success', 'Record created successfully');
         setShowCreateModal(false);
         setFormData({
           temperature: '', humidity: '', vocs: '', nitrogen_dioxide: '',
@@ -379,11 +401,11 @@ function Dashboard() {
         });
         fetchRecords();
       } else {
-        alert('Failed to create record');
+        showToast('error', 'Failed to create record');
       }
     } catch (error) {
       console.error('Error creating record:', error);
-      alert('Error creating record');
+      showToast('error', 'Error creating record');
     }
   };
 
@@ -413,7 +435,7 @@ function Dashboard() {
       });
       
       if (response.ok) {
-        alert('Record updated successfully');
+        showToast('success', 'Record updated successfully');
         setShowEditModal(false);
         setEditingRecord(null);
         setFormData({
@@ -422,11 +444,11 @@ function Dashboard() {
         });
         fetchRecords();
       } else {
-        alert('Failed to update record');
+        showToast('error', 'Failed to update record');
       }
     } catch (error) {
       console.error('Error updating record:', error);
-      alert('Error updating record');
+      showToast('error', 'Error updating record');
     }
   };
 
@@ -772,6 +794,30 @@ function Dashboard() {
 
   return (
     <div className={`dashboard ${darkMode ? 'dark-mode' : ''}`}>
+      <Toast />
+      <ConfirmModal 
+        isOpen={showConfirmModal}
+        title="Delete Record"
+        message="Are you sure you want to delete this record? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        isDangerous={true}
+        onConfirm={confirmDeleteRecord}
+        onCancel={() => {
+          setShowConfirmModal(false);
+          setRecordToDelete(null);
+        }}
+      />
+      <SensorDetailModal
+        isOpen={showSensorDetailModal}
+        sensorType={selectedSensorType}
+        sensorValue={sensorData ? sensorData[selectedSensorType] : null}
+        timestamp={sensorData?.timestamp}
+        onClose={() => {
+          setShowSensorDetailModal(false);
+          setSelectedSensorType(null);
+        }}
+      />
       <NotificationRibbon />
       
       {/* Top Header - Mobile Only */}
@@ -1123,7 +1169,13 @@ function Dashboard() {
                   </button>
                   
                   <div className="sensors-grid">
-                    <div className="sensor-card">
+                    <div 
+                      className="sensor-card"
+                      onClick={() => {
+                        setSelectedSensorType('temperature');
+                        setShowSensorDetailModal(true);
+                      }}
+                    >
                       <div className="sensor-card-header">
                         <div className="sensor-icon"><Thermometer /></div>
                         <h3>Temperature</h3>
@@ -1139,7 +1191,13 @@ function Dashboard() {
                       </div>
                     </div>
                     
-                    <div className="sensor-card">
+                    <div 
+                      className="sensor-card"
+                      onClick={() => {
+                        setSelectedSensorType('humidity');
+                        setShowSensorDetailModal(true);
+                      }}
+                    >
                       <div className="sensor-card-header">
                         <div className="sensor-icon"><Droplet /></div>
                         <h3>Humidity</h3>
@@ -1155,7 +1213,13 @@ function Dashboard() {
                       </div>
                     </div>
                     
-                    <div className="sensor-card">
+                    <div 
+                      className="sensor-card"
+                      onClick={() => {
+                        setSelectedSensorType('vocs');
+                        setShowSensorDetailModal(true);
+                      }}
+                    >
                       <div className="sensor-card-header">
                         <div className="sensor-icon"><Activity /></div>
                         <h3>VOCs</h3>
@@ -1171,7 +1235,13 @@ function Dashboard() {
                       </div>
                     </div>
 
-                    <div className="sensor-card">
+                    <div 
+                      className="sensor-card"
+                      onClick={() => {
+                        setSelectedSensorType('nitrogen_dioxide');
+                        setShowSensorDetailModal(true);
+                      }}
+                    >
                       <div className="sensor-card-header">
                         <div className="sensor-icon"><Wind /></div>
                         <h3>Nitrogen Dioxide</h3>
@@ -1187,7 +1257,13 @@ function Dashboard() {
                       </div>
                     </div>
                     
-                    <div className="sensor-card">
+                    <div 
+                      className="sensor-card"
+                      onClick={() => {
+                        setSelectedSensorType('carbon_monoxide');
+                        setShowSensorDetailModal(true);
+                      }}
+                    >
                       <div className="sensor-card-header">
                         <div className="sensor-icon"><Flame /></div>
                         <h3>Carbon Monoxide</h3>
@@ -1203,7 +1279,13 @@ function Dashboard() {
                       </div>
                     </div>
 
-                    <div className="sensor-card">
+                    <div 
+                      className="sensor-card"
+                      onClick={() => {
+                        setSelectedSensorType('pm25');
+                        setShowSensorDetailModal(true);
+                      }}
+                    >
                       <div className="sensor-card-header">
                         <div className="sensor-icon"><Circle /></div>
                         <h3>PM 2.5</h3>
@@ -1219,7 +1301,13 @@ function Dashboard() {
                       </div>
                     </div>
                     
-                    <div className="sensor-card">
+                    <div 
+                      className="sensor-card"
+                      onClick={() => {
+                        setSelectedSensorType('pm10');
+                        setShowSensorDetailModal(true);
+                      }}
+                    >
                       <div className="sensor-card-header">
                         <div className="sensor-icon"><Circle /></div>
                         <h3>PM 10</h3>
@@ -1418,7 +1506,8 @@ function Dashboard() {
                                 onClick={() => setShowCreateModal(true)}
                                 title="Create new record"
                               >
-                                ➕
+                                <PlusIcon />
+                                <span>New</span>
                               </button>
                             </th>
                           )}
@@ -1462,20 +1551,22 @@ function Dashboard() {
                               </td>
                               {userRole === 'superadmin' && (
                                 <td>
-                                  <button 
-                                    className="edit-btn"
-                                    onClick={() => openEditModal(record)}
-                                    title="Edit record"
-                                  >
-                                    ✏️
-                                  </button>
-                                  <button 
-                                    className="delete-btn"
-                                    onClick={() => handleDeleteRecord(record.id)}
-                                    title="Delete record"
-                                  >
-                                    🗑️
-                                  </button>
+                                  <div className="action-buttons">
+                                    <button 
+                                      className="action-btn edit-btn"
+                                      onClick={() => openEditModal(record)}
+                                      title="Edit record"
+                                    >
+                                      <EditIcon />
+                                    </button>
+                                    <button 
+                                      className="action-btn delete-btn"
+                                      onClick={() => handleDeleteRecord(record.id)}
+                                      title="Delete record"
+                                    >
+                                      <DeleteIcon />
+                                    </button>
+                                  </div>
                                 </td>
                               )}
                             </tr>
@@ -1597,7 +1688,7 @@ function Dashboard() {
             <section className="graphs-page-container">
               {showGraphLoading && (
                 <div className="graph-loading-overlay">
-                  <div className="loading-spinner"></div>
+                  <TriangleLoader />
                 </div>
               )}
 
