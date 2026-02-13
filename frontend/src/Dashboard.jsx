@@ -2585,6 +2585,28 @@ function Dashboard() {
           <Zap size={24} />
           <span>Sensors</span>
         </button>
+
+        <button 
+          onClick={(e) => {
+            const target = e.currentTarget;
+            target.classList.remove('clicked', 'loading');
+            void target.offsetWidth;
+            
+            target.classList.add('loading');
+            setTimeout(() => {
+              target.classList.remove('loading');
+              target.classList.add('clicked');
+              setTimeout(() => {
+                target.classList.remove('clicked');
+              }, 400);
+            }, 10);
+            setActivePage("info");
+          }}
+          className={`bottom-nav-item ${activePage === "info" ? "active" : ""}`}
+        >
+          <FileText size={24} />
+          <span>Info</span>
+        </button>
       </nav>
     </div>
   )
