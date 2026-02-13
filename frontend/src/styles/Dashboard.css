@@ -89,7 +89,7 @@ chatgpt-sidebar {
 
 /* Dark mode for dashboard sections */
 .dashboard.dark-mode .dashboard-section {
-  background: linear-gradient(135deg, #1e1e1e 0%, #252525 100%);
+  background: #1a1a1a;
 }
 
 .dashboard.dark-mode .section-header h2 {
@@ -437,6 +437,11 @@ chatgpt-sidebar {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  background-color: #f5f5f5;
+}
+
+.dashboard.dark-mode .dashboard-page-container {
+  background-color: #0a0a0a;
 }
 
 /* Mobile header - hidden on desktop */
@@ -452,6 +457,10 @@ chatgpt-sidebar {
   flex-direction: column;
   min-height: 300px;
   flex-shrink: 0;
+}
+
+.dashboard.dark-mode .camera-feed-container {
+  background: #1a1a1a;
 }
 
 .camera-feed-header {
