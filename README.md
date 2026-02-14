@@ -76,14 +76,7 @@ An IoT-based air quality monitoring system that collects sensor data from ESP32 
 
 ## 🚀 Quick Start
 
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/yourusername/smoki.git
-cd smoki
-```
-
-### 2. Database Setup
+### 1. Database Setup
 
 ```bash
 # Install PostgreSQL (if not already installed)
@@ -102,7 +95,7 @@ cp .env.example .env
 # Edit .env with your PostgreSQL credentials
 ```
 
-### 3. Backend Setup
+### 2. Backend Setup
 
 ```bash
 cd backend
@@ -125,7 +118,7 @@ python -m uvicorn main:app --reload
 
 Backend will be available at: `http://127.0.0.1:8000`
 
-### 4. Frontend Setup
+### 3. Frontend Setup
 
 ```bash
 cd frontend
@@ -137,14 +130,11 @@ npm install
 npm run dev
 ```
 
-Frontend will be available at: `http://localhost:5174`
+Frontend will be available at: `http://localhost:5173`
 
-### 5. Access the Dashboard
+### 4. Access the Dashboard
 
-1. Open browser: `http://localhost:5174`
-2. Login credentials:
-   - Username: `admin`
-   - Password: `1234`
+1. Open browser: `http://localhost:5173`
 
 ## 📁 Project Structure
 
@@ -279,7 +269,8 @@ psql -U postgres -d smoki_db
 - BME680 (Temperature, Humidity, Pressure, VOCs)
 - MICS6814 (NO₂, CO, NH₃)
 - PMS7003 (PM2.5, PM10)
-- ADS1115 (ADC for MICS6814)
+- RPI5
+- Hailo
 
 ### Wiring
 See `esp32/esp32_sensor_sender.ino` for pin configurations.
@@ -301,7 +292,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## 👥 Contributors
 
-- Your Name - Initial work
+- mercado - backend
 
 ## 🙏 Acknowledgments
 
@@ -314,7 +305,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 For issues and questions:
 - Create an issue on GitHub
-- Email: your.email@example.com
+- Email: aerobandtech@gmail.com
 
 ---
 
