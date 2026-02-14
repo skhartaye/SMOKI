@@ -1,15 +1,19 @@
-# SMOKi - Air Quality Monitoring System
+# 💨 SMOKi - Air Quality Monitoring System
 
 An IoT-based air quality monitoring system that collects sensor data from ESP32 devices and displays real-time environmental metrics through a web dashboard.
+
+**Repository**: [skhartaye/SMOKI](https://github.com/skhartaye/SMOKI)  
+**Web Design**: [miiikunnn/SMOKi_web_design_3](https://github.com/miiikunnn/SMOKi_web_design_3)
 
 ## 🌟 Features
 
 - **Real-time Sensor Monitoring**: Track temperature, humidity, VOCs, NO₂, CO, PM2.5, and PM10
 - **ESP32 Integration**: Wireless data collection from BME680, MICS6814, and PMS7003 sensors
+- **AI-Powered Smoke Detection**: Raspberry Pi 5 with Hailo accelerator for real-time video analysis
+- **Smoke Density & Color Analysis**: Advanced computer vision for smoke characterization
 - **Web Dashboard**: Interactive React-based interface with live graphs and historical data
 - **RESTful API**: FastAPI backend for data management
 - **PostgreSQL Database**: Reliable data storage with timezone-aware timestamps
-- **Camera Integration**: Placeholder for vehicle smoke detection (in development)
 
 ## 🏗️ Architecture
 
@@ -24,6 +28,42 @@ An IoT-based air quality monitoring system that collects sensor data from ESP32 
                                 ┌──────────────┐
                                 │   Database   │
                                 └──────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│  Raspberry Pi 5 + Hailo AI Accelerator                          │
+│  ┌──────────────────┐         ┌──────────────────────────────┐  │
+│  │  Camera Module   │ ──────> │  Hailo Inference Engine      │  │
+│  │  (Video Stream)  │         │  (Smoke Detection & Analysis)│  │
+│  └──────────────────┘         └──────────────────────────────┘  │
+│                                        │                         │
+│                                        ▼                         │
+│                              ┌──────────────────┐                │
+│                              │  Violator Data   │                │
+│                              │  (Metadata)      │                │
+│                              └──────────────────┘                │
+└─────────────────────────────────────────────────────────────────┘
+                                        │
+                                        │ HTTP POST
+                                        ▼
+                                ┌──────────────────┐
+                                │   FastAPI        │
+                                │   Backend        │
+                                └──────────────────┘
+                                        │
+                                        │ Store
+                                        ▼
+                                ┌──────────────────┐
+                                │   PostgreSQL     │
+                                │   (Violators DB) │
+                                └──────────────────┘
+                                        │
+                                        │ Query
+                                        ▼
+                                ┌──────────────────┐
+                                │   React          │
+                                │   Dashboard      │
+                                │   (Violators)    │
+                                └──────────────────┘
 ```
 
 ## 📋 Prerequisites
@@ -31,7 +71,8 @@ An IoT-based air quality monitoring system that collects sensor data from ESP32 
 - **Python 3.10+** (Backend)
 - **Node.js 16+** (Frontend)
 - **PostgreSQL 12+** (Database)
-- **ESP32** with sensors (Optional - for hardware integration)
+- **Raspberry Pi 5** with Hailo AI Accelerator (For smoke detection)
+- **ESP32** with sensors (For air quality monitoring)
 
 ## 🚀 Quick Start
 
@@ -135,6 +176,13 @@ smoki/
 - `GET /api/sensors/data?limit=N` - Get latest N readings
 - `GET /api/sensors/latest` - Get most recent reading
 
+### Violators (Smoke Detection)
+- `POST /api/violators` - Submit violator metadata from Hailo
+- `GET /api/violators` - Get list of detected violators
+- `GET /api/violators/{id}` - Get specific violator details
+- `PUT /api/violators/{id}` - Update violator status
+- `DELETE /api/violators/{id}` - Remove violator record
+
 ### System
 - `GET /api/hello` - Health check
 - `GET /api/time` - Server time (for debugging)
@@ -153,6 +201,20 @@ curl -X POST http://127.0.0.1:8000/api/sensors/data \
     "carbon_monoxide": 0.8,
     "pm25": 12.5,
     "pm10": 18.3
+  }'
+
+# Submit violator metadata from Hailo
+curl -X POST http://127.0.0.1:8000/api/violators \
+  -H "Content-Type: application/json" \
+  -d '{
+    "timestamp": "2025-02-14T10:30:00Z",
+    "license_plate": "ABC123",
+    "smoke_density": 85.5,
+    "smoke_color": "black",
+    "confidence": 0.92,
+    "image_path": "/path/to/image.jpg",
+    "location": "Main Street",
+    "vehicle_type": "truck"
   }'
 ```
 
@@ -224,13 +286,14 @@ See `esp32/esp32_sensor_sender.ino` for pin configurations.
 
 ## 🚧 Roadmap
 
-- [ ] Camera integration for vehicle smoke detection
+- [x] Camera integration with Hailo AI acceleration
+- [x] Smoke detection and analysis
 - [ ] License plate recognition
-- [ ] Smoke density and color analysis
 - [ ] Email/SMS alerts for threshold violations
 - [ ] Data export functionality
-- [ ] Multi-user authentication
+- [ ] Multi-user authentication improvements
 - [ ] Mobile app
+- [ ] Cloud deployment
 
 ## 📄 License
 
