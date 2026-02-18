@@ -3,17 +3,7 @@ import { X, AlertTriangle, AlertCircle, CheckCircle } from 'lucide-react';
 import '../styles/NotificationRibbon.css';
 
 export default function NotificationRibbon() {
-  const [notifications, setNotifications] = useState([]);
   const [visibleNotifications, setVisibleNotifications] = useState([]);
-
-  useEffect(() => {
-    // Fetch unread notifications
-    fetchNotifications();
-    
-    // Poll for new notifications every 5 seconds
-    const interval = setInterval(fetchNotifications, 5000);
-    return () => clearInterval(interval);
-  }, []);
 
   const fetchNotifications = async () => {
     try {
@@ -84,6 +74,15 @@ export default function NotificationRibbon() {
       console.error('Error marking notification as read:', error);
     }
   };
+
+  useEffect(() => {
+    // Fetch unread notifications
+    fetchNotifications();
+    
+    // Poll for new notifications every 5 seconds
+    const interval = setInterval(fetchNotifications, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const getSeverityIcon = (severity) => {
     switch (severity) {

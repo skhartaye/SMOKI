@@ -6,7 +6,8 @@ import { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Brush, ReferenceLine } from 'recharts';
 import { Thermometer, Droplet, Wind, Flame, Circle, Home, FileText, TrendingUp, Zap, Moon, Sun, LogOut, Menu, Activity } from 'lucide-react';
 import NotificationRibbon from './component/NotificationRibbon';
-import Toast, { showToast } from './component/Toast';
+import Toast from './component/Toast';
+import { showToast } from './utils/toastUtils';
 import { EditIcon, DeleteIcon, PlusIcon } from './component/IOSIcons';
 import ConfirmModal from './component/ConfirmModal';
 import SensorDetailModal from './component/SensorDetailModal';
@@ -69,13 +70,12 @@ function Dashboard() {
   const [selectedSensor, setSelectedSensor] = useState(null); // For sensor detail view
   const [sidebarHovered, setSidebarHovered] = useState(false);
   const [showGraphLoading, setShowGraphLoading] = useState(false);
-  const [userRole, setUserRole] = useState(localStorage.getItem('role') || 'admin');
+  const [userRole] = useState(localStorage.getItem('role') || 'admin');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  const [clickedNavItem, setClickedNavItem] = useState(null);
   const [formData, setFormData] = useState({
     temperature: '',
     humidity: '',
@@ -94,71 +94,7 @@ function Dashboard() {
   
   const navigate = useNavigate();
 
-  // Handle window resize to detect mobile
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
-    };
-    
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // Close dropdowns when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (!event.target.closest('.custom-dropdown')) {
-        setSensorDropdownOpen(false);
-        setGraphSensorDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Handle sidebar hover to show loading animation on graphs page
-  useEffect(() => {
-    let timeoutId;
-    if (activePage === "graphs") {
-      setShowGraphLoading(true);
-      // Hide loading after sidebar animation completes
-      timeoutId = setTimeout(() => {
-        setShowGraphLoading(false);
-      }, 1000);
-    }
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  }, [sidebarHovered, activePage]);
-
   // Fetch latest sensor data for sensors page
-  useEffect(() => {
-    if (activePage === "sensors") {
-      fetchLatestSensorData();
-      const interval = setInterval(fetchLatestSensorData, 5000); // Update every 5 seconds
-      return () => clearInterval(interval);
-    }
-  }, [activePage]);
-
-  // Fetch records for records page
-  useEffect(() => {
-    if (activePage === "records") {
-      fetchRecords();
-      const interval = setInterval(fetchRecords, 10000); // Update every 10 seconds
-      return () => clearInterval(interval);
-    }
-  }, [activePage]);
-
-  // Fetch graph data for graphs page
-  useEffect(() => {
-    if (activePage === "graphs") {
-      fetchGraphData();
-      const interval = setInterval(fetchGraphData, 30000); // Update every 30 seconds
-      return () => clearInterval(interval);
-    }
-  }, [activePage]);
-
   const fetchLatestSensorData = async () => {
     try {
       const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
@@ -184,14 +120,6 @@ function Dashboard() {
     } catch (error) {
       console.error('Error fetching sensor data:', error);
     }
-  };
-
-  const calculateChange = (current, previous) => {
-    // Always return a number - return 0 if no valid data
-    if (typeof current !== 'number' || typeof previous !== 'number') return 0;
-    if (previous === 0) return 0;
-    const change = ((current - previous) / previous) * 100;
-    return change;
   };
 
   const fetchRecords = async () => {
@@ -255,6 +183,79 @@ function Dashboard() {
       console.error('Error fetching graph data:', error);
     }
   };
+
+  const calculateChange = (current, previous) => {
+    // Always return a number - return 0 if no valid data
+    if (typeof current !== 'number' || typeof previous !== 'number') return 0;
+    if (previous === 0) return 0;
+    const change = ((current - previous) / previous) * 100;
+    return change;
+  };
+
+  // Handle window resize to detect mobile
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('.custom-dropdown')) {
+        setSensorDropdownOpen(false);
+        setGraphSensorDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Handle sidebar hover to show loading animation on graphs page
+  useEffect(() => {
+    let timeoutId;
+    if (activePage === "graphs") {
+      setShowGraphLoading(true);
+      // Hide loading after sidebar animation completes
+      timeoutId = setTimeout(() => {
+        setShowGraphLoading(false);
+      }, 1000);
+    }
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [activePage]);
+
+  // Fetch latest sensor data for sensors page
+  useEffect(() => {
+    if (activePage === "sensors") {
+      fetchLatestSensorData();
+      const interval = setInterval(fetchLatestSensorData, 5000); // Update every 5 seconds
+      return () => clearInterval(interval);
+    }
+  }, [activePage]);
+
+  // Fetch records for records page
+  useEffect(() => {
+    if (activePage === "records") {
+      fetchRecords();
+      const interval = setInterval(fetchRecords, 10000); // Update every 10 seconds
+      return () => clearInterval(interval);
+    }
+  }, [activePage]);
+
+  // Fetch graph data for graphs page
+  useEffect(() => {
+    if (activePage === "graphs") {
+      fetchGraphData();
+      const interval = setInterval(fetchGraphData, 30000); // Update every 30 seconds
+      return () => clearInterval(interval);
+    }
+  }, [activePage]);
 
   const fetchTopViolators = async () => {
     try {
@@ -606,19 +607,29 @@ function Dashboard() {
     };
   };
 
-  // Tooltip config for graphs
-  const tooltipStyle = {
-    backgroundColor: darkMode ? 'rgba(45,45,45,0.95)' : 'rgba(255,255,255,0.95)',
-    border: darkMode ? '1px solid #555' : '1px solid #ddd',
-    borderRadius: '8px',
-    padding: '10px',
-    color: darkMode ? '#e0e0e0' : '#333'
-  };
-
-  const tooltipLabelStyle = {
-    fontWeight: 'bold',
-    marginBottom: '5px',
-    color: darkMode ? '#e0e0e0' : '#333'
+  // Helper function to get selected sensor names for display
+  const getSelectedSensorNames = (sensorTypes) => {
+    const sensorLabels = {
+      temperature: 'Temp',
+      humidity: 'Humidity',
+      vocs: 'VOCs',
+      no2: 'NO₂',
+      co: 'CO',
+      pm25: 'PM2.5',
+      pm10: 'PM10'
+    };
+    
+    const selected = Object.keys(sensorTypes).filter(key => sensorTypes[key]);
+    
+    if (selected.length === 0) {
+      return 'None selected';
+    } else if (selected.length === Object.keys(sensorTypes).length) {
+      return 'All sensors';
+    } else if (selected.length <= 3) {
+      return selected.map(key => sensorLabels[key]).join(', ');
+    } else {
+      return `${selected.length} sensors`;
+    }
   };
 
   const handleClearFilters = () => {
@@ -660,31 +671,6 @@ function Dashboard() {
       ...prev,
       [sensor]: !prev[sensor]
     }));
-  };
-
-  // Helper function to get selected sensor names for display
-  const getSelectedSensorNames = (sensorTypes) => {
-    const sensorLabels = {
-      temperature: 'Temp',
-      humidity: 'Humidity',
-      vocs: 'VOCs',
-      no2: 'NO₂',
-      co: 'CO',
-      pm25: 'PM2.5',
-      pm10: 'PM10'
-    };
-    
-    const selected = Object.keys(sensorTypes).filter(key => sensorTypes[key]);
-    
-    if (selected.length === 0) {
-      return 'None selected';
-    } else if (selected.length === Object.keys(sensorTypes).length) {
-      return 'All sensors';
-    } else if (selected.length <= 3) {
-      return selected.map(key => sensorLabels[key]).join(', ');
-    } else {
-      return `${selected.length} sensors`;
-    }
   };
 
   const handleClearGraphFilters = () => {
