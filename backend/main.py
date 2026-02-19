@@ -1,5 +1,4 @@
 from fastapi import FastAPI, HTTPException, Depends
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime, timezone, timedelta
 import sys
@@ -15,15 +14,6 @@ from auth import (
 from vehicles import router as vehicles_router
 
 app = FastAPI()
-
-# Enable CORS for all origins
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # Include routers
 app.include_router(vehicles_router)
@@ -83,11 +73,6 @@ def get_me(current_user: User = Depends(get_current_user)):
 @app.get("/api/hello")
 def read_root():
     return {"message": "Hello from FastAPI!", "status": "ok"}
-
-@app.options("/{full_path:path}")
-async def preflight_handler(full_path: str):
-    """Handle CORS preflight requests"""
-    return {"status": "ok"}
 
 @app.get("/api/health")
 def health_check():
