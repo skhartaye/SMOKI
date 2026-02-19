@@ -26,7 +26,8 @@ function Dashboard() {
     no2: true,
     co: true,
     pm25: true,
-    pm10: true
+    pm10: true,
+    pressure: true
   });
   const [appliedSensorTypes, setAppliedSensorTypes] = useState({
     temperature: true,
@@ -35,7 +36,8 @@ function Dashboard() {
     no2: true,
     co: true,
     pm25: true,
-    pm10: true
+    pm10: true,
+    pressure: true
   });
   const [filterDate, setFilterDate] = useState("all");
   const [appliedDate, setAppliedDate] = useState("all");
@@ -50,7 +52,8 @@ function Dashboard() {
     no2: true,
     co: true,
     pm25: true,
-    pm10: true
+    pm10: true,
+    pressure: true
   });
   const [appliedGraphSensorTypes, setAppliedGraphSensorTypes] = useState({
     temperature: true,
@@ -59,7 +62,8 @@ function Dashboard() {
     no2: true,
     co: true,
     pm25: true,
-    pm10: true
+    pm10: true,
+    pressure: true
   });
   const [graphFilterDate, setGraphFilterDate] = useState("all");
   const [appliedGraphDate, setAppliedGraphDate] = useState("all");
@@ -171,6 +175,7 @@ function Dashboard() {
           fullTimestamp: new Date(item.timestamp).toLocaleString(),
           temperature: item.temperature || 0,
           humidity: item.humidity || 0,
+          pressure: item.pressure || 0,
           vocs: item.vocs || 0,
           no2: item.nitrogen_dioxide || 0,
           co: item.carbon_monoxide || 0,
@@ -616,7 +621,8 @@ function Dashboard() {
       no2: 'NO₂',
       co: 'CO',
       pm25: 'PM2.5',
-      pm10: 'PM10'
+      pm10: 'PM10',
+      pressure: 'Pressure'
     };
     
     const selected = Object.keys(sensorTypes).filter(key => sensorTypes[key]);
@@ -640,7 +646,8 @@ function Dashboard() {
       no2: true,
       co: true,
       pm25: true,
-      pm10: true
+      pm10: true,
+      pressure: true
     };
     setFilterSensorTypes(defaultSensors);
     setAppliedSensorTypes(defaultSensors);
@@ -681,7 +688,8 @@ function Dashboard() {
       no2: true,
       co: true,
       pm25: true,
-      pm10: true
+      pm10: true,
+      pressure: true
     };
     setGraphFilterSensorTypes(defaultSensors);
     setAppliedGraphSensorTypes(defaultSensors);
@@ -1458,6 +1466,14 @@ function Dashboard() {
                             />
                             PM10
                           </label>
+                          <label className="dropdown-item">
+                            <input 
+                              type="checkbox" 
+                              checked={filterSensorTypes.pressure}
+                              onChange={() => toggleSensorType('pressure')}
+                            />
+                            Pressure
+                          </label>
                           <div className="dropdown-divider"></div>
                           <label className="dropdown-item clear-item">
                             <input 
@@ -1512,6 +1528,7 @@ function Dashboard() {
                           {appliedSensorTypes.co && <th>CO (PPM)</th>}
                           {appliedSensorTypes.pm25 && <th>PM2.5 (µg/m³)</th>}
                           {appliedSensorTypes.pm10 && <th>PM10 (µg/m³)</th>}
+                          {appliedSensorTypes.pressure && <th>Pressure (hPa)</th>}
                           <th>AQI</th>
                           <th>Status</th>
                           {userRole === 'superadmin' && (
@@ -1557,6 +1574,7 @@ function Dashboard() {
                               {appliedSensorTypes.co && <td>{record.carbon_monoxide?.toFixed(2) || 'N/A'}</td>}
                               {appliedSensorTypes.pm25 && <td>{record.pm25?.toFixed(1) || 'N/A'}</td>}
                               {appliedSensorTypes.pm10 && <td>{record.pm10?.toFixed(1) || 'N/A'}</td>}
+                              {appliedSensorTypes.pressure && <td>{record.pressure?.toFixed(2) || 'N/A'}</td>}
                               <td>
                                 <span className="aqi-badge" style={{backgroundColor: aqi.color}}>
                                   {aqi.value}

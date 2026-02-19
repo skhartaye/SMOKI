@@ -48,6 +48,7 @@ def create_tables():
                         timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                         temperature FLOAT,
                         humidity FLOAT,
+                        pressure FLOAT,
                         vocs FLOAT,
                         nitrogen_dioxide FLOAT,
                         carbon_monoxide FLOAT,
@@ -55,6 +56,12 @@ def create_tables():
                         pm10 FLOAT,
                         created_at TIMESTAMPTZ DEFAULT NOW()
                     );
+                """)
+                
+                # Add pressure column if it doesn't exist (for existing databases)
+                cursor.execute("""
+                    ALTER TABLE sensor_data
+                    ADD COLUMN IF NOT EXISTS pressure FLOAT;
                 """)
                 
                 # Create vehicles table for SMOKI (RPi camera detection)
