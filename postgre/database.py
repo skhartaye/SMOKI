@@ -201,14 +201,14 @@ def get_latest_sensor_data(limit=10):
         try:
             with conn.cursor() as cursor:
                 cursor.execute("""
-                    SELECT id, timestamp, temperature, humidity, vocs, 
+                    SELECT id, timestamp, temperature, humidity, pressure, vocs, 
                            nitrogen_dioxide, carbon_monoxide, pm25, pm10
                     FROM sensor_data
                     ORDER BY timestamp DESC
                     LIMIT %s;
                 """, (limit,))
                 
-                columns = ['id', 'timestamp', 'temperature', 'humidity', 'vocs', 
+                columns = ['id', 'timestamp', 'temperature', 'humidity', 'pressure', 'vocs', 
                            'nitrogen_dioxide', 'carbon_monoxide', 'pm25', 'pm10']
                 results = []
                 for row in cursor.fetchall():
@@ -224,14 +224,14 @@ def get_sensor_data_by_timerange(start_time, end_time):
         try:
             with conn.cursor() as cursor:
                 cursor.execute("""
-                    SELECT id, timestamp, temperature, humidity, vocs, 
+                    SELECT id, timestamp, temperature, humidity, pressure, vocs, 
                            nitrogen_dioxide, carbon_monoxide, pm25, pm10
                     FROM sensor_data
                     WHERE timestamp BETWEEN %s AND %s
                     ORDER BY timestamp DESC;
                 """, (start_time, end_time))
                 
-                columns = ['id', 'timestamp', 'temperature', 'humidity', 'vocs', 
+                columns = ['id', 'timestamp', 'temperature', 'humidity', 'pressure', 'vocs', 
                            'nitrogen_dioxide', 'carbon_monoxide', 'pm25', 'pm10']
                 results = []
                 for row in cursor.fetchall():
