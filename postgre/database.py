@@ -166,7 +166,7 @@ def create_tables():
 
 # ============ SENSOR DATA FUNCTIONS ============
 
-def insert_sensor_data(temperature=None, humidity=None, vocs=None, 
+def insert_sensor_data(temperature=None, humidity=None, pressure=None, vocs=None, 
                        nitrogen_dioxide=None, carbon_monoxide=None, 
                        pm25=None, pm10=None):
     """Insert sensor data into database"""
@@ -175,10 +175,10 @@ def insert_sensor_data(temperature=None, humidity=None, vocs=None,
             with conn.cursor() as cursor:
                 cursor.execute("""
                     INSERT INTO sensor_data 
-                    (temperature, humidity, vocs, nitrogen_dioxide, carbon_monoxide, pm25, pm10)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    (temperature, humidity, pressure, vocs, nitrogen_dioxide, carbon_monoxide, pm25, pm10)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id, timestamp;
-                """, (temperature, humidity, vocs, nitrogen_dioxide, carbon_monoxide, pm25, pm10))
+                """, (temperature, humidity, pressure, vocs, nitrogen_dioxide, carbon_monoxide, pm25, pm10))
                 
                 result = cursor.fetchone()
                 conn.commit()
@@ -234,7 +234,7 @@ def get_sensor_data_by_timerange(start_time, end_time):
             print(f"Error fetching sensor data by time range: {e}")
             return []
 
-def update_sensor_data(record_id, temperature=None, humidity=None, vocs=None, 
+def update_sensor_data(record_id, temperature=None, humidity=None, pressure=None, vocs=None, 
                        nitrogen_dioxide=None, carbon_monoxide=None, 
                        pm25=None, pm10=None):
     """Update sensor data record"""
@@ -245,6 +245,7 @@ def update_sensor_data(record_id, temperature=None, humidity=None, vocs=None,
                     UPDATE sensor_data
                     SET temperature = %s,
                         humidity = %s,
+                        pressure = %s,
                         vocs = %s,
                         nitrogen_dioxide = %s,
                         carbon_monoxide = %s,
@@ -252,7 +253,7 @@ def update_sensor_data(record_id, temperature=None, humidity=None, vocs=None,
                         pm10 = %s
                     WHERE id = %s
                     RETURNING id, timestamp;
-                """, (temperature, humidity, vocs, nitrogen_dioxide, carbon_monoxide, 
+                """, (temperature, humidity, pressure, vocs, nitrogen_dioxide, carbon_monoxide, 
                       pm25, pm10, record_id))
                 
                 result = cursor.fetchone()
