@@ -820,7 +820,7 @@ function Dashboard() {
               <div className="user-menu-icon">👤</div>
               <div className="user-menu-info">
                 <div className="user-menu-name">{localStorage.getItem('username') || 'User'}</div>
-                <div className="user-menu-role">{localStorage.getItem('role') === 'superadmin' ? 'Super Admin' : 'Admin'}</div>
+                <div className="user-menu-role">{localStorage.getItem('role') === 'superadmin' ? 'SuperAdmin' : 'Admin'}</div>
               </div>
             </div>
             <button className="user-menu-logout" onClick={handleLogout}>
@@ -1140,6 +1140,19 @@ function Dashboard() {
                         {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
                       </div>
                     </div>
+
+                    <div className="sensor-card-compact" onClick={() => setSelectedSensor(true)}>
+                      <div className="sensor-card-compact-header">
+                        <div className="sensor-icon-small"><Wind size={24} /></div>
+                        <h3>Pressure</h3>
+                      </div>
+                      <div className="sensor-value-compact">
+                        {sensorData?.pressure ? `${sensorData.pressure.toFixed(1)} hPa` : '-- hPa'}
+                      </div>
+                      <div className="sensor-status-compact">
+                        {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
+                      </div>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -1298,6 +1311,28 @@ function Dashboard() {
                       </div>
                       <div className="sensor-value">
                         {sensorData?.pm10 ? `${sensorData.pm10.toFixed(1)} µg/m³` : '-- µg/m³'}
+                      </div>
+                      <div className="sensor-status">
+                        {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
+                      </div>
+                    </div>
+
+                    <div 
+                      className="sensor-card"
+                      onClick={() => {
+                        setSelectedSensorType('pressure');
+                        setShowSensorDetailModal(true);
+                      }}
+                    >
+                      <div className="sensor-card-header">
+                        <div className="sensor-icon"><Wind /></div>
+                        <h3>Pressure</h3>
+                      </div>
+                      <div className={`sensor-change ${calculateChange(sensorData?.pressure, previousSensorData?.pressure) >= 0 ? 'positive' : 'negative'}`}>
+                        {calculateChange(sensorData?.pressure, previousSensorData?.pressure) >= 0 ? '↑' : '↓'} {Math.abs(calculateChange(sensorData?.pressure, previousSensorData?.pressure)).toFixed(1)}%
+                      </div>
+                      <div className="sensor-value">
+                        {sensorData?.pressure ? `${sensorData.pressure.toFixed(1)} hPa` : '-- hPa'}
                       </div>
                       <div className="sensor-status">
                         {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}

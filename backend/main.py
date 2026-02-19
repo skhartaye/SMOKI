@@ -43,6 +43,7 @@ async def shutdown_event():
 class SensorData(BaseModel):
     temperature: float | None = None
     humidity: float | None = None
+    pressure: float | None = None
     vocs: float | None = None
     nitrogen_dioxide: float | None = None
     carbon_monoxide: float | None = None
@@ -101,6 +102,7 @@ def add_sensor_data(data: SensorData):
         result = insert_sensor_data(
             temperature=data.temperature,
             humidity=data.humidity,
+            pressure=data.pressure,
             vocs=data.vocs,
             nitrogen_dioxide=data.nitrogen_dioxide,
             carbon_monoxide=data.carbon_monoxide,
@@ -143,6 +145,7 @@ def update_sensor_record(record_id: int, data: SensorData, current_user: User = 
             record_id=record_id,
             temperature=data.temperature,
             humidity=data.humidity,
+            pressure=data.pressure,
             vocs=data.vocs,
             nitrogen_dioxide=data.nitrogen_dioxide,
             carbon_monoxide=data.carbon_monoxide,
