@@ -536,6 +536,15 @@ function Dashboard() {
       { cLow: 650, cHigh: 1249, iLow: 201, iHigh: 300 },
       { cLow: 1250, cHigh: 2049, iLow: 301, iHigh: 500 }
     ];
+
+    // Pressure breakpoints (hPa) - Normal range 1013 hPa
+    const pressureBreakpoints = [
+      { cLow: 950, cHigh: 1000, iLow: 0, iHigh: 50 },      // Low pressure
+      { cLow: 1000, cHigh: 1013, iLow: 0, iHigh: 50 },     // Below normal
+      { cLow: 1013, cHigh: 1020, iLow: 0, iHigh: 50 },     // Normal range
+      { cLow: 1020, cHigh: 1050, iLow: 51, iHigh: 100 },   // High pressure
+      { cLow: 1050, cHigh: 1100, iLow: 101, iHigh: 150 }   // Very high pressure
+    ];
     
     const calculatePollutantAQI = (concentration, breakpoints) => {
       if (!concentration || concentration < 0) return null;
@@ -572,6 +581,11 @@ function Dashboard() {
       const no2Ppb = record.nitrogen_dioxide * 1000;
       const aqi = calculatePollutantAQI(no2Ppb, no2Breakpoints);
       if (aqi !== null) pollutants.push({ name: 'NO2', aqi });
+    }
+
+    if (record.pressure) {
+      const aqi = calculatePollutantAQI(record.pressure, pressureBreakpoints);
+      if (aqi !== null) pollutants.push({ name: 'Pressure', aqi });
     }
     
     // Return the highest AQI (worst pollutant)
@@ -1086,6 +1100,19 @@ function Dashboard() {
 
                     <div className="sensor-card-compact" onClick={() => setSelectedSensor(true)}>
                       <div className="sensor-card-compact-header">
+                        <div className="sensor-icon-small"><Zap size={24} /></div>
+                        <h3>Pressure</h3>
+                      </div>
+                      <div className="sensor-value-compact">
+                        {sensorData?.pressure ? `${sensorData.pressure.toFixed(1)} hPa` : '-- hPa'}
+                      </div>
+                      <div className="sensor-status-compact">
+                        {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
+                      </div>
+                    </div>
+
+                    <div className="sensor-card-compact" onClick={() => setSelectedSensor(true)}>
+                      <div className="sensor-card-compact-header">
                         <div className="sensor-icon-small"><Activity size={24} /></div>
                         <h3>VOCs</h3>
                       </div>
@@ -1148,19 +1175,6 @@ function Dashboard() {
                         {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
                       </div>
                     </div>
-
-                    <div className="sensor-card-compact" onClick={() => setSelectedSensor(true)}>
-                      <div className="sensor-card-compact-header">
-                        <div className="sensor-icon-small"><Wind size={24} /></div>
-                        <h3>Pressure</h3>
-                      </div>
-                      <div className="sensor-value-compact">
-                        {sensorData?.pressure ? `${sensorData.pressure.toFixed(1)} hPa` : '-- hPa'}
-                      </div>
-                      <div className="sensor-status-compact">
-                        {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
-                      </div>
-                    </div>
                   </div>
                 </div>
               ) : (
@@ -1209,6 +1223,28 @@ function Dashboard() {
                       </div>
                       <div className="sensor-value">
                         {sensorData?.humidity ? `${sensorData.humidity.toFixed(1)}%` : '--%'}
+                      </div>
+                      <div className="sensor-status">
+                        {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
+                      </div>
+                    </div>
+
+                    <div 
+                      className="sensor-card"
+                      onClick={() => {
+                        setSelectedSensorType('pressure');
+                        setShowSensorDetailModal(true);
+                      }}
+                    >
+                      <div className="sensor-card-header">
+                        <div className="sensor-icon"><Zap /></div>
+                        <h3>Pressure</h3>
+                      </div>
+                      <div className={`sensor-change ${calculateChange(sensorData?.pressure, previousSensorData?.pressure) >= 0 ? 'positive' : 'negative'}`}>
+                        {calculateChange(sensorData?.pressure, previousSensorData?.pressure) >= 0 ? '↑' : '↓'} {Math.abs(calculateChange(sensorData?.pressure, previousSensorData?.pressure)).toFixed(1)}%
+                      </div>
+                      <div className="sensor-value">
+                        {sensorData?.pressure ? `${sensorData.pressure.toFixed(1)} hPa` : '-- hPa'}
                       </div>
                       <div className="sensor-status">
                         {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
@@ -1324,28 +1360,6 @@ function Dashboard() {
                         {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
                       </div>
                     </div>
-
-                    <div 
-                      className="sensor-card"
-                      onClick={() => {
-                        setSelectedSensorType('pressure');
-                        setShowSensorDetailModal(true);
-                      }}
-                    >
-                      <div className="sensor-card-header">
-                        <div className="sensor-icon"><Wind /></div>
-                        <h3>Pressure</h3>
-                      </div>
-                      <div className={`sensor-change ${calculateChange(sensorData?.pressure, previousSensorData?.pressure) >= 0 ? 'positive' : 'negative'}`}>
-                        {calculateChange(sensorData?.pressure, previousSensorData?.pressure) >= 0 ? '↑' : '↓'} {Math.abs(calculateChange(sensorData?.pressure, previousSensorData?.pressure)).toFixed(1)}%
-                      </div>
-                      <div className="sensor-value">
-                        {sensorData?.pressure ? `${sensorData.pressure.toFixed(1)} hPa` : '-- hPa'}
-                      </div>
-                      <div className="sensor-status">
-                        {sensorData ? formatTimestamp(sensorData.timestamp) : 'Waiting for data...'}
-                      </div>
-                    </div>
                   </div>
                 </div>
               )}
@@ -1429,6 +1443,14 @@ function Dashboard() {
                           <label className="dropdown-item">
                             <input 
                               type="checkbox" 
+                              checked={filterSensorTypes.pressure}
+                              onChange={() => toggleSensorType('pressure')}
+                            />
+                            Pressure
+                          </label>
+                          <label className="dropdown-item">
+                            <input 
+                              type="checkbox" 
                               checked={filterSensorTypes.vocs}
                               onChange={() => toggleSensorType('vocs')}
                             />
@@ -1465,14 +1487,6 @@ function Dashboard() {
                               onChange={() => toggleSensorType('pm10')}
                             />
                             PM10
-                          </label>
-                          <label className="dropdown-item">
-                            <input 
-                              type="checkbox" 
-                              checked={filterSensorTypes.pressure}
-                              onChange={() => toggleSensorType('pressure')}
-                            />
-                            Pressure
                           </label>
                           <div className="dropdown-divider"></div>
                           <label className="dropdown-item clear-item">
@@ -1523,12 +1537,12 @@ function Dashboard() {
                           <th>Time Stamp</th>
                           {appliedSensorTypes.temperature && <th>Temp (°C)</th>}
                           {appliedSensorTypes.humidity && <th>Humidity (%)</th>}
+                          {appliedSensorTypes.pressure && <th>Pressure (hPa)</th>}
                           {appliedSensorTypes.vocs && <th>VOCs (kΩ)</th>}
                           {appliedSensorTypes.no2 && <th>NO₂ (PPM)</th>}
                           {appliedSensorTypes.co && <th>CO (PPM)</th>}
                           {appliedSensorTypes.pm25 && <th>PM2.5 (µg/m³)</th>}
                           {appliedSensorTypes.pm10 && <th>PM10 (µg/m³)</th>}
-                          {appliedSensorTypes.pressure && <th>Pressure (hPa)</th>}
                           <th>AQI</th>
                           <th>Status</th>
                           {userRole === 'superadmin' && (
@@ -1569,12 +1583,12 @@ function Dashboard() {
                               <td>{formatTimestamp(record.timestamp)}</td>
                               {appliedSensorTypes.temperature && <td>{record.temperature?.toFixed(1) || 'N/A'}</td>}
                               {appliedSensorTypes.humidity && <td>{record.humidity?.toFixed(1) || 'N/A'}</td>}
+                              {appliedSensorTypes.pressure && <td>{record.pressure?.toFixed(2) || 'N/A'}</td>}
                               {appliedSensorTypes.vocs && <td>{record.vocs?.toFixed(1) || 'N/A'}</td>}
                               {appliedSensorTypes.no2 && <td>{record.nitrogen_dioxide?.toFixed(2) || 'N/A'}</td>}
                               {appliedSensorTypes.co && <td>{record.carbon_monoxide?.toFixed(2) || 'N/A'}</td>}
                               {appliedSensorTypes.pm25 && <td>{record.pm25?.toFixed(1) || 'N/A'}</td>}
                               {appliedSensorTypes.pm10 && <td>{record.pm10?.toFixed(1) || 'N/A'}</td>}
-                              {appliedSensorTypes.pressure && <td>{record.pressure?.toFixed(2) || 'N/A'}</td>}
                               <td>
                                 <span className="aqi-badge" style={{backgroundColor: aqi.color}}>
                                   {aqi.value}
@@ -1759,6 +1773,14 @@ function Dashboard() {
                               onChange={() => toggleGraphSensorType('humidity')}
                             />
                             Humidity
+                          </label>
+                          <label className="dropdown-item">
+                            <input 
+                              type="checkbox" 
+                              checked={graphFilterSensorTypes.pressure}
+                              onChange={() => toggleGraphSensorType('pressure')}
+                            />
+                            Pressure
                           </label>
                           <label className="dropdown-item">
                             <input 
@@ -2010,6 +2032,79 @@ function Dashboard() {
                           </ResponsiveContainer>
                         </div>
                       </div>
+                    )}
+
+                    {/* Pressure Graph */}
+                    {appliedGraphSensorTypes.pressure && (
+                    <div className="graph-card">
+                      <div className="graph-header">
+                        <div className="graph-value">
+                          {(() => {
+                            const peak = getPeakValue('pressure');
+                            return peak !== null ? (
+                              <>
+                                <span className="current-value">{peak.toFixed(2)} hPa</span>
+                                <span className="value-change">Peak</span>
+                              </>
+                            ) : '--';
+                          })()}
+                        </div>
+                        <h3><Zap size={20} /> Pressure</h3>
+                      </div>
+                      <div style={{ width: '100%', height: '280px' }}>
+                        <ResponsiveContainer debounce={300}>
+                          <LineChart data={getFilteredGraphData()} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                            <XAxis 
+                              dataKey="time" 
+                              stroke="#999" 
+                              tick={{ fontSize: 11, fill: '#999' }}
+                              axisLine={false}
+                              tickLine={false}
+                            />
+                            <YAxis 
+                              stroke="#999" 
+                              tick={{ fontSize: 11, fill: '#999' }}
+                              axisLine={false}
+                              tickLine={false}
+                              domain={['auto', 'auto']}
+                            />
+                            <Tooltip 
+                              contentStyle={{ 
+                                backgroundColor: 'rgba(255,255,255,0.95)', 
+                                border: '1px solid #ddd',
+                                borderRadius: '8px',
+                                padding: '10px'
+                              }}
+                              labelStyle={{ fontWeight: 'bold', marginBottom: '5px' }}
+                              formatter={(value) => [value.toFixed(2), 'Pressure']}
+                              labelFormatter={(label, payload) => {
+                                if (payload && payload[0]) {
+                                  return payload[0].payload.fullTimestamp || label;
+                                }
+                                return label;
+                              }}
+                            />
+                            <ReferenceLine 
+                              y={1013} 
+                              stroke="#4caf50" 
+                              strokeDasharray="5 5" 
+                              strokeWidth={2}
+                              label={{ value: 'Normal', position: 'insideTopRight', fill: '#4caf50', fontSize: 10 }}
+                            />
+                            <Line 
+                              type="monotone" 
+                              dataKey="pressure" 
+                              stroke="#5b6b8d" 
+                              strokeWidth={3}
+                              dot={{ fill: '#5b6b8d', r: 5, strokeWidth: 0 }}
+                              activeDot={{ r: 8, fill: '#5b6b8d' }}
+                              isAnimationActive={false}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
                     )}
 
                     {/* VOCs Graph */}
@@ -2359,7 +2454,7 @@ function Dashboard() {
                               tick={{ fontSize: 11, fill: '#999' }}
                               axisLine={false}
                               tickLine={false}
-                              domain={[0, (dataMax) => Math.max(dataMax, 160)]}
+                              domain={['auto', 'auto']}
                             />
                             <Tooltip 
                               contentStyle={{ 
@@ -2378,14 +2473,14 @@ function Dashboard() {
                               }}
                             />
                             <ReferenceLine 
-                              y={50} 
+                              y={54} 
                               stroke="#4caf50" 
                               strokeDasharray="5 5" 
                               strokeWidth={2}
                               label={{ value: 'Safe', position: 'insideTopRight', fill: '#4caf50', fontSize: 10 }}
                             />
                             <ReferenceLine 
-                              y={150} 
+                              y={154} 
                               stroke="#f44336" 
                               strokeDasharray="5 5" 
                               strokeWidth={2}
