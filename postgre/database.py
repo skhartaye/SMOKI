@@ -18,10 +18,13 @@ def init_db_pool():
     """Initialize database (create tables)"""
     try:
         print("Initializing database...")
+        print(f"Connecting to: {os.getenv('DB_HOST', 'localhost')}:{os.getenv('DB_PORT', '5432')}")
         create_tables()
-        print("Database initialized successfully")
+        print("✓ Database initialized successfully")
     except Exception as e:
-        print(f"Error initializing database: {e}")
+        print(f"✗ Error initializing database: {e}")
+        print("WARNING: Database initialization failed. Some features may not work.")
+        # Don't raise - allow app to start anyway
 
 def create_tables():
     """Create necessary tables if they don't exist"""
