@@ -1,9 +1,9 @@
 from fastapi import FastAPI, HTTPException, Depends
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime, timezone, timedelta
 import sys
 import psycopg
+import os
 sys.path.append('..')
 from postgre.database import init_db_pool, insert_sensor_data, get_latest_sensor_data, update_sensor_data, delete_sensor_data, close_db_pool
 from auth import (
@@ -14,21 +14,6 @@ from auth import (
 from vehicles import router as vehicles_router
 
 app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "https://smoki.aeroband.org",  # Your production domain
-        "https://*.onrender.com",  # Allow all Render domains
-    ],
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
-    allow_credentials=True,
-    max_age=3600
-)
 
 # Include routers
 app.include_router(vehicles_router)
@@ -87,7 +72,12 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 @app.get("/api/hello")
 def read_root():
-    return {"message": "Hello from FastAPI!"}
+    return {"message": "Hello from FastAPI!", "status": "ok"}
+
+@app.options("/{full_path:path}")
+async def preflight_handler(full_path: str):
+    """Handle CORS preflight requests"""
+    return {"status": "ok"}
 
 @app.get("/api/health")
 def health_check():
