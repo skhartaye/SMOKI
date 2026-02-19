@@ -18,7 +18,10 @@ load_dotenv()
 # JWT Configuration
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
-    raise ValueError("SECRET_KEY environment variable is not set. Please set it in .env file.")
+    # For development/testing only - in production, always set SECRET_KEY
+    import secrets
+    SECRET_KEY = secrets.token_urlsafe(32)
+    print("⚠️  WARNING: Using generated SECRET_KEY. In production, set SECRET_KEY environment variable!")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 
