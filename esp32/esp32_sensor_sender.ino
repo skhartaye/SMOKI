@@ -233,6 +233,7 @@ void postSensorData() {
   doc["carbon_monoxide"] = round(co * 1000) / 1000.0;
   doc["pm25"] = pmsData.valid ? round(pmsData.pm25 * 10) / 10.0 : 0;
   doc["pm10"] = pmsData.valid ? round(pmsData.pm10 * 10) / 10.0 : 0;
+  doc["pressure"] = round(pressure * 100) / 100.0;  // Atmospheric pressure in hPa
   
   // Serialize
   char buffer[256];
@@ -243,7 +244,8 @@ void postSensorData() {
   Serial.printf("🌡️  Temp: %.1f°C\n", temp);
   Serial.printf("💧 Humidity: %.1f%%\n", humidity);
   Serial.printf("🌫️  VOCs: %.1f kΩ\n", voc);
-  Serial.printf("💨 NO2: %.3f PPM\n", no2);
+  Serial.printf("� Pressure: %.2f hPa\n", pressure);
+  Serial.printf("�💨 NO2: %.3f PPM\n", no2);
   Serial.printf("🔥 CO: %.3f PPM\n", co);
   Serial.printf("⚫ PM2.5: %.1f µg/m³ %s\n", pmsData.pm25, pmsData.valid ? "✓" : "⚠️");
   Serial.printf("⚫ PM10: %.1f µg/m³ %s\n", pmsData.pm10, pmsData.valid ? "✓" : "⚠️");
