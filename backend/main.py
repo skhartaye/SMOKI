@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime, timezone, timedelta
 import sys
+import psycopg
 sys.path.append('..')
 from postgre.database import init_db_pool, insert_sensor_data, get_latest_sensor_data, update_sensor_data, delete_sensor_data, close_db_pool
 from auth import (
@@ -20,6 +21,7 @@ app.add_middleware(
         "http://localhost:3000",
         "http://localhost:5173",
         "http://localhost:5174",
+        "https://*.onrender.com",  # Allow all Render domains
     ],
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Content-Type", "Authorization"],
@@ -85,6 +87,17 @@ def get_me(current_user: User = Depends(get_current_user)):
 @app.get("/api/hello")
 def read_root():
     return {"message": "Hello from FastAPI!"}
+
+@app.get("/api/health")
+def health_check():
+    """Health check endpoint"""
+    try:
+        with psycopg.connect(get_connection_string()) as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT 1")
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        return {"status": "unhealthy", "database": "disconnected", "error": str(e)}
 
 @app.get("/api/time")
 def get_server_time():
