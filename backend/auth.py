@@ -6,12 +6,19 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import sys
+import os
+from dotenv import load_dotenv
 sys.path.append('..')
 from postgre.database import get_connection_string
 import psycopg
 
+# Load environment variables
+load_dotenv()
+
 # JWT Configuration
-SECRET_KEY = "your-secret-key-change-this-in-production"  # Change this in production!
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY environment variable is not set. Please set it in .env file.")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 
