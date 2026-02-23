@@ -127,6 +127,47 @@ def create_tables():
                     );
                 """)
                 
+                # Create images table for storing image data
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS images (
+                        id SERIAL PRIMARY KEY,
+                        vehicle_detection_id INT REFERENCES vehicle_detections(id) ON DELETE CASCADE,
+                        violation_id INT REFERENCES violations(id) ON DELETE SET NULL,
+                        image_data BYTEA NOT NULL,
+                        image_format VARCHAR(20),
+                        file_size INT,
+                        width INT,
+                        height INT,
+                        timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
+                
+                # Create image_metadata table for storing image metadata
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS image_metadata (
+                        id SERIAL PRIMARY KEY,
+                        image_id INT REFERENCES images(id) ON DELETE CASCADE,
+                        camera_id VARCHAR(100),
+                        camera_location VARCHAR(255),
+                        exposure_time FLOAT,
+                        iso_speed INT,
+                        focal_length FLOAT,
+                        aperture FLOAT,
+                        white_balance VARCHAR(50),
+                        flash_used BOOLEAN,
+                        gps_latitude FLOAT,
+                        gps_longitude FLOAT,
+                        gps_altitude FLOAT,
+                        device_model VARCHAR(255),
+                        software_version VARCHAR(100),
+                        processing_time_ms INT,
+                        quality_score FLOAT,
+                        additional_data JSONB,
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
+                
                 # Create indexes for faster queries
                 cursor.execute("""
                     CREATE INDEX IF NOT EXISTS idx_sensor_timestamp 
@@ -166,6 +207,31 @@ def create_tables():
                 cursor.execute("""
                     CREATE INDEX IF NOT EXISTS idx_notifications_timestamp 
                     ON notifications(timestamp);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_images_vehicle_detection_id 
+                    ON images(vehicle_detection_id);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_images_violation_id 
+                    ON images(violation_id);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_images_timestamp 
+                    ON images(timestamp);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_image_metadata_image_id 
+                    ON image_metadata(image_id);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_image_metadata_camera_id 
+                    ON image_metadata(camera_id);
                 """)
                 
                 conn.commit()
@@ -517,3 +583,239 @@ def mark_notification_read(notification_id):
 def close_db_pool():
     """Close database connections"""
     print("Database connections closed")
+
+# ============ IMAGE FUNCTIONS ============
+
+def insert_image(vehicle_detection_id, image_data, image_format="jpeg", 
+                 file_size=None, width=None, height=None, violation_id=None):
+    """Insert an image into the database"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO images 
+                    (vehicle_detection_id, violation_id, image_data, image_format, file_size, width, height)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id, timestamp;
+                """, (vehicle_detection_id, violation_id, image_data, image_format, file_size, width, height))
+                
+                result = cursor.fetchone()
+                conn.commit()
+                return {"id": result[0], "timestamp": result[1]}
+        except Exception as e:
+            print(f"Error inserting image: {e}")
+            conn.rollback()
+            return None
+
+def get_image(image_id):
+    """Retrieve image data by ID"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, image_data, image_format, file_size, width, height, timestamp
+                    FROM images
+                    WHERE id = %s;
+                """, (image_id,))
+                
+                result = cursor.fetchone()
+                if result:
+                    return {
+                        "id": result[0],
+                        "image_data": result[1],
+                        "image_format": result[2],
+                        "file_size": result[3],
+                        "width": result[4],
+                        "height": result[5],
+                        "timestamp": result[6]
+                    }
+                return None
+        except Exception as e:
+            print(f"Error retrieving image: {e}")
+            return None
+
+def get_images_by_detection(vehicle_detection_id):
+    """Get all images for a vehicle detection"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, image_format, file_size, width, height, timestamp
+                    FROM images
+                    WHERE vehicle_detection_id = %s
+                    ORDER BY timestamp DESC;
+                """, (vehicle_detection_id,))
+                
+                columns = ['id', 'image_format', 'file_size', 'width', 'height', 'timestamp']
+                results = []
+                for row in cursor.fetchall():
+                    results.append(dict(zip(columns, row)))
+                return results
+        except Exception as e:
+            print(f"Error fetching images by detection: {e}")
+            return []
+
+def get_images_by_violation(violation_id):
+    """Get all images for a violation"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, image_format, file_size, width, height, timestamp
+                    FROM images
+                    WHERE violation_id = %s
+                    ORDER BY timestamp DESC;
+                """, (violation_id,))
+                
+                columns = ['id', 'image_format', 'file_size', 'width', 'height', 'timestamp']
+                results = []
+                for row in cursor.fetchall():
+                    results.append(dict(zip(columns, row)))
+                return results
+        except Exception as e:
+            print(f"Error fetching images by violation: {e}")
+            return []
+
+def delete_image(image_id):
+    """Delete an image"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    DELETE FROM images
+                    WHERE id = %s
+                    RETURNING id;
+                """, (image_id,))
+                
+                result = cursor.fetchone()
+                conn.commit()
+                return result is not None
+        except Exception as e:
+            print(f"Error deleting image: {e}")
+            conn.rollback()
+            return False
+
+# ============ IMAGE METADATA FUNCTIONS ============
+
+def insert_image_metadata(image_id, camera_id=None, camera_location=None, 
+                         exposure_time=None, iso_speed=None, focal_length=None,
+                         aperture=None, white_balance=None, flash_used=None,
+                         gps_latitude=None, gps_longitude=None, gps_altitude=None,
+                         device_model=None, software_version=None, 
+                         processing_time_ms=None, quality_score=None, additional_data=None):
+    """Insert image metadata"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO image_metadata 
+                    (image_id, camera_id, camera_location, exposure_time, iso_speed, focal_length,
+                     aperture, white_balance, flash_used, gps_latitude, gps_longitude, gps_altitude,
+                     device_model, software_version, processing_time_ms, quality_score, additional_data)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id;
+                """, (image_id, camera_id, camera_location, exposure_time, iso_speed, focal_length,
+                      aperture, white_balance, flash_used, gps_latitude, gps_longitude, gps_altitude,
+                      device_model, software_version, processing_time_ms, quality_score, additional_data))
+                
+                result = cursor.fetchone()
+                conn.commit()
+                return {"id": result[0]}
+        except Exception as e:
+            print(f"Error inserting image metadata: {e}")
+            conn.rollback()
+            return None
+
+def get_image_metadata(image_id):
+    """Get metadata for an image"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, camera_id, camera_location, exposure_time, iso_speed, focal_length,
+                           aperture, white_balance, flash_used, gps_latitude, gps_longitude, gps_altitude,
+                           device_model, software_version, processing_time_ms, quality_score, additional_data
+                    FROM image_metadata
+                    WHERE image_id = %s;
+                """, (image_id,))
+                
+                result = cursor.fetchone()
+                if result:
+                    return {
+                        "id": result[0],
+                        "camera_id": result[1],
+                        "camera_location": result[2],
+                        "exposure_time": result[3],
+                        "iso_speed": result[4],
+                        "focal_length": result[5],
+                        "aperture": result[6],
+                        "white_balance": result[7],
+                        "flash_used": result[8],
+                        "gps_latitude": result[9],
+                        "gps_longitude": result[10],
+                        "gps_altitude": result[11],
+                        "device_model": result[12],
+                        "software_version": result[13],
+                        "processing_time_ms": result[14],
+                        "quality_score": result[15],
+                        "additional_data": result[16]
+                    }
+                return None
+        except Exception as e:
+            print(f"Error fetching image metadata: {e}")
+            return None
+
+def update_image_metadata(metadata_id, **kwargs):
+    """Update image metadata fields"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                # Build dynamic update query
+                set_clauses = []
+                values = []
+                for key, value in kwargs.items():
+                    set_clauses.append(f"{key} = %s")
+                    values.append(value)
+                
+                values.append(metadata_id)
+                
+                query = f"""
+                    UPDATE image_metadata
+                    SET {', '.join(set_clauses)}
+                    WHERE id = %s
+                    RETURNING id;
+                """
+                
+                cursor.execute(query, values)
+                result = cursor.fetchone()
+                conn.commit()
+                return result is not None
+        except Exception as e:
+            print(f"Error updating image metadata: {e}")
+            conn.rollback()
+            return False
+
+def get_metadata_by_camera(camera_id, limit=50):
+    """Get all metadata for a specific camera"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT im.id, im.image_id, im.camera_location, im.processing_time_ms, 
+                           im.quality_score, im.created_at
+                    FROM image_metadata im
+                    WHERE im.camera_id = %s
+                    ORDER BY im.created_at DESC
+                    LIMIT %s;
+                """, (camera_id, limit))
+                
+                columns = ['id', 'image_id', 'camera_location', 'processing_time_ms', 
+                           'quality_score', 'created_at']
+                results = []
+                for row in cursor.fetchall():
+                    results.append(dict(zip(columns, row)))
+                return results
+        except Exception as e:
+            print(f"Error fetching metadata by camera: {e}")
+            return []
+
