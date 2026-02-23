@@ -584,6 +584,40 @@ def close_db_pool():
     """Close database connections"""
     print("Database connections closed")
 
+# ============ USER MANAGEMENT ============
+
+def create_default_users():
+    """Create default admin and superadmin users if they don't exist"""
+    from backend.auth import get_password_hash
+    
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                # Check if admin exists
+                cursor.execute("SELECT id FROM users WHERE username = %s", ("admin1234",))
+                if not cursor.fetchone():
+                    admin_hash = get_password_hash("superadmin")
+                    cursor.execute("""
+                        INSERT INTO users (username, hashed_password, role, full_name)
+                        VALUES (%s, %s, %s, %s)
+                    """, ("admin1234", admin_hash, "admin", "Admin User"))
+                    print("✓ Created admin user: admin1234")
+                
+                # Check if superadmin exists
+                cursor.execute("SELECT id FROM users WHERE username = %s", ("superadmin",))
+                if not cursor.fetchone():
+                    superadmin_hash = get_password_hash("superadmin123")
+                    cursor.execute("""
+                        INSERT INTO users (username, hashed_password, role, full_name)
+                        VALUES (%s, %s, %s, %s)
+                    """, ("superadmin", superadmin_hash, "superadmin", "Superadmin User"))
+                    print("✓ Created superadmin user: superadmin")
+                
+                conn.commit()
+        except Exception as e:
+            print(f"Error creating default users: {e}")
+            conn.rollback()
+
 # ============ IMAGE FUNCTIONS ============
 
 def insert_image(vehicle_detection_id, image_data, image_format="jpeg", 
