@@ -11,19 +11,13 @@ import hailo_platform as hp
 import numpy as np
 import cv2
 import time
-import subprocess
 import os
-import shutil
-import threading
 import requests
 from picamera2 import Picamera2
-from http.server import SimpleHTTPRequestHandler, HTTPServer
-from socketserver import ThreadingMixIn
 from datetime import datetime
 
 # ─── CONFIGURATION ───────────────────────────────────────────────────────────
 HEF_PATH = r'/home/sevi/smoki_project/models/smoki_model_v1.hef'
-HLS_DIR = '/dev/shm/hls'  # RAM disk for ultra-low latency
 CONF_THRESH = 0.25
 IOU_THRESH = 0.45
 CLASS_NAMES = ['passenger', 'puv', 'service', 'two_wheel', 
@@ -33,25 +27,6 @@ CLASS_NAMES = ['passenger', 'puv', 'service', 'two_wheel',
 RENDER_BACKEND_URL = os.getenv('API_URL', 'https://smoki-backend-rpi.onrender.com')
 CAMERA_ID = os.getenv('DEVICE_ID', 'cam_001')
 SEND_DETECTIONS = os.getenv('SEND_DETECTIONS', 'true').lower() == 'true'
-
-# Clean up and prepare RAM disk directory
-if os.path.exists(HLS_DIR):
-    shutil.rmtree(HLS_DIR)
-os.makedirs(HLS_DIR, exist_ok=True)
-
-# ─── HLS SERVER ──────────────────────────────────────────────────────────────
-
-class HLSHandler(SimpleHTTPRequestHandler):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=HLS_DIR, **kwargs)
-    
-    def log_message(self, format, *args):
-        # Suppress verbose logging
-        pass
-
-class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    allow_reuse_address = True
-    daemon_threads = True
 
 # ─── HELPERS ─────────────────────────────────────────────────────────────────
 
@@ -103,37 +78,7 @@ def nms(boxes, scores, thresh):
         order = order[1:][ovr < thresh]
     return keep
 
-# ─── ULTRA-LOW-LATENCY FFmpeg ENCODER ────────────────────────────────────────
-
-def start_ffmpeg(w, h, fps=20, bitrate='1200k'):
-    """
-    Start FFmpeg with ultra-low latency settings
-    - libx264 with zerolatency preset
-    - 1-second segments for minimal buffering
-    - fmp4 format for faster parsing
-    """
-    cmd = [
-        'ffmpeg', '-y',
-        '-f', 'rawvideo', '-vcodec', 'rawvideo',
-        '-pix_fmt', 'bgr24', '-s', f'{w}x{h}', '-r', str(fps),
-        '-i', '-',
-        '-c:v', 'libx264',
-        '-preset', 'ultrafast',
-        '-tune', 'zerolatency',
-        '-b:v', bitrate,
-        '-maxrate', f'{int(int(bitrate.rstrip("k")) * 1.25)}k',
-        '-bufsize', f'{int(int(bitrate.rstrip("k")) * 2.5)}k',
-        '-g', '10',  # Keyframe every 10 frames (0.5 sec @ 20fps)
-        '-hls_time', '1',
-        '-hls_list_size', '2',
-        '-hls_segment_type', 'fmp4',
-        '-hls_flags', 'delete_segments+append_list+independent_segments',
-        '-f', 'hls',
-        os.path.join(HLS_DIR, 'stream.m3u8')
-    ]
-    return subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
-
-# ─── DETECTION SENDER ────────────────────────────────────────────────────────
+# ─── FRAME & DETECTION SENDER ───────────────────────────────────────────────
 
 def send_frame_to_backend(frame_rgb):
     """Send frame to Render backend for HLS streaming"""
@@ -198,8 +143,6 @@ def run_inference():
     picam2.configure(config)
     picam2.start()
 
-    ffmpeg_proc = start_ffmpeg(640, 480, fps=20, bitrate='1200k')
-
     with hp.VDevice() as target:
         hef = hp.HEF(HEF_PATH)
         network_group = target.configure(
@@ -217,10 +160,9 @@ def run_inference():
         )
 
         with network_group.activate(), hp.InferVStreams(network_group, in_params, out_params) as vstreams:
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] Ultra-Low-Latency HLS Active")
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] URL: http://localhost:8000/stream.m3u8")
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] RPi Camera Streaming to Render")
             if SEND_DETECTIONS:
-                print(f"[{datetime.now().strftime('%H:%M:%S')}] Sending detections to: {RENDER_BACKEND_URL}")
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] Sending frames & detections to: {RENDER_BACKEND_URL}")
 
             frame_count = 0
             start_time = time.time()
@@ -268,12 +210,8 @@ def run_inference():
                     # Send frame to Render for HLS streaming
                     send_frame_to_backend(vis_frame)
 
-                    # 6. Push to Stream
-                    try:
-                        ffmpeg_proc.stdin.write(vis_frame.tobytes())
-                    except BrokenPipeError:
-                        print("FFmpeg pipe broken, restarting...")
-                        ffmpeg_proc = start_ffmpeg(640, 480, fps=20, bitrate='1200k')
+                    # Send frame to Render for HLS streaming
+                    send_frame_to_backend(vis_frame)
                     
                     # Performance Monitor
                     frame_count += 1
@@ -288,13 +226,6 @@ def run_inference():
                     time.sleep(0.1)
 
 if __name__ == '__main__':
-    # Start HLS File Server
-    server_thread = threading.Thread(
-        target=lambda: ThreadedHTTPServer(('0.0.0.0', 8000), HLSHandler).serve_forever(),
-        daemon=True
-    )
-    server_thread.start()
-    
     try:
         run_inference()
     except KeyboardInterrupt:
