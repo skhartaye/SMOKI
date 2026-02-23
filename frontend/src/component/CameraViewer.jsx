@@ -14,7 +14,7 @@ function CameraViewer() {
   const detectionIntervalRef = useRef(null);
 
   const API_URL = import.meta.env.VITE_API_URL || 'https://smoki-backend-rpi.onrender.com';
-  const RPi_STREAM_URL = 'http://192.168.1.100:8000/stream.m3u8';
+  const RPi_STREAM_URL = `${API_URL}/api/stream/playlist.m3u8`;
   const token = localStorage.getItem('token');
 
   // Check camera health on mount

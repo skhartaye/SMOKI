@@ -135,6 +135,27 @@ def start_ffmpeg(w, h, fps=20, bitrate='1200k'):
 
 # ─── DETECTION SENDER ────────────────────────────────────────────────────────
 
+def send_frame_to_backend(frame_rgb):
+    """Send frame to Render backend for HLS streaming"""
+    if not SEND_DETECTIONS:
+        return
+    
+    try:
+        # Encode frame to JPEG
+        _, buffer = cv2.imencode('.jpg', cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR))
+        frame_bytes = buffer.tobytes()
+        
+        files = {'frame': ('frame.jpg', frame_bytes, 'image/jpeg')}
+        requests.post(
+            f'{RENDER_BACKEND_URL}/api/stream/frame',
+            files=files,
+            timeout=5
+        )
+    except requests.exceptions.Timeout:
+        pass  # Silent timeout
+    except Exception as e:
+        pass  # Silent error
+
 def send_detection(boxes, scores, classes, frame_rgb):
     """Send detection results to backend"""
     if not SEND_DETECTIONS or len(boxes) == 0:
@@ -160,12 +181,12 @@ def send_detection(boxes, scores, classes, frame_rgb):
         requests.post(
             f'{RENDER_BACKEND_URL}/api/camera/detections',
             json=payload,
-            timeout=10  # Increased timeout for Render cold starts
+            timeout=10
         )
     except requests.exceptions.Timeout:
-        print(f"Detection send timeout (Render may be cold starting)")
+        pass
     except Exception as e:
-        print(f"Detection send error: {e}")
+        pass
 
 # ─── MAIN PIPELINE ───────────────────────────────────────────────────────────
 
@@ -243,6 +264,9 @@ def run_inference():
                         
                         # Send detections to backend
                         send_detection(boxes[keep], scores[keep], classes[keep], frame_rgb)
+                    
+                    # Send frame to Render for HLS streaming
+                    send_frame_to_backend(vis_frame)
 
                     # 6. Push to Stream
                     try:
