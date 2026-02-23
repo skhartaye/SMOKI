@@ -116,6 +116,19 @@ def camera_detections_post():
     """Receive detections from RPi (no auth required)"""
     return {"success": True}
 
+@app.get("/api/vehicles/detections")
+def get_vehicle_detections(limit: int = 10, current_user: User = Depends(get_current_user)):
+    """Get recent vehicle detections"""
+    try:
+        from vehicles import get_recent_violations
+        violations = get_recent_violations(limit)
+        return {
+            "success": True,
+            "data": violations
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/time")
 def get_server_time():
     """Get server time for debugging timezone issues"""

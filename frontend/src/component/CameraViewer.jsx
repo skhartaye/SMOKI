@@ -80,7 +80,7 @@ function CameraViewer() {
   const startDetectionPolling = () => {
     detectionIntervalRef.current = setInterval(async () => {
       try {
-        const response = await fetch(`${API_URL}/api/camera/detections`, {
+        const response = await fetch(`${API_URL}/api/vehicles/detections`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -88,8 +88,8 @@ function CameraViewer() {
 
         if (response.ok) {
           const data = await response.json();
-          if (data.success && data.data.detections) {
-            setDetections(data.data.detections);
+          if (data.success && data.data) {
+            setDetections(data.data);
           }
         }
       } catch (err) {
