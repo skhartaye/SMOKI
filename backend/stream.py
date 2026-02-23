@@ -36,7 +36,6 @@ class HLSStreamManager:
     def add_frame(self, frame_data: bytes):
         """Add frame to buffer"""
         try:
-            # Store raw frame data
             with self.lock:
                 self.frame_buffer.append(frame_data)
                 self.frame_count += 1
