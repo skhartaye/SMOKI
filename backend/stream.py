@@ -5,8 +5,6 @@ Handles frame reception and HLS segment generation
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
-import cv2
-import numpy as np
 from collections import deque
 from datetime import datetime
 import threading
@@ -38,15 +36,9 @@ class HLSStreamManager:
     def add_frame(self, frame_data: bytes):
         """Add frame to buffer"""
         try:
-            # Decode frame
-            nparr = np.frombuffer(frame_data, np.uint8)
-            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            
-            if frame is None:
-                return False
-            
+            # Store raw frame data
             with self.lock:
-                self.frame_buffer.append(frame)
+                self.frame_buffer.append(frame_data)
                 self.frame_count += 1
                 
                 # Calculate FPS
@@ -69,32 +61,18 @@ class HLSStreamManager:
                     return None
                 
                 # Get frames for this segment
-                frames_needed = max(1, int(self.fps * HLS_SEGMENT_DURATION / 10))
-                segment_frames = list(self.frame_buffer)[-frames_needed:]
+                segment_frames = list(self.frame_buffer)[-10:]  # Last 10 frames
             
             if not segment_frames:
                 return None
             
-            # Create video segment
+            # Create segment file with raw frame data
             segment_path = self.temp_dir / f"segment_{self.segment_index}.ts"
             
-            # Use first frame dimensions
-            height, width = segment_frames[0].shape[:2]
-            
-            # Create video writer
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            out = cv2.VideoWriter(
-                str(segment_path),
-                fourcc,
-                max(self.fps, 15),  # Ensure minimum FPS
-                (width, height)
-            )
-            
-            # Write frames
-            for frame in segment_frames:
-                out.write(frame)
-            
-            out.release()
+            # Write raw frame data
+            with open(segment_path, 'wb') as f:
+                for frame_data in segment_frames:
+                    f.write(frame_data)
             
             # Store segment info
             with self.lock:
