@@ -12,6 +12,7 @@ import { EditIcon, DeleteIcon, PlusIcon } from './component/IOSIcons';
 import ConfirmModal from './component/ConfirmModal';
 import SensorDetailModal from './component/SensorDetailModal';
 import TriangleLoader from './component/TriangleLoader';
+import CameraViewer from './component/CameraViewer';
 
 function Dashboard() {
   const [activePage, setActivePage] = useState("dashboard");
@@ -800,6 +801,10 @@ function Dashboard() {
     return filtered;
   };
 
+  const getChartHeight = () => {
+    return isMobile ? '220px' : '280px';
+  };
+
   return (
     <div className={`dashboard ${darkMode ? 'dark-mode' : ''}`}>
       <Toast />
@@ -984,11 +989,7 @@ function Dashboard() {
               )}
               
               <div className="camera-feed-container">
-                <div className="camera-feed">
-                  <div className="camera-placeholder">
-                    CAMERA FEED
-                  </div>
-                </div>
+                <CameraViewer />
               </div>
 
               {/* Top Violators Section */}
@@ -1543,7 +1544,7 @@ function Dashboard() {
                           {appliedSensorTypes.co && <th>CO (PPM)</th>}
                           {appliedSensorTypes.pm25 && <th>PM2.5 (µg/m³)</th>}
                           {appliedSensorTypes.pm10 && <th>PM10 (µg/m³)</th>}
-                          <th>AQI</th>
+                          <th>AQI (PH BASED)</th>
                           <th>Status</th>
                           {userRole === 'superadmin' && (
                             <th>
@@ -2051,20 +2052,20 @@ function Dashboard() {
                         </div>
                         <h3><Zap size={20} /> Pressure</h3>
                       </div>
-                      <div style={{ width: '100%', height: '280px' }}>
+                      <div style={{ width: '100%', height: getChartHeight() }}>
                         <ResponsiveContainer debounce={300}>
                           <LineChart data={getFilteredGraphData()} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
                             <XAxis 
                               dataKey="time" 
                               stroke="#999" 
-                              tick={{ fontSize: 11, fill: '#999' }}
+                              tick={{ fontSize: isMobile ? 9 : 11, fill: '#999' }}
                               axisLine={false}
                               tickLine={false}
                             />
                             <YAxis 
                               stroke="#999" 
-                              tick={{ fontSize: 11, fill: '#999' }}
+                              tick={{ fontSize: isMobile ? 9 : 11, fill: '#999' }}
                               axisLine={false}
                               tickLine={false}
                               domain={['auto', 'auto']}

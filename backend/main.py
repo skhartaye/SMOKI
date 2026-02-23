@@ -1,22 +1,34 @@
 from fastapi import FastAPI, HTTPException, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime, timezone, timedelta
 import sys
 import psycopg
 import os
 sys.path.append('..')
-from postgre.database import init_db_pool, insert_sensor_data, get_latest_sensor_data, update_sensor_data, delete_sensor_data, close_db_pool
+from postgre.database import init_db_pool, insert_sensor_data, get_latest_sensor_data, update_sensor_data, delete_sensor_data, close_db_pool, get_connection_string
 from auth import (
     authenticate_user, create_access_token, get_current_user, 
     get_current_superadmin, get_current_admin_or_superadmin,
     Token, User, ACCESS_TOKEN_EXPIRE_MINUTES
 )
 from vehicles import router as vehicles_router
+from stream import router as stream_router
 
 app = FastAPI()
 
+# Enable CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Include routers
 app.include_router(vehicles_router)
+app.include_router(stream_router)
 
 # Initialize database on startup
 @app.on_event("startup")
@@ -84,6 +96,25 @@ def health_check():
         return {"status": "healthy", "database": "connected"}
     except Exception as e:
         return {"status": "unhealthy", "database": "disconnected", "error": str(e)}
+
+@app.get("/api/camera/health")
+def camera_health():
+    """Check camera health (no auth required)"""
+    return {
+        "status": "healthy",
+        "stream_url": "/api/stream/playlist.m3u8",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+@app.get("/api/camera/stream")
+def camera_stream():
+    """Redirect to HLS stream (no auth required)"""
+    return {"stream_url": "/api/stream/playlist.m3u8"}
+
+@app.post("/api/camera/detections")
+def camera_detections_post():
+    """Receive detections from RPi (no auth required)"""
+    return {"success": True}
 
 @app.get("/api/time")
 def get_server_time():
