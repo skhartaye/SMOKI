@@ -6,7 +6,7 @@ import sys
 import psycopg
 import os
 sys.path.append('..')
-from postgre.database import init_db_pool, insert_sensor_data, get_latest_sensor_data, update_sensor_data, delete_sensor_data, close_db_pool, get_connection_string
+from postgre.database import init_db_pool, insert_sensor_data, get_latest_sensor_data, update_sensor_data, delete_sensor_data, close_db_pool, get_connection_string, create_default_users
 from auth import (
     authenticate_user, create_access_token, get_current_user, 
     get_current_superadmin, get_current_admin_or_superadmin,
@@ -34,6 +34,7 @@ app.include_router(stream_router)
 @app.on_event("startup")
 async def startup_event():
     init_db_pool()
+    create_default_users()
 
 # Close database on shutdown
 @app.on_event("shutdown")
