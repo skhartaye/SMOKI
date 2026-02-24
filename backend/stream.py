@@ -1,12 +1,15 @@
 """
-Camera streaming module - serves latest frame as MJPEG
+Camera streaming module - serves HLS stream
 """
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from collections import deque
 import threading
 import time
+import os
+from pathlib import Path
 
 router = APIRouter(prefix="/api/stream", tags=["stream"])
 
@@ -44,14 +47,16 @@ class StreamManager:
             return self.latest_frame
     
     def get_mjpeg_stream(self):
-        """Generate MJPEG stream"""
+        """Generate MJPEG stream at 60 FPS"""
+        last_frame = None
         while True:
             frame = self.get_latest_frame()
-            if frame:
+            if frame and frame != last_frame:  # Only send if frame changed
+                last_frame = frame
                 yield (b'--frame\r\n'
                        b'Content-Type: image/jpeg\r\n'
                        b'Content-Length: ' + str(len(frame)).encode() + b'\r\n\r\n' + frame + b'\r\n')
-            time.sleep(0.05)  # ~20 FPS
+            time.sleep(0.0167)  # ~60 FPS (1/60 = 0.0167)
 
 # Global stream manager
 stream_manager = StreamManager()
@@ -87,6 +92,9 @@ async def get_mjpeg_stream():
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+    response.headers["Connection"] = "keep-alive"
     return response
 
 @router.get("/latest.jpg")
@@ -107,5 +115,21 @@ async def get_stream_status():
     return {
         "status": "active" if stream_manager.latest_frame else "idle",
         "fps": stream_manager.fps,
-        "buffered_frames": len(stream_manager.frame_buffer)
+        "buffered_frames": len(stream_manager.frame_buffer),
+        "latest_frame_size": len(stream_manager.latest_frame) if stream_manager.latest_frame else 0
+    }
+
+@router.get("/debug")
+async def debug_stream():
+    """Debug endpoint to check stream state"""
+    return {
+        "has_frames": stream_manager.latest_frame is not None,
+        "frame_size": len(stream_manager.latest_frame) if stream_manager.latest_frame else 0,
+        "buffer_size": len(stream_manager.frame_buffer),
+        "fps": stream_manager.fps,
+        "endpoints": {
+            "latest_frame": "/api/stream/latest.jpg",
+            "mjpeg_stream": "/api/stream/stream.mjpeg",
+            "status": "/api/stream/status"
+        }
     }

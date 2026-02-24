@@ -12,7 +12,7 @@ import { EditIcon, DeleteIcon, PlusIcon } from './component/IOSIcons';
 import ConfirmModal from './component/ConfirmModal';
 import SensorDetailModal from './component/SensorDetailModal';
 import TriangleLoader from './component/TriangleLoader';
-import CameraViewer from './component/CameraViewer';
+import WebRTCViewer from './component/WebRTCViewer';
 
 function Dashboard() {
   const [activePage, setActivePage] = useState("dashboard");
@@ -971,89 +971,79 @@ function Dashboard() {
       <main className="main-content">
           {activePage === "dashboard" && (
             <div className="dashboard-page-container">
-              {/* Conditionally render mobile OR desktop header */}
-              {isMobile ? (
-                <div className="dashboard-mobile-header">
-                  <p className="dashboard-date">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</p>
-                  <h1>Dashboard</h1>
-                  <p className="dashboard-subtitle">Smoke Emission monitoring overview</p>
-                </div>
-              ) : (
-                <div className="dashboard-header-section">
-                  <div className="dashboard-header-left">
-                    <h1>Dashboard</h1>
-                    <p className="dashboard-subtitle">Smoke Emission monitoring overview</p>
+              <div className="dashboard-layout">
+                <div className="dashboard-camera-section">
+                  <div className="camera-feed-box">
+                    <WebRTCViewer />
                   </div>
-                  <p className="dashboard-date">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</p>
                 </div>
-              )}
-              
-              <div className="camera-feed-container">
-                <CameraViewer />
-              </div>
-
-              {/* Top Violators Section */}
-              <div className="dashboard-section">
-                <div className="section-header">
-                  <h2>Top Violators</h2>
-                  <p className="section-subtitle">Vehicles with highest emissions</p>
-                </div>
-                <div className="violators-list">
-                  {topViolators.length > 0 ? (
-                    topViolators.map((violator, index) => (
-                      <div key={violator.id} className="violator-item">
-                        <div className="violator-rank">{index + 1}</div>
-                        <div className="violator-info">
-                          <div className="violator-name">{violator.license_plate}</div>
-                          <div className="violator-value">
-                            {violator.emission_level ? `Emission: ${violator.emission_level}` : 'No data'}
-                            {violator.smoke_detected && ' • Smoke Detected'}
+                
+                <div className="dashboard-violators-column">
+                  {/* Top Violators Section */}
+                  <div className="dashboard-section-compact">
+                    <div className="section-header-compact">
+                      <h2>Top Violators</h2>
+                      <p className="section-subtitle">Vehicles with highest emissions</p>
+                    </div>
+                    <div className="violators-list-compact">
+                      {topViolators.length > 0 ? (
+                        topViolators.map((violator, index) => (
+                          <div key={violator.id} className="violator-item-compact">
+                            <div className="violator-rank-compact">{index + 1}</div>
+                            <div className="violator-info-compact">
+                              <div className="violator-name-compact">{violator.license_plate}</div>
+                              <div className="violator-value-compact">
+                                {violator.emission_level ? `Emission: ${violator.emission_level}` : 'No data'}
+                              </div>
+                            </div>
+                            <div className={`violator-status-compact ${violator.violations > 15 ? 'danger' : violator.violations > 5 ? 'warning' : 'safe'}`}>
+                              {violator.violations > 15 ? 'Critical' : violator.violations > 5 ? 'Warning' : 'Safe'}
+                            </div>
                           </div>
+                        ))
+                      ) : (
+                        <div style={{ textAlign: 'center', color: '#999', padding: '20px', fontSize: '14px' }}>
+                          No violations recorded yet
                         </div>
-                        <div className={`violator-status ${violator.violations > 15 ? 'danger' : violator.violations > 5 ? 'warning' : 'safe'}`}>
-                          {violator.violations > 15 ? 'Critical' : violator.violations > 5 ? 'Warning' : 'Safe'}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div style={{ textAlign: 'center', color: '#999', padding: '20px' }}>
-                      No violations recorded yet
+                      )}
                     </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Violators Ranking Section */}
-              <div className="dashboard-section">
-                <div className="section-header">
-                  <h2>Violators Ranking</h2>
-                  <p className="section-subtitle">Vehicles by emission violations</p>
-                </div>
-                <div className="ranking-table">
-                  <div className="ranking-header">
-                    <div className="ranking-col rank">Rank</div>
-                    <div className="ranking-col name">Vehicle</div>
-                    <div className="ranking-col violations">Violations</div>
-                    <div className="ranking-col status">Status</div>
                   </div>
-                  {vehicleRanking.length > 0 ? (
-                    vehicleRanking.map((vehicle, index) => (
-                      <div key={vehicle.id} className="ranking-row">
-                        <div className="ranking-col rank">{index + 1}</div>
-                        <div className="ranking-col name">{vehicle.license_plate}</div>
-                        <div className="ranking-col violations">{vehicle.violations}</div>
-                        <div className="ranking-col status">
-                          <span className={`badge ${vehicle.violations > 15 ? 'critical' : vehicle.violations > 5 ? 'warning' : 'safe'}`}>
-                            {vehicle.violations > 15 ? 'Critical' : vehicle.violations > 5 ? 'Warning' : 'Safe'}
-                          </span>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div style={{ textAlign: 'center', color: '#999', padding: '20px' }}>
-                      No vehicles registered yet
+
+                  {/* Violators Ranking Section */}
+                  <div className="dashboard-section-compact">
+                    <div className="section-header-compact">
+                      <h2>Violators Ranking</h2>
+                      <p className="section-subtitle">Vehicles by emission violations</p>
                     </div>
-                  )}
+                    <div className="ranking-table-compact">
+                      <div className="ranking-header-compact">
+                        <div className="ranking-col-compact rank">Rank</div>
+                        <div className="ranking-col-compact name">Vehicle</div>
+                        <div className="ranking-col-compact violations">Violations</div>
+                        <div className="ranking-col-compact status">Status</div>
+                      </div>
+                      <div className="ranking-rows-compact">
+                        {vehicleRanking.length > 0 ? (
+                          vehicleRanking.map((vehicle, index) => (
+                            <div key={vehicle.id} className="ranking-row-compact">
+                              <div className="ranking-col-compact rank">{index + 1}</div>
+                              <div className="ranking-col-compact name">{vehicle.license_plate}</div>
+                              <div className="ranking-col-compact violations">{vehicle.violations}</div>
+                              <div className="ranking-col-compact status">
+                                <span className={`badge-compact ${vehicle.violations > 15 ? 'critical' : vehicle.violations > 5 ? 'warning' : 'safe'}`}>
+                                  {vehicle.violations > 15 ? 'Critical' : vehicle.violations > 5 ? 'Warning' : 'Safe'}
+                                </span>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div style={{ textAlign: 'center', color: '#999', padding: '20px', fontSize: '14px' }}>
+                            No vehicles registered yet
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1066,9 +1056,7 @@ function Dashboard() {
                 <div className="sensors-layout">
                   <div className="sensors-camera-section">
                     <div className="camera-feed-box">
-                      <div className="camera-placeholder">
-                        CAMERA FEED
-                      </div>
+                      <WebRTCViewer />
                     </div>
                   </div>
                   

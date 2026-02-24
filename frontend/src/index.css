@@ -66,3 +66,30 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 } */
+
+
+/* Disable zoom on all pages */
+html, body {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* Prevent pinch zoom on desktop */
+body {
+  overflow: hidden;
+}
+
+/* Disable double-tap zoom */
+input, button, textarea, select {
+  touch-action: manipulation;
+}
+
+/* Prevent zoom with keyboard shortcuts */
+@media (min-width: 1024px) {
+  html {
+    touch-action: none;
+  }
+}
