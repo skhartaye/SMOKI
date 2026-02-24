@@ -452,11 +452,39 @@ chatgpt-sidebar {
 .camera-feed-container {
   background: #e8e8e8;
   border-radius: 12px;
-  padding: 20px;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  min-height: 300px;
-  flex-shrink: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.camera-feed-container .camera-viewer {
+  padding: 0;
+  margin-bottom: 0;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 12px;
+  height: 100%;
+}
+
+.camera-feed-container .camera-header {
+  display: none;
+}
+
+.camera-feed-container .camera-controls {
+  display: none;
+}
+
+.camera-feed-container .detections-panel {
+  display: none;
+}
+
+.camera-feed-container .camera-stream-container {
+  margin-bottom: 0;
+  border-radius: 12px;
+  flex: 1;
+  aspect-ratio: auto;
 }
 
 .dashboard.dark-mode .camera-feed-container {
@@ -2357,50 +2385,53 @@ chatgpt-sidebar {
 /* New Sensors Page Layout */
 .sensors-page-container-new {
   padding: 40px;
-  height: 100vh;
-  overflow: hidden;
-  box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  gap: 24px;
+  height: 100vh;
+  overflow: hidden;
 }
 
-.sensors-layout {
-  display: flex;
-  gap: 24px;
-  height: calc(100vh - 80px);
+.sensors-page-container-new .dashboard-section {
+  flex: 1;
+  overflow-y: auto;
+  flex-shrink: 1;
 }
 
 .sensors-camera-section {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 0;
+  min-height: 0;
 }
 
-.camera-feed-box {
+.sensors-camera-section .camera-feed-box {
   flex: 1;
   background: white;
-  border-radius: 12px;
-  padding: 20px;
+  border-radius: 16px;
+  padding: 0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
 }
 
 .sensors-cards-column {
-  width: 350px;
+  width: 100%;
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
   padding-right: 8px;
+  align-content: start;
 }
 
 .sensor-card-compact {
   background: white;
-  border-radius: 16px;
-  padding: 20px;
+  border-radius: 12px;
+  padding: 14px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -2415,30 +2446,31 @@ chatgpt-sidebar {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .sensor-icon-small {
   color: #5b6b8d;
   opacity: 0.8;
+  font-size: 0.9em;
 }
 
 .sensor-card-compact-header h3 {
-  font-size: 1em;
+  font-size: 0.9em;
   font-weight: 600;
   color: #333;
   margin: 0;
 }
 
 .sensor-value-compact {
-  font-size: 2em;
+  font-size: 1.4em;
   font-weight: 700;
   color: #ff8c00;
-  margin: 8px 0;
+  margin: 6px 0;
 }
 
 .sensor-status-compact {
-  font-size: 0.75em;
+  font-size: 0.7em;
   color: #999;
 }
 
@@ -2581,14 +2613,15 @@ chatgpt-sidebar {
   
   .sensors-cards-column {
     max-height: calc(100vh - 440px);
+    grid-template-columns: 1fr;
   }
   
   .sensor-card-compact {
-    padding: 16px;
+    padding: 14px;
   }
   
   .sensor-value-compact {
-    font-size: 1.8em;
+    font-size: 1.4em;
   }
 }
 
@@ -2630,7 +2663,7 @@ chatgpt-sidebar {
   }
   
   .sensors-cards-column {
-    width: 350px;
+    width: 100%;
     max-height: calc(100vh - 120px);
   }
 }
@@ -2638,7 +2671,7 @@ chatgpt-sidebar {
 /* Large screens for sensors page */
 @media (min-width: 1600px) {
   .sensors-cards-column {
-    width: 400px;
+    width: 100%;
   }
   
   .sensor-card-compact {
@@ -3235,4 +3268,595 @@ chatgpt-sidebar {
 .bottom-nav-item:focus {
   outline: none !important;
   box-shadow: none !important;
+}
+
+
+/* Dashboard Layout - Two Column */
+.dashboard-layout {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 16px;
+  padding: 16px;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.dashboard-page-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+  gap: 0;
+}
+
+.dashboard-header-section {
+  padding: 20px 24px 0 24px;
+  flex-shrink: 0;
+}
+
+.dashboard-camera-section {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  flex-shrink: 0;
+}
+
+.camera-feed-box {
+  background: #fff;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.camera-placeholder {
+  background: #2a2a2a;
+  color: #666;
+  font-size: 28px;
+  font-weight: 600;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+}
+
+.dashboard-violators-column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 0 1 auto;
+}
+
+.dashboard-violators-column::-webkit-scrollbar {
+  width: 6px;
+}
+
+.dashboard-violators-column::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dashboard-violators-column::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.dashboard-section-compact {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  flex-shrink: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.section-header-compact {
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.section-header-compact h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+  color: #333;
+}
+
+.section-header-compact .section-subtitle {
+  font-size: 12px;
+  color: #999;
+  margin: 0;
+}
+
+.violators-list-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.violators-list-compact::-webkit-scrollbar {
+  width: 5px;
+}
+
+.violators-list-compact::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.violators-list-compact::-webkit-scrollbar-thumb {
+  background: #ddd;
+  border-radius: 3px;
+}
+
+.violator-item-compact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background: #f9f9f9;
+  border-radius: 8px;
+  border-left: 3px solid #2196f3;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.violator-rank-compact {
+  font-weight: 700;
+  font-size: 14px;
+  color: #2196f3;
+  min-width: 24px;
+  text-align: center;
+}
+
+.violator-info-compact {
+  flex: 1;
+  min-width: 0;
+}
+
+.violator-name-compact {
+  font-weight: 600;
+  font-size: 13px;
+  color: #333;
+  margin-bottom: 2px;
+}
+
+.violator-value-compact {
+  font-size: 11px;
+  color: #666;
+}
+
+.violator-status-compact {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.violator-status-compact.danger {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.violator-status-compact.warning {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.violator-status-compact.safe {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.ranking-table-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.ranking-header-compact {
+  display: grid;
+  grid-template-columns: 32px 1fr 55px 65px;
+  gap: 8px;
+  padding: 10px;
+  background: #f0f0f0;
+  border-radius: 6px 6px 0 0;
+  font-weight: 600;
+  font-size: 12px;
+  color: #666;
+  position: sticky;
+  top: 0;
+  flex-shrink: 0;
+}
+
+.ranking-rows-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.ranking-rows-compact::-webkit-scrollbar {
+  width: 5px;
+}
+
+.ranking-rows-compact::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ranking-rows-compact::-webkit-scrollbar-thumb {
+  background: #ddd;
+  border-radius: 3px;
+}
+
+.ranking-row-compact {
+  display: grid;
+  grid-template-columns: 32px 1fr 55px 65px;
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid #f0f0f0;
+  align-items: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.ranking-row-compact:last-child {
+  border-bottom: none;
+}
+
+.ranking-col-compact {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ranking-col-compact.rank {
+  font-weight: 600;
+  color: #2196f3;
+  text-align: center;
+}
+
+.ranking-col-compact.name {
+  color: #333;
+  font-weight: 500;
+}
+
+.ranking-col-compact.violations {
+  text-align: center;
+  color: #666;
+}
+
+.ranking-col-compact.status {
+  text-align: center;
+}
+
+.badge-compact {
+  display: inline-block;
+  padding: 3px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-compact.critical {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.badge-compact.warning {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.badge-compact.safe {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+/* Dark mode for new layout */
+.dashboard.dark-mode .dashboard-layout {
+  background-color: #0a0a0a;
+}
+
+.dashboard.dark-mode .camera-feed-box,
+.dashboard.dark-mode .dashboard-section-compact {
+  background: #1a1a1a;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.dashboard.dark-mode .section-header-compact h2 {
+  color: #e0e0e0;
+}
+
+.dashboard.dark-mode .section-header-compact .section-subtitle {
+  color: #888;
+}
+
+.dashboard.dark-mode .violator-item-compact {
+  background: #252525;
+  border-left-color: #42a5f5;
+}
+
+.dashboard.dark-mode .violator-name-compact {
+  color: #e0e0e0;
+}
+
+.dashboard.dark-mode .violator-value-compact {
+  color: #a0a0a0;
+}
+
+.dashboard.dark-mode .ranking-header-compact {
+  background: #252525;
+  color: #a0a0a0;
+}
+
+.dashboard.dark-mode .ranking-row-compact {
+  border-bottom-color: #252525;
+}
+
+.dashboard.dark-mode .ranking-col-compact.name {
+  color: #e0e0e0;
+}
+
+.dashboard.dark-mode .ranking-col-compact.violations {
+  color: #a0a0a0;
+}
+
+/* Mobile responsive */
+@media (max-width: 1024px) {
+  .dashboard-layout {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  
+  .dashboard-camera-section {
+    min-height: 300px;
+  }
+}
+
+
+/* Sensors Page Layout */
+.sensors-layout {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+  padding: 16px;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.sensors-page-container-new {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.sensors-camera-section {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  flex-shrink: 0;
+}
+
+.sensors-cards-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  padding-right: 8px;
+  min-height: 0;
+}
+
+.sensors-cards-column::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sensors-cards-column::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sensors-cards-column::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.sensor-card-compact {
+  background: #fff;
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+  flex-shrink: 0;
+}
+
+.sensor-card-compact:hover {
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12);
+  border-color: #2196f3;
+}
+
+.sensor-card-compact-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.sensor-icon-small {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #2196f3;
+  flex-shrink: 0;
+}
+
+.sensor-card-compact-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  color: #666;
+}
+
+.sensor-value-compact {
+  font-size: 22px;
+  font-weight: 700;
+  color: #ff9800;
+  margin-bottom: 6px;
+}
+
+.sensor-status-compact {
+  font-size: 12px;
+  color: #999;
+}
+
+.sensor-detail-view {
+  padding: 20px;
+}
+
+.back-button {
+  background: none;
+  border: none;
+  color: #2196f3;
+  font-size: 14px;
+  cursor: pointer;
+  margin-bottom: 20px;
+  padding: 0;
+  font-weight: 600;
+}
+
+.back-button:hover {
+  text-decoration: underline;
+}
+
+.sensors-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+/* Dark mode for sensors layout */
+.dashboard.dark-mode .sensors-layout {
+  background-color: #0a0a0a;
+}
+
+.dashboard.dark-mode .camera-feed-box {
+  background: #1a1a1a;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.dashboard.dark-mode .sensor-card-compact {
+  background: #1a1a1a;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.dashboard.dark-mode .sensor-card-compact:hover {
+  box-shadow: 0 4px 12px rgba(66, 165, 245, 0.2);
+  border-color: #42a5f5;
+}
+
+.dashboard.dark-mode .sensor-card-compact-header h3 {
+  color: #a0a0a0;
+}
+
+.dashboard.dark-mode .sensor-value-compact {
+  color: #ffb74d;
+}
+
+.dashboard.dark-mode .sensor-status-compact {
+  color: #666;
+}
+
+/* Mobile responsive for sensors */
+@media (max-width: 1024px) {
+  .sensors-layout {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  
+  .sensors-camera-section {
+    min-height: 300px;
+  }
+  
+  .sensors-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+}
+
+
+/* Sensors page camera styling */
+.sensors-camera-section .camera-viewer {
+  padding: 0 !important;
+  margin: 0 !important;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  height: 100% !important;
+  width: 100% !important;
+  flex: 1 !important;
+  min-height: 0;
+  gap: 0;
+}
+
+.sensors-camera-section .camera-stream-container {
+  margin-bottom: 0 !important;
+  border-radius: 0;
+  flex: 1 !important;
+  height: 100% !important;
+  width: 100% !important;
+  aspect-ratio: auto;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box;
+}
+
+.sensors-camera-section .camera-stream {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain;
+  display: block;
+  box-sizing: border-box;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+}
+
+.sensors-camera-section .camera-header {
+  display: none;
+}
+
+.sensors-camera-section .camera-controls {
+  display: none;
+}
+
+.sensors-camera-section .camera-error {
+  display: none;
+}
+
+.sensors-camera-section .detections-panel {
+  display: none;
 }

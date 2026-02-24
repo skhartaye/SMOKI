@@ -14,6 +14,7 @@ from auth import (
 )
 from vehicles import router as vehicles_router
 from stream import router as stream_router
+from webrtc_proxy import router as webrtc_router
 
 app = FastAPI()
 
@@ -42,6 +43,7 @@ async def add_stream_headers(request, call_next):
 # Include routers
 app.include_router(vehicles_router)
 app.include_router(stream_router)
+app.include_router(webrtc_router)
 
 # Initialize database on startup
 @app.on_event("startup")

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AlertCircle, Wifi, WifiOff, Play, Pause } from 'lucide-react';
+import { AlertCircle, Wifi, WifiOff, Play, Pause, Zap } from 'lucide-react';
 import '../styles/CameraViewer.css';
 
-function CameraViewer() {
+function WebRTCViewer() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [isHealthy, setIsHealthy] = useState(false);
   const [error, setError] = useState(null);
@@ -15,7 +15,6 @@ function CameraViewer() {
   const RPI_IP = import.meta.env.VITE_RPI_IP || '192.168.100.198';
   const token = localStorage.getItem('token');
 
-  // Check camera health on mount
   useEffect(() => {
     checkCameraHealth();
     const healthInterval = setInterval(checkCameraHealth, 10000);
@@ -25,7 +24,13 @@ function CameraViewer() {
     };
   }, []);
 
-  // Start/stop detection polling
+  // Autoplay stream when component mounts
+  useEffect(() => {
+    if (isHealthy && !isStreaming && !isLoading) {
+      startStream();
+    }
+  }, [isHealthy, isLoading]);
+
   useEffect(() => {
     if (isStreaming) {
       startDetectionPolling();
@@ -38,7 +43,6 @@ function CameraViewer() {
   const checkCameraHealth = async () => {
     try {
       const response = await fetch(`${API_URL}/api/camera/health`);
-
       if (response.ok) {
         setIsHealthy(true);
         setError(null);
@@ -174,7 +178,7 @@ function CameraViewer() {
       } catch (err) {
         console.error('Detection polling error:', err);
       }
-    }, 2000); // Poll every 2 seconds
+    }, 2000);
   };
 
   const stopDetectionPolling = () => {
@@ -187,7 +191,7 @@ function CameraViewer() {
   return (
     <div className="camera-viewer">
       <div className="camera-header">
-        <h2>Live Camera Feed</h2>
+        <h2>Live Camera Feed (HLS)</h2>
         <div className="camera-status">
           {isHealthy ? (
             <>
@@ -286,4 +290,4 @@ function CameraViewer() {
   );
 }
 
-export default CameraViewer;
+export default WebRTCViewer;
