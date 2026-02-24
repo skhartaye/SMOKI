@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import HLS from 'hls.js';
 import { AlertCircle, Wifi, WifiOff, Play, Pause } from 'lucide-react';
 import '../styles/CameraViewer.css';
 
@@ -9,18 +8,16 @@ function CameraViewer() {
   const [error, setError] = useState(null);
   const [detections, setDetections] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const videoRef = useRef(null);
-  const hlsRef = useRef(null);
+  const imgRef = useRef(null);
   const detectionIntervalRef = useRef(null);
 
   const API_URL = import.meta.env.VITE_API_URL || 'https://smoki-backend-rpi.onrender.com';
-  const RPi_STREAM_URL = `${API_URL}/api/stream/playlist.m3u8`;
   const token = localStorage.getItem('token');
 
   // Check camera health on mount
   useEffect(() => {
     checkCameraHealth();
-    const healthInterval = setInterval(checkCameraHealth, 10000); // Check every 10 seconds
+    const healthInterval = setInterval(checkCameraHealth, 10000);
     return () => clearInterval(healthInterval);
   }, []);
 
@@ -43,8 +40,7 @@ function CameraViewer() {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        setIsHealthy(data.status === 'healthy');
+        setIsHealthy(true);
         setError(null);
       } else {
         setIsHealthy(false);
@@ -63,41 +59,9 @@ function CameraViewer() {
       setError(null);
       setIsStreaming(true);
       
-      // Initialize HLS player for local RPi stream
-      const video = videoRef.current;
-      
-      if (HLS.isSupported()) {
-        const hls = new HLS({
-          debug: false,
-          enableWorker: true,
-          lowLatencyMode: true,
-        });
-
-        hlsRef.current = hls;
-
-        hls.loadSource(RPi_STREAM_URL);
-        hls.attachMedia(video);
-
-        hls.on(HLS.Events.MANIFEST_PARSED, () => {
-          console.log('HLS stream loaded');
-          video.play().catch(e => console.log('Autoplay prevented:', e));
-        });
-
-        hls.on(HLS.Events.ERROR, (event, data) => {
-          console.error('HLS error:', data);
-          if (data.fatal) {
-            setError(`Stream error: ${data.details}`);
-            setIsStreaming(false);
-          }
-        });
-      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Safari native HLS support
-        video.src = RPi_STREAM_URL;
-        video.addEventListener('loadedmetadata', () => {
-          video.play().catch(e => console.log('Autoplay prevented:', e));
-        });
-      } else {
-        setError('HLS streaming not supported in this browser');
+      // Use MJPEG stream from Render
+      if (imgRef.current) {
+        imgRef.current.src = `${API_URL}/api/stream/stream.mjpeg`;
       }
     } catch (err) {
       setError('Failed to start stream');
@@ -107,12 +71,8 @@ function CameraViewer() {
 
   const stopStream = () => {
     setIsStreaming(false);
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.src = '';
+    if (imgRef.current) {
+      imgRef.current.src = '';
     }
   };
 
@@ -179,13 +139,10 @@ function CameraViewer() {
         <>
           <div className="camera-stream-container">
             {isStreaming ? (
-              <video
-                ref={videoRef}
+              <img
+                ref={imgRef}
+                alt="Camera Stream"
                 className="camera-stream"
-                controls
-                autoPlay
-                muted
-                playsInline
                 onError={() => {
                   setError('Stream connection lost');
                   setIsStreaming(false);

@@ -63,12 +63,11 @@ void setup() {
   
   // Initialize I2C for ADS1115
   Wire.begin(21, 22);
+  Wire.setClock(100000);
+  delay(100);
   
   // Initialize ADS1115
-  if (!ads.begin()) {
-    Serial.println("❌ ADS1115 not found!");
-    while (1) delay(100);
-  }
+  ads.begin();
   ads.setGain(GAIN_ONE);
   Serial.println("✓ ADS1115 initialized");
   

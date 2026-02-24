@@ -81,25 +81,24 @@ def nms(boxes, scores, thresh):
 # ─── FRAME & DETECTION SENDER ───────────────────────────────────────────────
 
 def send_frame_to_backend(frame_rgb):
-    """Send frame to Render backend for HLS streaming"""
-    if not SEND_DETECTIONS:
-        return
-    
+    """Send frame to Render backend for streaming"""
     try:
         # Encode frame to JPEG
         _, buffer = cv2.imencode('.jpg', cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR))
         frame_bytes = buffer.tobytes()
         
         files = {'frame': ('frame.jpg', frame_bytes, 'image/jpeg')}
-        requests.post(
+        response = requests.post(
             f'{RENDER_BACKEND_URL}/api/stream/frame',
             files=files,
             timeout=5
         )
+        if response.status_code != 200:
+            print(f"Frame upload error: {response.status_code}")
     except requests.exceptions.Timeout:
-        pass  # Silent timeout
+        print("Frame upload timeout")
     except Exception as e:
-        pass  # Silent error
+        print(f"Frame upload error: {e}")
 
 def send_detection(boxes, scores, classes, frame_rgb):
     """Send detection results to backend"""
@@ -207,10 +206,7 @@ def run_inference():
                         # Send detections to backend
                         send_detection(boxes[keep], scores[keep], classes[keep], frame_rgb)
                     
-                    # Send frame to Render for HLS streaming
-                    send_frame_to_backend(vis_frame)
-
-                    # Send frame to Render for HLS streaming
+                    # Send frame to Render for streaming
                     send_frame_to_backend(vis_frame)
                     
                     # Performance Monitor
