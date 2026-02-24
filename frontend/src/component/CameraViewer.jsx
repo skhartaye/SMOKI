@@ -10,6 +10,8 @@ function CameraViewer() {
   const [isLoading, setIsLoading] = useState(true);
   const imgRef = useRef(null);
   const detectionIntervalRef = useRef(null);
+  const frameIntervalRef = useRef(null);
+  const isStreamingRef = useRef(false);
 
   const API_URL = import.meta.env.VITE_API_URL || 'https://smoki-backend-rpi.onrender.com';
   const token = localStorage.getItem('token');
@@ -18,7 +20,10 @@ function CameraViewer() {
   useEffect(() => {
     checkCameraHealth();
     const healthInterval = setInterval(checkCameraHealth, 10000);
-    return () => clearInterval(healthInterval);
+    return () => {
+      clearInterval(healthInterval);
+      stopStream();
+    };
   }, []);
 
   // Start/stop detection polling
@@ -54,10 +59,11 @@ function CameraViewer() {
     try {
       setError(null);
       setIsStreaming(true);
+      isStreamingRef.current = true;
       
-      // Continuously fetch latest frame
+      // Continuously fetch latest frame at higher rate for smooth video
       const frameInterval = setInterval(async () => {
-        if (!isStreaming) {
+        if (!isStreamingRef.current) {
           clearInterval(frameInterval);
           return;
         }
@@ -70,26 +76,33 @@ function CameraViewer() {
             if (imgRef.current) {
               imgRef.current.src = url;
             }
+          } else {
+            setError('Failed to fetch frame');
           }
         } catch (err) {
           console.error('Frame fetch error:', err);
+          setError('Stream connection lost');
         }
-      }, 100); // Update every 100ms (~10 FPS)
+      }, 50); // Update every 50ms (~20 FPS) - increased from 100ms
       
       // Store interval ID for cleanup
-      imgRef.current.frameInterval = frameInterval;
+      frameIntervalRef.current = frameInterval;
     } catch (err) {
+      console.error('Start stream error:', err);
       setError('Failed to start stream');
       setIsStreaming(false);
+      isStreamingRef.current = false;
     }
   };
 
   const stopStream = () => {
     setIsStreaming(false);
+    isStreamingRef.current = false;
+    if (frameIntervalRef.current) {
+      clearInterval(frameIntervalRef.current);
+      frameIntervalRef.current = null;
+    }
     if (imgRef.current) {
-      if (imgRef.current.frameInterval) {
-        clearInterval(imgRef.current.frameInterval);
-      }
       imgRef.current.src = '';
     }
   };

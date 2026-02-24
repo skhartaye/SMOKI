@@ -30,7 +30,7 @@ SEND_DETECTIONS = os.getenv('SEND_DETECTIONS', 'true').lower() == 'true'
 
 # ─── HELPERS ─────────────────────────────────────────────────────────────────
 
-def letterbox(img, size=640):
+def letterbox(img, size=480):  # Changed from 640 to 480
     h, w = img.shape[:2]
     r = size / max(h, w)
     new_w, new_h = int(w * r), int(h * r)
@@ -83,22 +83,28 @@ def nms(boxes, scores, thresh):
 def send_frame_to_backend(frame_rgb):
     """Send frame to Render backend for streaming"""
     try:
-        # Encode frame to JPEG
-        _, buffer = cv2.imencode('.jpg', cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR))
+        # Encode frame to JPEG with lower quality for faster upload
+        _, buffer = cv2.imencode('.jpg', cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 60])
         frame_bytes = buffer.tobytes()
         
         files = {'frame': ('frame.jpg', frame_bytes, 'image/jpeg')}
+        url = f'{RENDER_BACKEND_URL}/api/stream/frame'
+        
         response = requests.post(
-            f'{RENDER_BACKEND_URL}/api/stream/frame',
+            url,
             files=files,
-            timeout=5
+            timeout=10
         )
+        
         if response.status_code != 200:
-            print(f"Frame upload error: {response.status_code}")
+            print(f"[FRAME] Upload failed: {response.status_code}")
+            
     except requests.exceptions.Timeout:
-        print("Frame upload timeout")
+        print("[FRAME] Timeout")
+    except requests.exceptions.ConnectionError as e:
+        print(f"[FRAME] Connection error")
     except Exception as e:
-        print(f"Frame upload error: {e}")
+        print(f"[FRAME] Error: {e}")
 
 def send_detection(boxes, scores, classes, frame_rgb):
     """Send detection results to backend"""
@@ -134,10 +140,25 @@ def send_detection(boxes, scores, classes, frame_rgb):
 
 # ─── MAIN PIPELINE ───────────────────────────────────────────────────────────
 
+def test_backend_connectivity():
+    """Test if backend is reachable"""
+    try:
+        print(f"\n[TEST] Checking backend connectivity to {RENDER_BACKEND_URL}...")
+        response = requests.get(f'{RENDER_BACKEND_URL}/api/health', timeout=10)
+        if response.status_code == 200:
+            print(f"[TEST] ✓ Backend is reachable: {response.json()}")
+            return True
+        else:
+            print(f"[TEST] ✗ Backend returned {response.status_code}")
+            return False
+    except Exception as e:
+        print(f"[TEST] ✗ Cannot reach backend: {e}")
+        return False
+
 def run_inference():
     picam2 = Picamera2()
     config = picam2.create_video_configuration(
-        main={"format": "RGB888", "size": (640, 480)}
+        main={"format": "RGB888", "size": (480, 360)}  # Reduced from 640x480 for faster upload
     )
     picam2.configure(config)
     picam2.start()
@@ -219,10 +240,17 @@ def run_inference():
                 
                 except Exception as e:
                     print(f"Error in inference loop: {e}")
-                    time.sleep(0.1)
+                    time.sleep(0.01)
 
 if __name__ == '__main__':
     try:
+        # Test backend connectivity first
+        if not test_backend_connectivity():
+            print("\n⚠️  WARNING: Backend is not reachable. Frames will not be uploaded.")
+            print(f"Make sure RENDER_BACKEND_URL is set correctly: {RENDER_BACKEND_URL}")
+            print("You can set it with: export API_URL=https://your-backend-url.com")
+            input("Press Enter to continue anyway or Ctrl+C to exit...")
+        
         run_inference()
     except KeyboardInterrupt:
         print("\nStopping...")
