@@ -33,11 +33,7 @@ function CameraViewer() {
 
   const checkCameraHealth = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/camera/health`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await fetch(`${API_URL}/api/camera/health`);
 
       if (response.ok) {
         setIsHealthy(true);
@@ -61,7 +57,9 @@ function CameraViewer() {
       
       // Use MJPEG stream from Render
       if (imgRef.current) {
-        imgRef.current.src = `${API_URL}/api/stream/stream.mjpeg`;
+        // Add timestamp to bypass cache
+        const timestamp = new Date().getTime();
+        imgRef.current.src = `${API_URL}/api/stream/stream.mjpeg?t=${timestamp}`;
       }
     } catch (err) {
       setError('Failed to start stream');
@@ -79,7 +77,7 @@ function CameraViewer() {
   const startDetectionPolling = () => {
     detectionIntervalRef.current = setInterval(async () => {
       try {
-        const response = await fetch(`${API_URL}/api/vehicles/detections`, {
+        const response = await fetch(`${API_URL}/api/vehicles/violations/recent?limit=5`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
