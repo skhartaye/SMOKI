@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api/stream", tags=["stream"])
 class StreamManager:
     def __init__(self):
         self.latest_frame = None
-        self.frame_buffer = deque(maxlen=30)
+        self.frame_buffer = deque(maxlen=60)  # Increased from 30 to 60 frames
         self.lock = threading.Lock()
         self.fps = 0
         self.frame_count = 0

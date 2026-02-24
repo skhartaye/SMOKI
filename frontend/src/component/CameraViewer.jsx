@@ -61,12 +61,9 @@ function CameraViewer() {
       setIsStreaming(true);
       isStreamingRef.current = true;
       
-      // Continuously fetch latest frame at higher rate for smooth video
-      const frameInterval = setInterval(async () => {
-        if (!isStreamingRef.current) {
-          clearInterval(frameInterval);
-          return;
-        }
+      // Fetch frames as fast as possible without blocking
+      const fetchFrame = async () => {
+        if (!isStreamingRef.current) return;
         
         try {
           const response = await fetch(`${API_URL}/api/stream/latest.jpg`);
@@ -76,17 +73,20 @@ function CameraViewer() {
             if (imgRef.current) {
               imgRef.current.src = url;
             }
-          } else {
-            setError('Failed to fetch frame');
           }
         } catch (err) {
           console.error('Frame fetch error:', err);
-          setError('Stream connection lost');
         }
-      }, 50); // Update every 50ms (~20 FPS) - increased from 100ms
+        
+        // Schedule next frame immediately (non-blocking)
+        if (isStreamingRef.current) {
+          requestAnimationFrame(fetchFrame);
+        }
+      };
       
-      // Store interval ID for cleanup
-      frameIntervalRef.current = frameInterval;
+      // Start fetching frames
+      requestAnimationFrame(fetchFrame);
+      
     } catch (err) {
       console.error('Start stream error:', err);
       setError('Failed to start stream');
@@ -98,10 +98,6 @@ function CameraViewer() {
   const stopStream = () => {
     setIsStreaming(false);
     isStreamingRef.current = false;
-    if (frameIntervalRef.current) {
-      clearInterval(frameIntervalRef.current);
-      frameIntervalRef.current = null;
-    }
     if (imgRef.current) {
       imgRef.current.src = '';
     }
