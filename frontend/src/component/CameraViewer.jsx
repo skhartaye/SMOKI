@@ -55,12 +55,29 @@ function CameraViewer() {
       setError(null);
       setIsStreaming(true);
       
-      // Use MJPEG stream from Render
-      if (imgRef.current) {
-        // Add timestamp to bypass cache
-        const timestamp = new Date().getTime();
-        imgRef.current.src = `${API_URL}/api/stream/stream.mjpeg?t=${timestamp}`;
-      }
+      // Continuously fetch latest frame
+      const frameInterval = setInterval(async () => {
+        if (!isStreaming) {
+          clearInterval(frameInterval);
+          return;
+        }
+        
+        try {
+          const response = await fetch(`${API_URL}/api/stream/latest.jpg`);
+          if (response.ok) {
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            if (imgRef.current) {
+              imgRef.current.src = url;
+            }
+          }
+        } catch (err) {
+          console.error('Frame fetch error:', err);
+        }
+      }, 100); // Update every 100ms (~10 FPS)
+      
+      // Store interval ID for cleanup
+      imgRef.current.frameInterval = frameInterval;
     } catch (err) {
       setError('Failed to start stream');
       setIsStreaming(false);
@@ -70,6 +87,9 @@ function CameraViewer() {
   const stopStream = () => {
     setIsStreaming(false);
     if (imgRef.current) {
+      if (imgRef.current.frameInterval) {
+        clearInterval(imgRef.current.frameInterval);
+      }
       imgRef.current.src = '';
     }
   };
