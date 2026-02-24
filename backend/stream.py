@@ -80,10 +80,14 @@ async def receive_frame(frame: UploadFile = File(...)):
 @router.get("/stream.mjpeg")
 async def get_mjpeg_stream():
     """Get MJPEG stream"""
-    return StreamingResponse(
+    response = StreamingResponse(
         stream_manager.get_mjpeg_stream(),
         media_type="multipart/x-mixed-replace; boundary=frame"
     )
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 @router.get("/latest.jpg")
 async def get_latest_frame():
