@@ -674,31 +674,33 @@ function Dashboard() {
     setAppliedSensorTypes(defaultSensors);
     setFilterDate("all");
     setAppliedDate("all");
+    fetchRecords();
   };
 
   const handleSubmit = () => {
-    if (clearFilters) {
-      handleClearFilters();
-      setClearFilters(false);
-    } else {
-      setAppliedSensorTypes(filterSensorTypes);
-      setAppliedDate(filterDate);
-    }
+    setAppliedSensorTypes(filterSensorTypes);
+    setAppliedDate(filterDate);
     fetchRecords();
   };
 
   const toggleSensorType = (sensor) => {
-    setFilterSensorTypes(prev => ({
-      ...prev,
-      [sensor]: !prev[sensor]
-    }));
+    const updated = {
+      ...filterSensorTypes,
+      [sensor]: !filterSensorTypes[sensor]
+    };
+    setFilterSensorTypes(updated);
+    setAppliedSensorTypes(updated);
+    fetchRecords();
   };
 
   const toggleGraphSensorType = (sensor) => {
-    setGraphFilterSensorTypes(prev => ({
-      ...prev,
-      [sensor]: !prev[sensor]
-    }));
+    const updated = {
+      ...graphFilterSensorTypes,
+      [sensor]: !graphFilterSensorTypes[sensor]
+    };
+    setGraphFilterSensorTypes(updated);
+    setAppliedGraphSensorTypes(updated);
+    fetchGraphData();
   };
 
   const handleClearGraphFilters = () => {
@@ -716,16 +718,12 @@ function Dashboard() {
     setAppliedGraphSensorTypes(defaultSensors);
     setGraphFilterDate("all");
     setAppliedGraphDate("all");
+    fetchGraphData();
   };
 
   const handleGraphSubmit = () => {
-    if (clearGraphFilters) {
-      handleClearGraphFilters();
-      setClearGraphFilters(false);
-    } else {
-      setAppliedGraphSensorTypes(graphFilterSensorTypes);
-      setAppliedGraphDate(graphFilterDate);
-    }
+    setAppliedGraphSensorTypes(graphFilterSensorTypes);
+    setAppliedGraphDate(graphFilterDate);
     fetchGraphData();
   };
 
@@ -1487,15 +1485,6 @@ function Dashboard() {
                             />
                             PM10
                           </label>
-                          <div className="dropdown-divider"></div>
-                          <label className="dropdown-item clear-item">
-                            <input 
-                              type="checkbox" 
-                              checked={clearFilters}
-                              onChange={(e) => setClearFilters(e.target.checked)}
-                            />
-                            Clear all filters
-                          </label>
                         </div>
                       )}
                     </div>
@@ -1505,7 +1494,11 @@ function Dashboard() {
                     <select 
                       className="filter-select"
                       value={filterDate}
-                      onChange={(e) => setFilterDate(e.target.value)}
+                      onChange={(e) => {
+                        setFilterDate(e.target.value);
+                        setAppliedDate(e.target.value);
+                        fetchRecords();
+                      }}
                     >
                       <option value="all">All Dates</option>
                       <option value="today">Today</option>
@@ -1513,7 +1506,7 @@ function Dashboard() {
                       <option value="30days">Last 30 Days</option>
                     </select>
                   </div>
-                  <button className="submit-filters-btn" onClick={handleSubmit}>Submit</button>
+                  <button className="submit-filters-btn" onClick={handleClearFilters}>Clear Filters</button>
                 </div>
               </div>
 
@@ -1839,7 +1832,11 @@ function Dashboard() {
                     <select 
                       className="filter-select"
                       value={graphFilterDate}
-                      onChange={(e) => setGraphFilterDate(e.target.value)}
+                      onChange={(e) => {
+                        setGraphFilterDate(e.target.value);
+                        setAppliedGraphDate(e.target.value);
+                        fetchGraphData();
+                      }}
                     >
                       <option value="all">All Dates</option>
                       <option value="today">Today</option>
@@ -1847,7 +1844,7 @@ function Dashboard() {
                       <option value="30days">Last 30 Days</option>
                     </select>
                   </div>
-                  <button className="submit-filters-btn" onClick={handleGraphSubmit}>Submit</button>
+                  <button className="submit-filters-btn" onClick={handleClearGraphFilters}>Clear Filters</button>
                 </div>
               </div>
 
@@ -1909,27 +1906,6 @@ function Dashboard() {
                                   }
                                   return label;
                                 }}
-                              />
-                              <ReferenceLine 
-                                y={18} 
-                                stroke="#4caf50" 
-                                strokeDasharray="5 5" 
-                                strokeWidth={2}
-                                label={{ value: 'Safe Min', position: 'insideBottomRight', fill: '#4caf50', fontSize: 10 }}
-                              />
-                              <ReferenceLine 
-                                y={27} 
-                                stroke="#4caf50" 
-                                strokeDasharray="5 5" 
-                                strokeWidth={2}
-                                label={{ value: 'Safe Max', position: 'insideTopRight', fill: '#4caf50', fontSize: 10 }}
-                              />
-                              <ReferenceLine 
-                                y={30} 
-                                stroke="#f44336" 
-                                strokeDasharray="5 5" 
-                                strokeWidth={2}
-                                label={{ value: 'Danger', position: 'insideTopRight', fill: '#f44336', fontSize: 10 }}
                               />
                               <Line 
                                 type="monotone" 
@@ -1997,27 +1973,6 @@ function Dashboard() {
                                   return label;
                                 }}
                               />
-                              <ReferenceLine 
-                                y={30} 
-                                stroke="#4caf50" 
-                                strokeDasharray="5 5" 
-                                strokeWidth={2}
-                                label={{ value: 'Safe Min', position: 'insideBottomRight', fill: '#4caf50', fontSize: 12 }}
-                              />
-                              <ReferenceLine 
-                                y={60} 
-                                stroke="#4caf50" 
-                                strokeDasharray="5 5" 
-                                strokeWidth={2}
-                                label={{ value: 'Safe Max', position: 'insideTopRight', fill: '#4caf50', fontSize: 12 }}
-                              />
-                              <ReferenceLine 
-                                y={70} 
-                                stroke="#f44336" 
-                                strokeDasharray="5 5" 
-                                strokeWidth={2}
-                                label={{ value: 'Danger', position: 'insideTopRight', fill: '#f44336', fontSize: 12 }}
-                              />
                               <Line 
                                 type="monotone" 
                                 dataKey="humidity" 
@@ -2083,13 +2038,6 @@ function Dashboard() {
                                 }
                                 return label;
                               }}
-                            />
-                            <ReferenceLine 
-                              y={1013} 
-                              stroke="#4caf50" 
-                              strokeDasharray="5 5" 
-                              strokeWidth={2}
-                              label={{ value: 'Normal', position: 'insideTopRight', fill: '#4caf50', fontSize: 10 }}
                             />
                             <Line 
                               type="monotone" 
@@ -2157,20 +2105,6 @@ function Dashboard() {
                                   return label;
                                 }}
                               />
-                              <ReferenceLine 
-                                y={80} 
-                                stroke="#4caf50" 
-                                strokeDasharray="5 5" 
-                                strokeWidth={2}
-                                label={{ value: 'Safe', position: 'insideTopRight', fill: '#4caf50', fontSize: 10 }}
-                              />
-                              <ReferenceLine 
-                                y={40} 
-                                stroke="#f44336" 
-                                strokeDasharray="5 5" 
-                                strokeWidth={2}
-                                label={{ value: 'Danger', position: 'insideTopRight', fill: '#f44336', fontSize: 10 }}
-                              />
                               <Line 
                                 type="monotone" 
                                 dataKey="vocs" 
@@ -2236,20 +2170,6 @@ function Dashboard() {
                                 }
                                 return label;
                               }}
-                            />
-                            <ReferenceLine 
-                              y={0.053} 
-                              stroke="#4caf50" 
-                              strokeDasharray="5 5" 
-                              strokeWidth={2}
-                              label={{ value: 'Safe', position: 'insideTopRight', fill: '#4caf50', fontSize: 10 }}
-                            />
-                            <ReferenceLine 
-                              y={0.1} 
-                              stroke="#f44336" 
-                              strokeDasharray="5 5" 
-                              strokeWidth={2}
-                              label={{ value: 'Danger', position: 'insideTopRight', fill: '#f44336', fontSize: 10 }}
                             />
                             <Line 
                               type="monotone" 
@@ -2391,20 +2311,6 @@ function Dashboard() {
                                 return label;
                               }}
                             />
-                            <ReferenceLine 
-                              y={12} 
-                              stroke="#4caf50" 
-                              strokeDasharray="5 5" 
-                              strokeWidth={2}
-                              label={{ value: 'Safe', position: 'insideTopRight', fill: '#4caf50', fontSize: 10 }}
-                            />
-                            <ReferenceLine 
-                              y={35} 
-                              stroke="#f44336" 
-                              strokeDasharray="5 5" 
-                              strokeWidth={2}
-                              label={{ value: 'Danger', position: 'insideTopRight', fill: '#f44336', fontSize: 10 }}
-                            />
                             <Line 
                               type="monotone" 
                               dataKey="pm25" 
@@ -2470,20 +2376,6 @@ function Dashboard() {
                                 }
                                 return label;
                               }}
-                            />
-                            <ReferenceLine 
-                              y={54} 
-                              stroke="#4caf50" 
-                              strokeDasharray="5 5" 
-                              strokeWidth={2}
-                              label={{ value: 'Safe', position: 'insideTopRight', fill: '#4caf50', fontSize: 10 }}
-                            />
-                            <ReferenceLine 
-                              y={154} 
-                              stroke="#f44336" 
-                              strokeDasharray="5 5" 
-                              strokeWidth={2}
-                              label={{ value: 'Danger', position: 'insideTopRight', fill: '#f44336', fontSize: 10 }}
                             />
                             <Line 
                               type="monotone" 

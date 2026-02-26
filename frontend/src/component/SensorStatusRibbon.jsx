@@ -20,19 +20,41 @@ export default function SensorStatusRibbon({ sensorConnected, lastSensorUpdate }
 
   // Update seconds counter every second
   useEffect(() => {
-    if (!showWarning || !lastSensorUpdate) return;
+    if (!showWarning) return;
 
     const updateSeconds = () => {
+      if (!lastSensorUpdate) {
+        setSecondsSinceUpdate(0);
+        return;
+      }
       const lastUpdate = new Date(lastSensorUpdate);
       const now = new Date();
       const seconds = Math.round((now - lastUpdate) / 1000);
-      setSecondsSinceUpdate(seconds);
+      setSecondsSinceUpdate(Math.max(0, seconds)); // Ensure it doesn't go negative
     };
 
     updateSeconds();
     const interval = setInterval(updateSeconds, 1000);
     return () => clearInterval(interval);
-  }, [showWarning, lastSensorUpdate]);
+  }, [showWarning]);
+
+  const formatTimeDisplay = (seconds) => {
+    if (seconds < 60) {
+      return `${seconds}s`;
+    } else if (seconds < 3600) {
+      const minutes = Math.floor(seconds / 60);
+      const remainingSeconds = seconds % 60;
+      return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+    } else if (seconds < 86400) {
+      const hours = Math.floor(seconds / 3600);
+      const remainingMinutes = Math.floor((seconds % 3600) / 60);
+      return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+    } else {
+      const days = Math.floor(seconds / 86400);
+      const remainingHours = Math.floor((seconds % 86400) / 3600);
+      return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`;
+    }
+  };
 
   if (!showWarning) {
     return null;
@@ -49,7 +71,7 @@ export default function SensorStatusRibbon({ sensorConnected, lastSensorUpdate }
           ⚠️ ESP32 Sensor Offline
         </div>
         <div className="sensor-status-message">
-          No data received for {secondsSinceUpdate} seconds
+          No data received for {formatTimeDisplay(secondsSinceUpdate)}
         </div>
       </div>
 
