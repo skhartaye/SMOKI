@@ -196,6 +196,47 @@ def get_latest_reading():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/sensors/status")
+def get_sensor_status():
+    """Get sensor connection status and last update time"""
+    try:
+        data = get_latest_sensor_data(limit=1)
+        if data:
+            last_update = data[0].get('timestamp')
+            if last_update:
+                # Parse timestamp and check if it's older than 30 seconds
+                from datetime import datetime
+                
+                # Handle both string and datetime objects
+                if isinstance(last_update, str):
+                    last_update_dt = datetime.fromisoformat(last_update.replace('Z', '+00:00'))
+                else:
+                    last_update_dt = last_update
+                    
+                current_time = datetime.now(timezone.utc)
+                time_diff = (current_time - last_update_dt).total_seconds()  # In seconds
+                
+                is_timeout = time_diff > 30  # 30 seconds timeout
+                
+                return {
+                    "success": True,
+                    "connected": not is_timeout,
+                    "last_update": str(last_update),
+                    "seconds_since_update": round(time_diff, 2),
+                    "timeout_threshold_seconds": 30
+                }
+        
+        return {
+            "success": True,
+            "connected": False,
+            "last_update": None,
+            "seconds_since_update": None,
+            "timeout_threshold_seconds": 30
+        }
+    except Exception as e:
+        print(f"Error in get_sensor_status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.put("/api/sensors/data/{record_id}")
 def update_sensor_record(record_id: int, data: SensorData, current_user: User = Depends(get_current_superadmin)):
     """Update sensor reading (Superadmin only)"""
