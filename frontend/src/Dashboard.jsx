@@ -1414,6 +1414,14 @@ function Dashboard() {
 
           {activePage === "records" && (
             <section className="records-page-container">
+              {/* Disclaimer */}
+              <div className="data-disclaimer">
+                <div className="disclaimer-icon">ℹ️</div>
+                <div className="disclaimer-content">
+                  <strong>Note:</strong> Air quality sensors used in records and graphs pages are not reference grade. Hence the data provided is for indicative measurements only and should be interpreted accordingly.
+                </div>
+              </div>
+
               {/* Filters Section */}
               <div className="filters-container">
                 <div className="filters-header">
@@ -1742,6 +1750,14 @@ function Dashboard() {
                   <TriangleLoader />
                 </div>
               )}
+
+              {/* Disclaimer */}
+              <div className="data-disclaimer">
+                <div className="disclaimer-icon">ℹ️</div>
+                <div className="disclaimer-content">
+                  <strong>Note:</strong> Air quality sensors used in records and graphs pages are not reference grade. Hence the data provided is for indicative measurements only and should be interpreted accordingly.
+                </div>
+              </div>
 
               {/* Filters Section */}
               <div className="filters-container">

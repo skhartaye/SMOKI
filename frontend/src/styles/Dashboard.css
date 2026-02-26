@@ -812,6 +812,45 @@ chatgpt-sidebar {
   padding: 40px 40px 40px 60px;
 }
 
+.data-disclaimer {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #e3f2fd;
+  border-left: 4px solid #2196f3;
+  border-radius: 4px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  color: #1565c0;
+}
+
+.disclaimer-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.disclaimer-content {
+  flex: 1;
+  line-height: 1.5;
+}
+
+.disclaimer-content strong {
+  color: #1565c0;
+  font-weight: 600;
+}
+
+.dashboard.dark-mode .data-disclaimer {
+  background: #1a237e;
+  border-left-color: #42a5f5;
+  color: #90caf9;
+}
+
+.dashboard.dark-mode .disclaimer-content strong {
+  color: #90caf9;
+}
+
 .records-header {
   margin-bottom: 20px;
   flex-shrink: 0;
