@@ -6,6 +6,8 @@ import { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Brush, ReferenceLine } from 'recharts';
 import { Thermometer, Droplet, Wind, Flame, Circle, Home, FileText, TrendingUp, Zap, Moon, Sun, LogOut, Menu, Activity } from 'lucide-react';
 import NotificationRibbon from './component/NotificationRibbon';
+import SensorStatusRibbon from './component/SensorStatusRibbon';
+import DataTimeoutModal from './component/DataTimeoutModal';
 import Toast from './component/Toast';
 import { showToast } from './utils/toastUtils';
 import { EditIcon, DeleteIcon, PlusIcon } from './component/IOSIcons';
@@ -13,6 +15,7 @@ import ConfirmModal from './component/ConfirmModal';
 import SensorDetailModal from './component/SensorDetailModal';
 import TriangleLoader from './component/TriangleLoader';
 import WebRTCViewer from './component/WebRTCViewer';
+import { useSensorStatus } from './context/SensorStatusContext';
 
 function Dashboard() {
   const [activePage, setActivePage] = useState("dashboard");
@@ -98,6 +101,7 @@ function Dashboard() {
   const [selectedSensorType, setSelectedSensorType] = useState(null);
   
   const navigate = useNavigate();
+  const { sensorConnected, lastSensorUpdate, updateLastSensorTime } = useSensorStatus();
 
   // Fetch latest sensor data for sensors page
   const fetchLatestSensorData = async () => {
@@ -121,6 +125,7 @@ function Dashboard() {
       if (result.success && result.data) {
         setPreviousSensorData(sensorData);
         setSensorData(result.data);
+        updateLastSensorTime(); // Update the last sensor update time
       }
     } catch (error) {
       console.error('Error fetching sensor data:', error);
@@ -146,6 +151,7 @@ function Dashboard() {
       const result = await response.json();
       if (result.success) {
         setRecords(result.data);
+        updateLastSensorTime(); // Update the last sensor update time
       }
     } catch (error) {
       console.error('Error fetching records:', error);
@@ -184,6 +190,7 @@ function Dashboard() {
           pm10: item.pm10 || 0
         }));
         setGraphData(formatted);
+        updateLastSensorTime(); // Update the last sensor update time
       }
     } catch (error) {
       console.error('Error fetching graph data:', error);
@@ -808,6 +815,9 @@ function Dashboard() {
   return (
     <div className={`dashboard ${darkMode ? 'dark-mode' : ''}`}>
       <Toast />
+      <DataTimeoutModal 
+        lastSensorUpdate={lastSensorUpdate}
+      />
       <ConfirmModal 
         isOpen={showConfirmModal}
         title="Delete Record"
@@ -832,6 +842,10 @@ function Dashboard() {
         }}
       />
       <NotificationRibbon />
+      <SensorStatusRibbon 
+        sensorConnected={sensorConnected} 
+        lastSensorUpdate={lastSensorUpdate}
+      />
       
       {/* Top Header - Mobile Only */}
       <header className="mobile-top-header">

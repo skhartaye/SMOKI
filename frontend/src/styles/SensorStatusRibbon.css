@@ -1,0 +1,110 @@
+.sensor-status-ribbon {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  animation: slideInRight 0.3s ease-out;
+  max-width: 400px;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(450px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.sensor-status-ribbon.warning {
+  background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
+  border-left: 4px solid #ffc107;
+  color: #856404;
+}
+
+.sensor-status-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #ff9800;
+}
+
+.sensor-status-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sensor-status-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #856404;
+}
+
+.sensor-status-message {
+  font-size: 12px;
+  color: #856404;
+  opacity: 0.9;
+}
+
+.sensor-status-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #856404;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.sensor-status-close:hover {
+  color: #ff9800;
+  transform: scale(1.1);
+}
+
+/* Dark mode support */
+.dashboard.dark-mode .sensor-status-ribbon.warning {
+  background: linear-gradient(135deg, #664d03 0%, #7a5c0a 100%);
+  border-left-color: #ffc107;
+  color: #ffecb5;
+}
+
+.dashboard.dark-mode .sensor-status-title {
+  color: #ffecb5;
+}
+
+.dashboard.dark-mode .sensor-status-message {
+  color: #ffecb5;
+  opacity: 0.85;
+}
+
+.dashboard.dark-mode .sensor-status-close {
+  color: #ffecb5;
+}
+
+.dashboard.dark-mode .sensor-status-close:hover {
+  color: #ffc107;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .sensor-status-ribbon {
+    top: 10px;
+    right: 10px;
+    left: 10px;
+    max-width: none;
+  }
+}

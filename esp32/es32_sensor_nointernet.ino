@@ -30,7 +30,7 @@ void setup() {
   delay(1000);
 
   // I2C for ADS1115
-  Wire.begin(21, 22);
+  Wire.begin(32, 33);
 
   if (!ads.begin()) {
     Serial.println("❌ ADS1115 not found!");
