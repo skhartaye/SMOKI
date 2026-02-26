@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.0.0.5-beta] - 2026-02-27
+
+### Added
+- Sensor type filter icon (signal/frequency icon) for better visual consistency
+- Tutorial modal now shows on every login (not on page reload)
+- Compact timestamp format in records table (MM-DD HH:MM A/P format)
+
+### Changed
+- Updated sensor type filter icons on Records and Graphs pages to match design system
+- Changed filter icon color to #5b6b8d for consistency with other UI elements
+- Records table timestamp display now uses compact format to improve table layout
+- Tutorial modal uses sessionStorage flag to detect login vs page reload
+
+### Fixed
+- Records table layout now properly displays all columns without wrapping headers
+- Timestamp column stays on single line in records table
+- Tutorial modal behavior: shows on login, doesn't show on page reload
+
+### Files Modified
+- `frontend/src/Dashboard.jsx` - Updated sensor filter icons, added login detection for tutorial, compact timestamp format
+- `frontend/src/component/TutorialModal.jsx` - Added triggerOnLogin prop for login detection
+- `frontend/src/App.jsx` - Added sessionStorage flag on successful login
+- `frontend/src/styles/Dashboard.css` - Updated table styling for better layout
+
 ## [1.0.0.4] - 2026-02-26
 
 ### Added
