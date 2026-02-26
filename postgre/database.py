@@ -853,3 +853,64 @@ def get_metadata_by_camera(camera_id, limit=50):
             print(f"Error fetching metadata by camera: {e}")
             return []
 
+def insert_smoke_detection(timestamp, confidence, smoke_type, bounding_box=None, 
+                          camera_id="rpi_camera", location="unknown", metadata=None):
+    """Insert a smoke detection record from RPi camera"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                # Prepare metadata JSON
+                detection_metadata = {
+                    "smoke_type": smoke_type,
+                    "bounding_box": bounding_box,
+                    "camera_id": camera_id,
+                    "detection_source": "rpi_camera"
+                }
+                if metadata:
+                    detection_metadata.update(metadata)
+                
+                cursor.execute("""
+                    INSERT INTO vehicle_detections 
+                    (timestamp, location, confidence, smoke_detected, emission_level, metadata)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING id, timestamp;
+                """, (timestamp, location, confidence, True, smoke_type, detection_metadata))
+                
+                result = cursor.fetchone()
+                conn.commit()
+                
+                if result:
+                    return {
+                        "id": result[0],
+                        "timestamp": result[1],
+                        "confidence": confidence,
+                        "smoke_type": smoke_type
+                    }
+                return None
+        except Exception as e:
+            print(f"Error inserting smoke detection: {e}")
+            return None
+
+
+def get_smoke_detections(limit=50, hours=24):
+    """Get recent smoke detections"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, timestamp, location, confidence, metadata
+                    FROM vehicle_detections
+                    WHERE smoke_detected = TRUE 
+                    AND timestamp > NOW() - INTERVAL '%s hours'
+                    ORDER BY timestamp DESC
+                    LIMIT %s;
+                """, (hours, limit))
+                
+                columns = ['id', 'timestamp', 'location', 'confidence', 'metadata']
+                results = []
+                for row in cursor.fetchall():
+                    results.append(dict(zip(columns, row)))
+                return results
+        except Exception as e:
+            print(f"Error fetching smoke detections: {e}")
+            return []

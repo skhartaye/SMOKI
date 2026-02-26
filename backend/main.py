@@ -132,6 +132,50 @@ def camera_detections_post():
     """Receive detections from RPi (no auth required)"""
     return {"success": True}
 
+class SmokeDetection(BaseModel):
+    timestamp: str
+    confidence: float
+    smoke_type: str  # 'smoke_black' or 'smoke_white'
+    bounding_box: dict | None = None  # {"x1": int, "y1": int, "x2": int, "y2": int}
+    camera_id: str = "rpi_camera"
+    location: str = "unknown"
+    metadata: dict | None = None
+
+@app.post("/api/detections/smoke")
+def record_smoke_detection(detection: SmokeDetection):
+    """Record smoke detection from RPi camera (no auth required)"""
+    try:
+        from postgre.database import insert_smoke_detection
+        result = insert_smoke_detection(
+            timestamp=detection.timestamp,
+            confidence=detection.confidence,
+            smoke_type=detection.smoke_type,
+            bounding_box=detection.bounding_box,
+            camera_id=detection.camera_id,
+            location=detection.location,
+            metadata=detection.metadata
+        )
+        if result:
+            return {"success": True, "data": result}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to record detection")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/detections/smoke")
+def get_smoke_detections(limit: int = 50, hours: int = 24, current_user: User = Depends(get_current_user)):
+    """Get recent smoke detections (requires authentication)"""
+    try:
+        from postgre.database import get_smoke_detections
+        detections = get_smoke_detections(limit=limit, hours=hours)
+        return {
+            "success": True,
+            "data": detections,
+            "count": len(detections)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/vehicles/detections")
 def get_vehicle_detections(limit: int = 10, current_user: User = Depends(get_current_user)):
     """Get recent vehicle detections"""

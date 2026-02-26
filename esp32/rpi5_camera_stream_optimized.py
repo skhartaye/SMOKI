@@ -6,6 +6,9 @@ import subprocess
 import os
 import shutil
 import threading
+import requests
+import json
+from datetime import datetime, timezone
 from picamera2 import Picamera2
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
@@ -16,6 +19,12 @@ HLS_DIR     = '/dev/shm/hls'  # RAM disk to prevent SD card lag
 CONF_THRESH = 0.25
 IOU_THRESH  = 0.45
 CLASS_NAMES = ['passenger', 'puv', 'service', 'two_wheel', 'license_plate', 'exhaust_pipe', 'smoke_black', 'smoke_white']
+SMOKE_CLASSES = {'smoke_black', 'smoke_white'}
+
+# Backend API configuration
+BACKEND_URL = os.getenv('BACKEND_URL', 'http://localhost:8000')
+CAMERA_ID = os.getenv('CAMERA_ID', 'rpi_camera_01')
+CAMERA_LOCATION = os.getenv('CAMERA_LOCATION', 'unknown')
 
 # Clean up and prepare RAM disk directory
 if os.path.exists(HLS_DIR): shutil.rmtree(HLS_DIR)
@@ -86,6 +95,34 @@ def nms(boxes, scores, thresh):
         order = order[1:][ovr < thresh]
     return keep
 
+def send_smoke_detection(timestamp, confidence, smoke_type, bounding_box, inference_time_ms):
+    """Send smoke detection metadata to backend"""
+    try:
+        payload = {
+            "timestamp": timestamp,
+            "confidence": float(confidence),
+            "smoke_type": smoke_type,
+            "bounding_box": bounding_box,
+            "camera_id": CAMERA_ID,
+            "location": CAMERA_LOCATION,
+            "metadata": {
+                "inference_time_ms": inference_time_ms,
+                "model": "smoki_model_v1",
+                "confidence_threshold": CONF_THRESH
+            }
+        }
+        response = requests.post(
+            f"{BACKEND_URL}/api/detections/smoke",
+            json=payload,
+            timeout=5
+        )
+        if response.status_code == 200:
+            print(f"✓ Smoke detection recorded: {smoke_type} ({confidence:.2f})")
+        else:
+            print(f"✗ Failed to record detection: {response.status_code}")
+    except Exception as e:
+        print(f"✗ Error sending detection: {e}")
+
 # ─── LOW-LATENCY FFmpeg ENCODER ────────────────────────────────────────────
 def start_ffmpeg(w, h, fps=15):
     cmd = ['ffmpeg', '-y',
@@ -145,16 +182,25 @@ def run_inference():
                 
                 boxes, scores, classes = decode(final_feats, conf_thresh=CONF_THRESH)
                 
-                # 5. Drawing
+                # 5. Drawing and Detection Recording
                 vis_frame = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+                inference_time_ms = (time.time() - start_time) * 1000
+                
                 if len(boxes) > 0:
                     keep = nms(boxes, scores, IOU_THRESH)
                     for b, s, c in zip(boxes[keep], scores[keep], classes[keep]):
                         x1, y1, x2, y2 = map(int, (b - [pad_left, pad_top, pad_left, pad_top]) / ratio)
-                        color = (0, 0, 255) if 'smoke' in CLASS_NAMES[c] else (0, 255, 0)
+                        class_name = CLASS_NAMES[c]
+                        color = (0, 0, 255) if 'smoke' in class_name else (0, 255, 0)
                         cv2.rectangle(vis_frame, (x1, y1), (x2, y2), color, 2)
-                        label = f"{CLASS_NAMES[c]} {s:.2f}"
+                        label = f"{class_name} {s:.2f}"
                         cv2.putText(vis_frame, label, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                        
+                        # Send smoke detection to backend
+                        if class_name in SMOKE_CLASSES:
+                            timestamp = datetime.now(timezone.utc).isoformat()
+                            bounding_box = {"x1": x1, "y1": y1, "x2": x2, "y2": y2}
+                            send_smoke_detection(timestamp, float(s), class_name, bounding_box, int(inference_time_ms))
                 
                 # 6. Push to Stream
                 try:
