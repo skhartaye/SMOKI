@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import '../styles/SensorStatusRibbon.css';
 
 export default function SensorStatusRibbon({ sensorConnected, lastSensorUpdate }) {
   const [showWarning, setShowWarning] = useState(false);
   const [secondsSinceUpdate, setSecondsSinceUpdate] = useState(0);
+  const offlineTimeRef = useRef(null);
 
   useEffect(() => {
     console.log('SensorStatusRibbon - sensorConnected:', sensorConnected, 'lastSensorUpdate:', lastSensorUpdate);
@@ -12,25 +13,25 @@ export default function SensorStatusRibbon({ sensorConnected, lastSensorUpdate }
     // Show warning if sensor is disconnected
     if (!sensorConnected) {
       setShowWarning(true);
+      // Set the offline time only once when sensor first goes offline
+      if (!offlineTimeRef.current) {
+        offlineTimeRef.current = new Date(lastSensorUpdate);
+      }
     } else {
-      // Hide warning when sensor reconnects
+      // Hide warning when sensor reconnects and reset the offline time
       setShowWarning(false);
+      offlineTimeRef.current = null;
     }
   }, [sensorConnected]);
 
   // Update seconds counter every second
   useEffect(() => {
-    if (!showWarning) return;
+    if (!showWarning || !offlineTimeRef.current) return;
 
     const updateSeconds = () => {
-      if (!lastSensorUpdate) {
-        setSecondsSinceUpdate(0);
-        return;
-      }
-      const lastUpdate = new Date(lastSensorUpdate);
       const now = new Date();
-      const seconds = Math.round((now - lastUpdate) / 1000);
-      setSecondsSinceUpdate(Math.max(0, seconds)); // Ensure it doesn't go negative
+      const seconds = Math.round((now - offlineTimeRef.current) / 1000);
+      setSecondsSinceUpdate(Math.max(0, seconds));
     };
 
     updateSeconds();

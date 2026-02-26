@@ -987,36 +987,6 @@ function Dashboard() {
                 </div>
                 
                 <div className="dashboard-violators-column">
-                  {/* Top Violators Section */}
-                  <div className="dashboard-section-compact">
-                    <div className="section-header-compact">
-                      <h2>Top Violators</h2>
-                      <p className="section-subtitle">Vehicles with highest emissions</p>
-                    </div>
-                    <div className="violators-list-compact">
-                      {topViolators.length > 0 ? (
-                        topViolators.map((violator, index) => (
-                          <div key={violator.id} className="violator-item-compact">
-                            <div className="violator-rank-compact">{index + 1}</div>
-                            <div className="violator-info-compact">
-                              <div className="violator-name-compact">{violator.license_plate}</div>
-                              <div className="violator-value-compact">
-                                {violator.emission_level ? `Emission: ${violator.emission_level}` : 'No data'}
-                              </div>
-                            </div>
-                            <div className={`violator-status-compact ${violator.violations > 15 ? 'danger' : violator.violations > 5 ? 'warning' : 'safe'}`}>
-                              {violator.violations > 15 ? 'Critical' : violator.violations > 5 ? 'Warning' : 'Safe'}
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div style={{ textAlign: 'center', color: '#999', padding: '20px', fontSize: '14px' }}>
-                          No violations recorded yet
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
                   {/* Violators Ranking Section */}
                   <div className="dashboard-section-compact">
                     <div className="section-header-compact">
@@ -1050,6 +1020,47 @@ function Dashboard() {
                           </div>
                         )}
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Report Violator Section */}
+                  <div className="dashboard-section-compact">
+                    <div className="section-header-compact">
+                      <h2>Report Violator</h2>
+                      <p className="section-subtitle">Vehicles with highest emissions</p>
+                    </div>
+                    <div className="violators-list-compact">
+                      {topViolators.length > 0 ? (
+                        topViolators.map((violator, index) => (
+                          <div key={violator.id} className="violator-item-compact">
+                            <div className="violator-rank-compact">{index + 1}</div>
+                            <div className="violator-info-compact">
+                              <div className="violator-name-compact">{violator.license_plate}</div>
+                              <div className="violator-value-compact">
+                                {violator.emission_level ? `Emission: ${violator.emission_level}` : 'No data'}
+                              </div>
+                            </div>
+                            <div className={`violator-status-compact ${violator.violations > 15 ? 'danger' : violator.violations > 5 ? 'warning' : 'safe'}`}>
+                              {violator.violations > 15 ? 'Critical' : violator.violations > 5 ? 'Warning' : 'Safe'}
+                            </div>
+                            <button 
+                              className="report-btn-compact"
+                              onClick={() => {
+                                const subject = `Emission Violation Report - ${violator.license_plate}`;
+                                const body = `Vehicle License Plate: ${violator.license_plate}%0AEmission Level: ${violator.emission_level || 'No data'}%0AViolations: ${violator.violations}%0AStatus: ${violator.violations > 15 ? 'Critical' : violator.violations > 5 ? 'Warning' : 'Safe'}%0A%0AThis vehicle has been flagged for excessive emissions.`;
+                                window.location.href = `mailto:sample@example.com?subject=${subject}&body=${body}`;
+                              }}
+                              title="Report this violator via email"
+                            >
+                              📧 Report
+                            </button>
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ textAlign: 'center', color: '#999', padding: '20px', fontSize: '14px' }}>
+                          No violations recorded yet
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

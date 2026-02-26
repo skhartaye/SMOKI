@@ -1,6 +1,6 @@
 .sensor-status-ribbon {
   position: fixed;
-  top: 20px;
+  top: 80px;
   right: 20px;
   display: flex;
   align-items: center;
@@ -8,7 +8,7 @@
   padding: 14px 16px;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
+  z-index: 999;
   animation: slideInRight 0.3s ease-out;
   max-width: 400px;
 }
@@ -102,9 +102,10 @@
 /* Mobile responsive */
 @media (max-width: 768px) {
   .sensor-status-ribbon {
-    top: 10px;
+    top: 70px;
     right: 10px;
     left: 10px;
     max-width: none;
+    z-index: 1001;
   }
 }
