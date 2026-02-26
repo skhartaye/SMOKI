@@ -7,7 +7,6 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Thermometer, Droplet, Wind, Flame, Circle, Home, FileText, TrendingUp, Zap, Moon, Sun, LogOut, Menu, Activity } from 'lucide-react';
 import NotificationRibbon from './component/NotificationRibbon';
 import SensorStatusRibbon from './component/SensorStatusRibbon';
-import DataTimeoutModal from './component/DataTimeoutModal';
 import Toast from './component/Toast';
 import { showToast } from './utils/toastUtils';
 import { EditIcon, DeleteIcon, PlusIcon } from './component/IOSIcons';
@@ -815,9 +814,6 @@ function Dashboard() {
   return (
     <div className={`dashboard ${darkMode ? 'dark-mode' : ''}`}>
       <Toast />
-      <DataTimeoutModal 
-        lastSensorUpdate={lastSensorUpdate}
-      />
       <ConfirmModal 
         isOpen={showConfirmModal}
         title="Delete Record"
