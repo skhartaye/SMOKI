@@ -177,6 +177,15 @@ chatgpt-sidebar {
   color: #e0e0e0;
 }
 
+.dashboard.dark-mode .filter-select {
+  background: #242424 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23b0b0b0' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 10px center;
+  background-size: 16px 16px;
+}
+
+.dashboard.dark-mode .filter-icon {
+  color: #b0b0b0;
+}
+
 .dashboard.dark-mode .dropdown-menu {
   background: #242424;
   border-color: #444;
@@ -309,25 +318,42 @@ chatgpt-sidebar {
 }
 
 .sidebar-footer {
-  padding: 20px;
+  padding: 10px;
   border-top: 1px solid rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
 }
 
 .user-info {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 15px;
+  gap: 12px;
+  margin-bottom: 0;
   overflow: hidden;
+  width: 100%;
+  padding: 10px 5px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.user-info:hover {
+  background-color: rgba(0, 0, 0, 0.05);
 }
 
 .user-icon {
   font-size: 24px;
   min-width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .user-details {
-  flex: 1;
+  font-weight: 500;
   opacity: 0;
   max-width: 0;
   overflow: hidden;
@@ -337,37 +363,42 @@ chatgpt-sidebar {
 
 .sidebar:hover .user-details {
   opacity: 1;
-  max-width: 200px;
+  max-width: 150px;
 }
 
 .user-name {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: #333;
+  line-height: 1.2;
 }
 
 .user-email {
-  font-size: 12px;
-  color: #666;
+  font-size: 13px;
+  color: #999;
+  line-height: 1.2;
 }
 
 .sign-out-btn {
   width: 100%;
-  padding: 10px;
+  padding: 10px 5px;
   background: none;
-  border: 1px solid #999;
-  border-radius: 6px;
+  border: none;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 15px;
   color: #666;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  gap: 12px;
+  transition: all 0.3s ease;
   white-space: nowrap;
   overflow: hidden;
   position: relative;
+}
+
+.sign-out-btn:hover {
+  background-color: rgba(0, 0, 0, 0.05);
 }
 
 .sign-out-btn span:first-child {
@@ -375,37 +406,27 @@ chatgpt-sidebar {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  min-width: 24px;
 }
 
 .sign-out-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
 }
 
 .sign-out-btn span:last-child {
+  font-weight: 500;
   opacity: 0;
-  width: 0;
   max-width: 0;
   overflow: hidden;
-  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
-}
-
-.sidebar:hover .sign-out-btn {
-  justify-content: flex-start;
-  gap: 8px;
 }
 
 .sidebar:hover .sign-out-btn span:last-child {
   opacity: 1;
-  width: auto;
-  max-width: 100px;
-}
-
-.sign-out-btn:hover {
-  background-color: rgba(0, 0, 0, 0.05);
-  border-color: #666;
+  max-width: 150px;
 }
 
 /* Main Content */
@@ -828,7 +849,16 @@ chatgpt-sidebar {
 .disclaimer-icon {
   font-size: 18px;
   flex-shrink: 0;
-  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #2196f3;
+}
+
+.disclaimer-icon svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
 }
 
 .disclaimer-content {
@@ -890,6 +920,10 @@ chatgpt-sidebar {
 
 .filter-icon {
   font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
 }
 
 .filters-content {
@@ -932,6 +966,16 @@ chatgpt-sidebar {
 .dropdown-arrow {
   font-size: 10px;
   color: #666;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+}
+
+.dropdown-arrow svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
 }
 
 .dropdown-menu {
@@ -995,14 +1039,19 @@ chatgpt-sidebar {
 
 .filter-select {
   padding: 10px 14px;
+  padding-right: 32px;
   border: 1px solid #ccc;
   border-radius: 8px;
-  background: white;
+  background: white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 10px center;
+  background-size: 16px 16px;
   font-size: 14px;
   color: #333;
   cursor: pointer;
   outline: none;
   transition: all 0.3s ease;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
 }
 
 .filter-select:focus {
@@ -1037,6 +1086,14 @@ chatgpt-sidebar {
 
 .data-logs-header {
   margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.data-logs-title {
+  flex: 1;
 }
 
 .data-logs-header h2 {
@@ -1052,12 +1109,58 @@ chatgpt-sidebar {
   margin: 0;
 }
 
+.download-csv-btn {
+  padding: 10px 20px;
+  background: #2196f3;
+  border: 1px solid #2196f3;
+  border-radius: 8px;
+  font-size: 14px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.download-csv-btn svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+}
+
+.download-csv-btn:hover {
+  background: #1976d2;
+  border-color: #1976d2;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+}
+
+.download-csv-btn:active {
+  transform: translateY(0);
+}
+
+.dashboard.dark-mode .download-csv-btn {
+  background: #1976d2;
+  border-color: #1976d2;
+}
+
+.dashboard.dark-mode .download-csv-btn:hover {
+  background: #1565c0;
+  border-color: #1565c0;
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.4);
+}
+
 .records-table-wrapper {
   background: white;
   border-radius: 8px;
   overflow: hidden;
   max-height: 500px;
   overflow-y: auto;
+  overflow-x: auto;
 }
 
 .records-table {
@@ -1095,6 +1198,10 @@ chatgpt-sidebar {
   font-size: 14px;
   color: #333;
   text-align: center;
+}
+
+.records-table tbody tr td:first-child {
+  white-space: nowrap;
 }
 
 .status-badge {

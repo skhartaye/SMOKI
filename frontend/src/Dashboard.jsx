@@ -13,8 +13,17 @@ import { EditIcon, DeleteIcon, PlusIcon } from './component/IOSIcons';
 import ConfirmModal from './component/ConfirmModal';
 import SensorDetailModal from './component/SensorDetailModal';
 import TriangleLoader from './component/TriangleLoader';
+import TutorialModal from './component/TutorialModal';
 import WebRTCViewer from './component/WebRTCViewer';
 import { useSensorStatus } from './context/SensorStatusContext';
+
+const InfoIcon = () => (
+  <svg height="16" stroke-linejoin="round" viewBox="0 0 16 16" width="16" style={{color: 'currentcolor'}}><path d="M14 8C14 11.3137 11.3137 14 8 14C4.68629 14 2 11.3137 2 8C2 4.68629 4.68629 2 8 2C11.3137 2 14 4.68629 14 8Z" fill="currentColor" fillOpacity="0.08"></path><path fillRule="evenodd" clipRule="evenodd" d="M8 6C8.55228 6 9 5.55228 9 5C9 4.44772 8.55228 4 8 4C7.44771 4 7 4.44772 7 5C7 5.55228 7.44771 6 8 6ZM7 7H6.25V8.5H7H7.24999V10.5V11.25H8.74999V10.5V8C8.74999 7.44772 8.30227 7 7.74999 7H7Z" fill="currentColor"></path></svg>
+);
+
+const UserIcon = ({ size = 24 }) => (
+  <svg data-testid="geist-icon" height={size} stroke-linejoin="round" viewBox="0 0 16 16" width={size} style={{color: 'currentcolor', display: 'block'}}><path fillRule="evenodd" clipRule="evenodd" d="M7.75 0C5.95507 0 4.5 1.45507 4.5 3.25V3.75C4.5 5.54493 5.95507 7 7.75 7H8.25C10.0449 7 11.5 5.54493 11.5 3.75V3.25C11.5 1.45507 10.0449 0 8.25 0H7.75ZM6 3.25C6 2.2835 6.7835 1.5 7.75 1.5H8.25C9.2165 1.5 10 2.2835 10 3.25V3.75C10 4.7165 9.2165 5.5 8.25 5.5H7.75C6.7835 5.5 6 4.7165 6 3.75V3.25ZM2.5 14.5V13.1709C3.31958 11.5377 4.99308 10.5 6.82945 10.5H9.17055C11.0069 10.5 12.6804 11.5377 13.5 13.1709V14.5H2.5ZM6.82945 9C4.35483 9 2.10604 10.4388 1.06903 12.6857L1 12.8353V13V15.25V16H1.75H14.25H15V15.25V13V12.8353L14.931 12.6857C13.894 10.4388 11.6452 9 9.17055 9H6.82945Z" fill="#666"></path></svg>
+);
 
 function Dashboard() {
   const [activePage, setActivePage] = useState("dashboard");
@@ -77,7 +86,7 @@ function Dashboard() {
   const [selectedSensor, setSelectedSensor] = useState(null); // For sensor detail view
   const [sidebarHovered, setSidebarHovered] = useState(false);
   const [showGraphLoading, setShowGraphLoading] = useState(false);
-  const [userRole] = useState(localStorage.getItem('role') || 'admin');
+  const [userRole] = useState(localStorage.getItem('role') || 'Admin');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
@@ -98,6 +107,7 @@ function Dashboard() {
   const [recordToDelete, setRecordToDelete] = useState(null);
   const [showSensorDetailModal, setShowSensorDetailModal] = useState(false);
   const [selectedSensorType, setSelectedSensorType] = useState(null);
+  const [triggerTutorialOnLogin, setTriggerTutorialOnLogin] = useState(false);
   
   const navigate = useNavigate();
   const { sensorConnected, lastSensorUpdate, updateLastSensorTime } = useSensorStatus();
@@ -212,6 +222,20 @@ function Dashboard() {
     
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Detect login and trigger tutorial on Dashboard mount
+  useEffect(() => {
+    // Check if user just logged in (flag set by login page)
+    const justLoggedIn = sessionStorage.getItem('justLoggedIn');
+    if (justLoggedIn) {
+      setTriggerTutorialOnLogin(true);
+      sessionStorage.removeItem('justLoggedIn');
+      // Reset the trigger after a short delay to allow the modal to show
+      setTimeout(() => {
+        setTriggerTutorialOnLogin(false);
+      }, 100);
+    }
   }, []);
 
   // Close dropdowns when clicking outside
@@ -495,12 +519,15 @@ function Dashboard() {
     hours = hours ? hours : 12; // 0 should be 12
     const hoursStr = String(hours).padStart(2, '0');
     
-    return `${year}-${month}-${day} ${hoursStr}:${minutes}:${seconds} ${ampm}`;
+    // Format: YYYY-MM-DD HH:MM:SS AM/PM (with space before AM/PM to prevent Excel auto-conversion)
+    const formatted = `${year}-${month}-${day} ${hoursStr}:${minutes}:${seconds} ${ampm}`;
+    return formatted;
   };
 
   const calculateAQI = (record) => {
     // AQI calculation based on US EPA standard
     // Using the formula: Ip = [(IHI - ILO) / (BPHI - BPLO)] * (Cp - BPLO) + ILO
+    // Only uses: NO₂, CO, PM2.5, PM10
     
     const pollutants = [];
     
@@ -543,15 +570,6 @@ function Dashboard() {
       { cLow: 650, cHigh: 1249, iLow: 201, iHigh: 300 },
       { cLow: 1250, cHigh: 2049, iLow: 301, iHigh: 500 }
     ];
-
-    // Pressure breakpoints (hPa) - Normal range 1013 hPa
-    const pressureBreakpoints = [
-      { cLow: 950, cHigh: 1000, iLow: 0, iHigh: 50 },      // Low pressure
-      { cLow: 1000, cHigh: 1013, iLow: 0, iHigh: 50 },     // Below normal
-      { cLow: 1013, cHigh: 1020, iLow: 0, iHigh: 50 },     // Normal range
-      { cLow: 1020, cHigh: 1050, iLow: 51, iHigh: 100 },   // High pressure
-      { cLow: 1050, cHigh: 1100, iLow: 101, iHigh: 150 }   // Very high pressure
-    ];
     
     const calculatePollutantAQI = (concentration, breakpoints) => {
       if (!concentration || concentration < 0) return null;
@@ -567,7 +585,7 @@ function Dashboard() {
       return 500;
     };
     
-    // Calculate AQI for each pollutant
+    // Calculate AQI for each pollutant (only NO₂, CO, PM2.5, PM10)
     if (record.pm25) {
       const aqi = calculatePollutantAQI(record.pm25, pm25Breakpoints);
       if (aqi !== null) pollutants.push({ name: 'PM2.5', aqi });
@@ -588,11 +606,6 @@ function Dashboard() {
       const no2Ppb = record.nitrogen_dioxide * 1000;
       const aqi = calculatePollutantAQI(no2Ppb, no2Breakpoints);
       if (aqi !== null) pollutants.push({ name: 'NO2', aqi });
-    }
-
-    if (record.pressure) {
-      const aqi = calculatePollutantAQI(record.pressure, pressureBreakpoints);
-      if (aqi !== null) pollutants.push({ name: 'Pressure', aqi });
     }
     
     // Return the highest AQI (worst pollutant)
@@ -727,6 +740,115 @@ function Dashboard() {
     fetchGraphData();
   };
 
+  const downloadDataAsCSV = () => {
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+      const token = localStorage.getItem('token');
+      
+      // Fetch all data with a very large limit
+      fetch(`${API_URL}/api/sensors/data?limit=999999`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      .then(response => {
+        if (response.status === 401) {
+          localStorage.clear();
+          navigate('/');
+          return;
+        }
+        return response.json();
+      })
+      .then(result => {
+        if (!result.success || !result.data || result.data.length === 0) {
+          showToast('error', 'No records to download');
+          return;
+        }
+
+        const allRecords = result.data;
+
+        // Define CSV headers
+        const headers = [
+          'Timestamp',
+          'Temperature (C)',
+          'Humidity (%)',
+          'Pressure (hPa)',
+          'VOCs (kOhm)',
+          'NO2 (PPM)',
+          'CO (PPM)',
+          'PM2.5 (ug/m3)',
+          'PM10 (ug/m3)',
+          'AQI',
+          'Status'
+        ];
+
+        // Build CSV rows
+        const rows = allRecords.map(record => {
+          const aqi = calculateAQI(record);
+          const isDanger = 
+            (record.temperature > 35) || 
+            (record.carbon_monoxide > 9) || 
+            (record.pm25 > 35) || 
+            (record.pm10 > 50);
+          const isWarning = 
+            (record.temperature > 30 && record.temperature <= 35) || 
+            (record.carbon_monoxide > 5 && record.carbon_monoxide <= 9) || 
+            (record.pm25 > 25 && record.pm25 <= 35) || 
+            (record.pm10 > 35 && record.pm10 <= 50);
+          const status = isDanger ? 'danger' : isWarning ? 'warning' : 'safe';
+
+          return [
+            formatTimestamp(record.timestamp),
+            record.temperature?.toFixed(1) || 'N/A',
+            record.humidity?.toFixed(1) || 'N/A',
+            record.pressure?.toFixed(2) || 'N/A',
+            record.vocs?.toFixed(1) || 'N/A',
+            record.nitrogen_dioxide?.toFixed(2) || 'N/A',
+            record.carbon_monoxide?.toFixed(2) || 'N/A',
+            record.pm25?.toFixed(1) || 'N/A',
+            record.pm10?.toFixed(1) || 'N/A',
+            aqi.value,
+            status
+          ];
+        });
+
+        // Create CSV content
+        const headerRow = headers.map(header => `"${header}"`).join(',');
+        const dataRows = rows.map(row => row.map((cell, index) => {
+          // For timestamp column (index 0), add single quote prefix to force text format in Excel
+          if (index === 0) {
+            return `"'${cell}"`;
+          }
+          return `"${cell}"`;
+        }).join(','));
+        
+        const csvContent = [headerRow, ...dataRows].join('\n');
+
+        // Create blob and download
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        
+        link.setAttribute('href', url);
+        link.setAttribute('download', `sensor-data-${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = 'hidden';
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        showToast('success', `Downloaded ${allRecords.length} records`);
+      })
+      .catch(error => {
+        console.error('Error downloading CSV:', error);
+        showToast('error', 'Failed to download CSV');
+      });
+    } catch (error) {
+      console.error('Error downloading CSV:', error);
+      showToast('error', 'Failed to download CSV');
+    }
+  };
+
   const getFilteredGraphData = () => {
     let filtered = [...graphData];
 
@@ -812,6 +934,7 @@ function Dashboard() {
   return (
     <div className={`dashboard ${darkMode ? 'dark-mode' : ''}`}>
       <Toast />
+      <TutorialModal triggerOnLogin={triggerTutorialOnLogin} />
       <ConfirmModal 
         isOpen={showConfirmModal}
         title="Delete Record"
@@ -845,21 +968,21 @@ function Dashboard() {
       <header className="mobile-top-header">
         <h1>SMOKi</h1>
         <button className="user-btn" onClick={() => setShowUserMenu(!showUserMenu)}>
-          <span>👤</span>
+          <UserIcon size={24} />
         </button>
         
         {/* User Menu Dropdown */}
         {showUserMenu && (
           <div className="user-menu-dropdown">
             <div className="user-menu-header">
-              <div className="user-menu-icon">👤</div>
+              <div className="user-menu-icon"><UserIcon size={24} /></div>
               <div className="user-menu-info">
                 <div className="user-menu-name">{localStorage.getItem('username') || 'User'}</div>
                 <div className="user-menu-role">{localStorage.getItem('role') === 'superadmin' ? 'SuperAdmin' : 'Admin'}</div>
               </div>
             </div>
             <button className="user-menu-logout" onClick={handleLogout}>
-              <LogOut size={18} />
+              <LogOut size={24} />
               <span>Sign out</span>
             </button>
           </div>
@@ -962,10 +1085,10 @@ function Dashboard() {
 
         <div className="sidebar-footer">
           <div className="user-info">
-            <span className="user-icon">👤</span>
+            <UserIcon size={20} />
             <div className="user-details">
-              <div className="user-name">{localStorage.getItem('username') || 'User'}</div>
-              <div className="user-email">{localStorage.getItem('role') === 'superadmin' ? 'Super Admin' : 'Admin'}</div>
+              <div className="user-name">{(localStorage.getItem('username') || 'User').charAt(0).toUpperCase() + (localStorage.getItem('username') || 'User').slice(1)}</div>
+              <div className="user-email">{localStorage.getItem('role') === 'superadmin' ? 'Super Admin' : localStorage.getItem('role') === 'admin' ? 'Admin' : (localStorage.getItem('role') || 'Admin').charAt(0).toUpperCase() + (localStorage.getItem('role') || 'Admin').slice(1)}</div>
             </div>
           </div>
           <button className="sign-out-btn" onClick={handleLogout}>
@@ -1416,7 +1539,7 @@ function Dashboard() {
             <section className="records-page-container">
               {/* Disclaimer */}
               <div className="data-disclaimer">
-                <div className="disclaimer-icon">ℹ️</div>
+                <div className="disclaimer-icon"><InfoIcon /></div>
                 <div className="disclaimer-content">
                   <strong>Note:</strong> Air quality sensors used in records and graphs pages are not reference grade. Hence the data provided is for indicative measurements only and should be interpreted accordingly.
                 </div>
@@ -1425,18 +1548,30 @@ function Dashboard() {
               {/* Filters Section */}
               <div className="filters-container">
                 <div className="filters-header">
-                  <span className="filter-icon">▼</span> Filters
+                  <svg className="filter-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="4" y1="6" x2="20" y2="6"></line>
+                    <line x1="8" y1="12" x2="16" y2="12"></line>
+                    <line x1="10" y1="18" x2="14" y2="18"></line>
+                  </svg>
+                  Filters
                 </div>
                 <div className="filters-content">
                   <div className="filter-group">
-                    <label>📊 Sensor Types</label>
+                    <label>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{display: 'inline', marginRight: '6px', verticalAlign: 'middle'}}>
+                        <path d="M8.464 15.536a5 5 0 0 1 0-7.072m-2.828 9.9a9 9 0 0 1 0-12.728m9.9 9.9a5 5 0 0 0 0-7.072m2.828 9.9a9 9 0 0 0 0-12.728M13 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0" stroke="#5b6b8d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Sensor Types
+                    </label>
                     <div className="custom-dropdown">
                       <div 
                         className="dropdown-header"
                         onClick={() => setSensorDropdownOpen(!sensorDropdownOpen)}
                       >
                         <span>{getSelectedSensorNames(filterSensorTypes)}</span>
-                        <span className="dropdown-arrow">{sensorDropdownOpen ? '▲' : '▼'}</span>
+                        <svg className="dropdown-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points={sensorDropdownOpen ? "18 15 12 9 6 15" : "6 9 12 15 18 9"}></polyline>
+                        </svg>
                       </div>
                       {sensorDropdownOpen && (
                         <div className="dropdown-menu">
@@ -1509,7 +1644,15 @@ function Dashboard() {
                     </div>
                   </div>
                   <div className="filter-group">
-                    <label>📅 Date</label>
+                    <label>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{display: 'inline', marginRight: '6px', verticalAlign: 'middle'}}>
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                      </svg>
+                      Date
+                    </label>
                     <select 
                       className="filter-select"
                       value={filterDate}
@@ -1532,8 +1675,22 @@ function Dashboard() {
               {/* Data Logs Section */}
               <div className="data-logs-container">
                 <div className="data-logs-header">
-                  <h2>Data Logs</h2>
-                  <p>Real-time and historical sensor measurements</p>
+                  <div className="data-logs-title">
+                    <h2>Data Logs</h2>
+                    <p>Real-time and historical sensor measurements</p>
+                  </div>
+                  <button 
+                    className="download-csv-btn"
+                    onClick={downloadDataAsCSV}
+                    title="Download all data as CSV"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                      <polyline points="7 10 12 15 17 10"></polyline>
+                      <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    Download CSV
+                  </button>
                 </div>
                 
                 {records.length === 0 ? (
@@ -1753,7 +1910,7 @@ function Dashboard() {
 
               {/* Disclaimer */}
               <div className="data-disclaimer">
-                <div className="disclaimer-icon">ℹ️</div>
+                <div className="disclaimer-icon"><InfoIcon /></div>
                 <div className="disclaimer-content">
                   <strong>Note:</strong> Air quality sensors used in records and graphs pages are not reference grade. Hence the data provided is for indicative measurements only and should be interpreted accordingly.
                 </div>
@@ -1766,14 +1923,21 @@ function Dashboard() {
                 </div>
                 <div className="filters-content">
                   <div className="filter-group">
-                    <label>📊 Sensor Types</label>
+                    <label>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{display: 'inline', marginRight: '6px', verticalAlign: 'middle'}}>
+                        <path d="M8.464 15.536a5 5 0 0 1 0-7.072m-2.828 9.9a9 9 0 0 1 0-12.728m9.9 9.9a5 5 0 0 0 0-7.072m2.828 9.9a9 9 0 0 0 0-12.728M13 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0" stroke="#5b6b8d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Sensor Types
+                    </label>
                     <div className="custom-dropdown">
                       <div 
                         className="dropdown-header"
                         onClick={() => setGraphSensorDropdownOpen(!graphSensorDropdownOpen)}
                       >
                         <span>{getSelectedSensorNames(graphFilterSensorTypes)}</span>
-                        <span className="dropdown-arrow">{graphSensorDropdownOpen ? '▲' : '▼'}</span>
+                        <svg className="dropdown-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points={graphSensorDropdownOpen ? "18 15 12 9 6 15" : "6 9 12 15 18 9"}></polyline>
+                        </svg>
                       </div>
                       {graphSensorDropdownOpen && (
                         <div className="dropdown-menu">
@@ -1855,7 +2019,15 @@ function Dashboard() {
                     </div>
                   </div>
                   <div className="filter-group">
-                    <label>📅 Date</label>
+                    <label>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{display: 'inline', marginRight: '6px', verticalAlign: 'middle'}}>
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                      </svg>
+                      Date
+                    </label>
                     <select 
                       className="filter-select"
                       value={graphFilterDate}
@@ -2493,7 +2665,7 @@ function Dashboard() {
                 <div className="info-section">
                   <h2>Air Quality Index (AQI)</h2>
                   <p>
-                    The system calculates AQI based on US EPA standards. AQI is a standardized indicator 
+                    The system calculates indicative AQI based on DENR-EMB computation standards. AQI is a standardized indicator 
                     of air quality that considers all monitored pollutants and reports the worst value:
                   </p>
                   <div className="aqi-legend">
@@ -2660,6 +2832,9 @@ function Dashboard() {
 }
 
 export default Dashboard
+
+
+
 
 
 

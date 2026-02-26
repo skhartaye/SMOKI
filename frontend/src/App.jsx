@@ -34,6 +34,9 @@ function App() {
         localStorage.setItem('username', data.username);
         localStorage.setItem('isLoggedIn', 'true');
         
+        // Set flag to show tutorial on Dashboard
+        sessionStorage.setItem('justLoggedIn', 'true');
+        
         // Navigate to dashboard
         setTimeout(() => {
           navigate('/dashboard');
