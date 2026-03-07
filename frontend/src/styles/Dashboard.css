@@ -2630,26 +2630,28 @@ chatgpt-sidebar {
 }
 
 .back-button {
-  background: #5b6b8d;
-  color: white;
+  background: #e8f0f7;
+  color: #5b6b8d;
   border: none;
   border-radius: 8px;
-  padding: 10px 20px;
+  padding: 12px 22px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
+  min-height: 40px;
+  width: fit-content;
 }
 
 .back-button:hover {
-  background: #4a5a7a;
+  background: #d4e3f0;
   transform: translateX(-4px);
-  box-shadow: 0 2px 8px rgba(91, 107, 141, 0.3);
+  box-shadow: 0 2px 8px rgba(91, 107, 141, 0.2);
 }
 
 .sensor-detail-view .sensors-grid {
@@ -3916,21 +3918,6 @@ chatgpt-sidebar {
 
 .sensor-detail-view {
   padding: 20px;
-}
-
-.back-button {
-  background: none;
-  border: none;
-  color: #2196f3;
-  font-size: 14px;
-  cursor: pointer;
-  margin-bottom: 20px;
-  padding: 0;
-  font-weight: 600;
-}
-
-.back-button:hover {
-  text-decoration: underline;
 }
 
 .sensors-grid {
