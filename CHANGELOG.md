@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.0.0.6-beta] - 2026-03-07
+
+### Added
+- 6-model AI pipeline for RPi5 with separate HEF models:
+  - Vehicle Detection (passenger, PUV, service, two-wheeler, exhaust pipe)
+  - Smoke Detection (black smoke, white smoke) - separate dedicated model
+  - License Plate Detection
+  - License Plate Recognition (OCR)
+  - Face Detection
+  - Face Blur (privacy protection)
+- Comprehensive detection metadata storage for all model classes
+- Backend endpoint `/api/detections/smoke` now accepts and stores all detections from all 6 models
+- Detection model class: `Detection` with model_name, class_name, confidence, bounding_box
+- Database stores all detection data in JSONB metadata field
+
+### Changed
+- Enhanced `SmokeDetection` model to include detections list from all models
+- Updated `insert_smoke_detection()` to accept and organize detections by model
+- RPi5 pipeline now sends all detection classes to backend with confidence scores
+- Records page performance optimized with IIFE caching for filtered records
+
+### Fixed
+- Dashboard.jsx IIFE syntax error in records table rendering
+- Sensor percentage change calculation now uses functional setState to capture previous state
+- Back button styling on sensor detail view (light blue background, compact width)
+- Tutorial modal UI/UX improvements with better animations and button layout
+
+### Files Modified
+- `backend/main.py` - Added Detection model, updated SmokeDetection endpoint
+- `postgre/database.py` - Enhanced insert_smoke_detection() for comprehensive metadata
+- `esp32/rpi5_camera_stream_6models.py` - Updated send_smoke_detection() to include all detections
+- `frontend/src/Dashboard.jsx` - Fixed IIFE syntax, optimized records filtering, improved percentage calculation
+- `frontend/src/component/TutorialModal.jsx` - Enhanced UI/UX with animations
+- `frontend/src/styles/Dashboard.css` - Updated back button styling, improved layout
+- `frontend/src/styles/TutorialModal.css` - Enhanced modal animations and button styling
+
 ## [1.0.0.5-beta] - 2026-02-27
 
 ### Added
