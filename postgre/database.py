@@ -854,18 +854,40 @@ def get_metadata_by_camera(camera_id, limit=50):
             return []
 
 def insert_smoke_detection(timestamp, confidence, smoke_type, bounding_box=None, 
-                          camera_id="rpi_camera", location="unknown", metadata=None):
-    """Insert a smoke detection record from RPi camera"""
+                          camera_id="rpi_camera", location="unknown", metadata=None,
+                          detections=None, screenshots=None, license_plate=None):
+    """Insert a smoke detection record from RPi camera with all model detections"""
     with psycopg.connect(get_connection_string()) as conn:
         try:
             with conn.cursor() as cursor:
-                # Prepare metadata JSON
+                # Prepare comprehensive metadata JSON
                 detection_metadata = {
                     "smoke_type": smoke_type,
                     "bounding_box": bounding_box,
                     "camera_id": camera_id,
-                    "detection_source": "rpi_camera"
+                    "detection_source": "rpi_camera",
+                    "all_detections": []
                 }
+                
+                # Add all model detections to metadata
+                if detections:
+                    for det in detections:
+                        detection_metadata["all_detections"].append({
+                            "model": det.get("model_name") if isinstance(det, dict) else det.model_name,
+                            "class": det.get("class_name") if isinstance(det, dict) else det.class_name,
+                            "confidence": det.get("confidence") if isinstance(det, dict) else det.confidence,
+                            "bounding_box": det.get("bounding_box") if isinstance(det, dict) else det.bounding_box
+                        })
+                
+                # Add screenshots info
+                if screenshots:
+                    detection_metadata["screenshots"] = screenshots
+                
+                # Add license plate
+                if license_plate:
+                    detection_metadata["license_plate"] = license_plate
+                
+                # Merge with additional metadata
                 if metadata:
                     detection_metadata.update(metadata)
                 
@@ -884,7 +906,8 @@ def insert_smoke_detection(timestamp, confidence, smoke_type, bounding_box=None,
                         "id": result[0],
                         "timestamp": result[1],
                         "confidence": confidence,
-                        "smoke_type": smoke_type
+                        "smoke_type": smoke_type,
+                        "detections_count": len(detections) if detections else 0
                     }
                 return None
         except Exception as e:

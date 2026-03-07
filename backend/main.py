@@ -132,6 +132,14 @@ def camera_detections_post():
     """Receive detections from RPi (no auth required)"""
     return {"success": True}
 
+class Detection(BaseModel):
+    """Generic detection from any model"""
+    model_name: str  # 'vehicle_detection', 'smoke_detection', etc.
+    class_name: str  # 'passenger', 'smoke_black', 'license_plate', etc.
+    confidence: float
+    bounding_box: dict | None = None  # {"x1": int, "y1": int, "x2": int, "y2": int}
+    timestamp: str | None = None
+
 class SmokeDetection(BaseModel):
     timestamp: str
     confidence: float
@@ -140,6 +148,9 @@ class SmokeDetection(BaseModel):
     camera_id: str = "rpi_camera"
     location: str = "unknown"
     metadata: dict | None = None
+    detections: list[Detection] | None = None  # All detections from all models
+    screenshots: dict | None = None
+    license_plate: str | None = None
 
 @app.post("/api/detections/smoke")
 def record_smoke_detection(detection: SmokeDetection):
@@ -153,7 +164,10 @@ def record_smoke_detection(detection: SmokeDetection):
             bounding_box=detection.bounding_box,
             camera_id=detection.camera_id,
             location=detection.location,
-            metadata=detection.metadata
+            metadata=detection.metadata,
+            detections=detection.detections,
+            screenshots=detection.screenshots,
+            license_plate=detection.license_plate
         )
         if result:
             return {"success": True, "data": result}

@@ -111,16 +111,8 @@ export default function TutorialModal({ triggerOnLogin = false }) {
   const step = tutorialSteps[currentStep];
 
   return (
-    <div className="tutorial-overlay">
-      <div className="tutorial-modal">
-        <button 
-          className="tutorial-close"
-          onClick={closeTutorial}
-          title="Close tutorial"
-        >
-          <X size={24} />
-        </button>
-
+    <div className="tutorial-overlay" onClick={closeTutorial}>
+      <div className="tutorial-modal" onClick={(e) => e.stopPropagation()}>
         <div className="tutorial-header">
           <div className="tutorial-icon">{step.icon}</div>
           <h2>{step.title}</h2>
@@ -141,29 +133,23 @@ export default function TutorialModal({ triggerOnLogin = false }) {
         </div>
 
         <div className="tutorial-footer">
-          <button 
-            className="tutorial-btn tutorial-btn-secondary"
-            onClick={closeTutorial}
-          >
-            Skip Tutorial
-          </button>
-
           <div className="tutorial-nav">
             <button 
-              className="tutorial-btn tutorial-btn-icon"
+              className="tutorial-btn tutorial-btn-nav tutorial-btn-prev"
               onClick={handlePrev}
               disabled={currentStep === 0}
               title="Previous"
             >
-              <ChevronLeft size={20} />
+              <ChevronLeft size={22} />
+              <span>Back</span>
             </button>
 
             <button 
               className="tutorial-btn tutorial-btn-primary"
               onClick={handleNext}
             >
-              {currentStep === tutorialSteps.length - 1 ? 'Finish' : 'Next'}
-              <ChevronRight size={20} />
+              <span>{currentStep === tutorialSteps.length - 1 ? 'Finish' : 'Next'}</span>
+              <ChevronRight size={22} />
             </button>
           </div>
         </div>

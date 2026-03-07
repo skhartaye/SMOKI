@@ -132,8 +132,11 @@ function Dashboard() {
       
       const result = await response.json();
       if (result.success && result.data) {
-        setPreviousSensorData(sensorData);
-        setSensorData(result.data);
+        setSensorData(prevData => {
+          // Set previous data to the current data before updating
+          setPreviousSensorData(prevData);
+          return result.data;
+        });
         updateLastSensorTime(); // Update the last sensor update time
       }
     } catch (error) {
@@ -908,17 +911,20 @@ function Dashboard() {
     // Filter by date using applied date
     if (appliedDate !== "all") {
       const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
       filtered = filtered.filter(record => {
         const recordDate = new Date(record.timestamp);
-        const diffTime = Math.abs(now - recordDate);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        const recordDay = new Date(recordDate.getFullYear(), recordDate.getMonth(), recordDate.getDate());
+        const diffTime = today - recordDay;
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
         
         if (appliedDate === "today") {
-          return recordDate.toDateString() === now.toDateString();
+          return diffDays === 0;
         } else if (appliedDate === "7days") {
-          return diffDays <= 7;
+          return diffDays >= 0 && diffDays < 7;
         } else if (appliedDate === "30days") {
-          return diffDays <= 30;
+          return diffDays >= 0 && diffDays < 30;
         }
         return true;
       });
@@ -1695,41 +1701,43 @@ function Dashboard() {
                 
                 {records.length === 0 ? (
                   <p className="no-records">No sensor data recorded yet. Waiting for ESP32 data...</p>
-                ) : getFilteredRecords().length === 0 ? (
-                  <p className="no-records">No records match the selected filters.</p>
-                ) : (
-                  <div className="records-table-wrapper">
-                    <table className="records-table">
-                      <thead>
-                        <tr>
-                          <th>Time Stamp</th>
-                          {appliedSensorTypes.temperature && <th>Temp (°C)</th>}
-                          {appliedSensorTypes.humidity && <th>Humidity (%)</th>}
-                          {appliedSensorTypes.pressure && <th>Pressure (hPa)</th>}
-                          {appliedSensorTypes.vocs && <th>VOCs (kΩ)</th>}
-                          {appliedSensorTypes.no2 && <th>NO₂ (PPM)</th>}
-                          {appliedSensorTypes.co && <th>CO (PPM)</th>}
-                          {appliedSensorTypes.pm25 && <th>PM2.5 (µg/m³)</th>}
-                          {appliedSensorTypes.pm10 && <th>PM10 (µg/m³)</th>}
-                          <th>AQI (PH BASED)</th>
-                          <th>Status</th>
-                          {userRole === 'superadmin' && (
-                            <th>
-                              Actions
-                              <button 
-                                className="create-action-btn"
-                                onClick={() => setShowCreateModal(true)}
-                                title="Create new record"
-                              >
-                                <PlusIcon />
-                                <span>New</span>
-                              </button>
-                            </th>
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {getFilteredRecords().map((record, index) => {
+                ) : (() => {
+                  const filteredRecords = getFilteredRecords();
+                  return filteredRecords.length === 0 ? (
+                    <p className="no-records">No records match the selected filters.</p>
+                  ) : (
+                    <div className="records-table-wrapper">
+                      <table className="records-table">
+                        <thead>
+                          <tr>
+                            <th>Time Stamp</th>
+                            {appliedSensorTypes.temperature && <th>Temp (°C)</th>}
+                            {appliedSensorTypes.humidity && <th>Humidity (%)</th>}
+                            {appliedSensorTypes.pressure && <th>Pressure (hPa)</th>}
+                            {appliedSensorTypes.vocs && <th>VOCs (kΩ)</th>}
+                            {appliedSensorTypes.no2 && <th>NO₂ (PPM)</th>}
+                            {appliedSensorTypes.co && <th>CO (PPM)</th>}
+                            {appliedSensorTypes.pm25 && <th>PM2.5 (µg/m³)</th>}
+                            {appliedSensorTypes.pm10 && <th>PM10 (µg/m³)</th>}
+                            <th>AQI (PH BASED)</th>
+                            <th>Status</th>
+                            {userRole === 'superadmin' && (
+                              <th>
+                                Actions
+                                <button 
+                                  className="create-action-btn"
+                                  onClick={() => setShowCreateModal(true)}
+                                  title="Create new record"
+                                >
+                                  <PlusIcon />
+                                  <span>New</span>
+                                </button>
+                              </th>
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredRecords.map((record, index) => {
                           // Determine status based on sensor values
                           const isDanger = 
                             (record.temperature > 35) || 
@@ -1791,7 +1799,7 @@ function Dashboard() {
                       </tbody>
                     </table>
                   </div>
-                )}
+                )})()}
               </div>
 
               {/* Create Modal */}
