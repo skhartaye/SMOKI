@@ -9,12 +9,22 @@ export default function NotificationRibbon() {
   const fetchNotifications = async () => {
     try {
       const token = localStorage.getItem('token');
+      if (!token) {
+        console.log('No auth token - skipping notifications fetch');
+        return;
+      }
       
       const response = await fetchWithFallback('/api/vehicles/notifications/unread?limit=5', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
+
+      if (response.status === 401) {
+        console.log('Auth expired - clearing token but continuing');
+        localStorage.removeItem('token');
+        return;
+      }
 
       if (response.ok) {
         const result = await response.json();
@@ -32,7 +42,7 @@ export default function NotificationRibbon() {
         }
       }
     } catch (error) {
-      console.error('Error fetching notifications:', error);
+      console.log('Notifications fetch failed (non-critical):', error.message);
     }
   };
 
@@ -62,6 +72,7 @@ export default function NotificationRibbon() {
   const markAsRead = async (notificationId) => {
     try {
       const token = localStorage.getItem('token');
+      if (!token) return;
       
       await fetchWithFallback(`/api/vehicles/notifications/${notificationId}/read`, {
         method: 'POST',
@@ -70,7 +81,7 @@ export default function NotificationRibbon() {
         }
       });
     } catch (error) {
-      console.error('Error marking notification as read:', error);
+      console.log('Mark as read failed (non-critical):', error.message);
     }
   };
 

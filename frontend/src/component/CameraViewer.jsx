@@ -10,10 +10,10 @@ function CameraViewer() {
   const [detections, setDetections] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const videoRef = useRef(null);
-  const detectionIntervalRef = useRef(null);
+  const [lastUpdate, setLastUpdate] = useState(null);
 
+  const detectionIntervalRef = useRef(null);
   const API_URL = import.meta.env.VITE_API_URL || 'https://smoki-backend.onrender.com';
-  const API_URL_FALLBACK = import.meta.env.VITE_API_URL_FALLBACK || 'http://192.168.1.35:8000';
   const RPI_IP = import.meta.env.VITE_RPI_IP || '192.168.1.35';
   const token = localStorage.getItem('token');
 
@@ -61,90 +61,50 @@ function CameraViewer() {
       setError(null);
       setIsStreaming(true);
       
-      // Wait for video element to mount
-      await new Promise(resolve => {
-        const checkRef = () => {
+      console.log('Starting frame refresh mode for simple detection system');
+
+      // Start polling for latest frame every 5 seconds
+      const frameInterval = setInterval(async () => {
+        if (!isStreaming) {
+          clearInterval(frameInterval);
+          return;
+        }
+
+        try {
+          // Get latest frame from simple detection system
+          const frameUrl = `${API_URL}/api/stream/latest.jpg?t=${Date.now()}`;
+          
+          // Update image source to trigger refresh
           if (videoRef.current) {
-            resolve();
-          } else {
-            setTimeout(checkRef, 50);
+            videoRef.current.src = frameUrl;
+            setLastUpdate(new Date());
           }
+        } catch (err) {
+          console.error('Frame refresh error:', err);
+        }
+      }, 5000); // Refresh every 5 seconds to match detection cycle
+
+      // Store interval reference for cleanup
+      videoRef.current.frameInterval = frameInterval;
+
+      // Load initial frame
+      const initialFrameUrl = `${API_URL}/api/stream/latest.jpg?t=${Date.now()}`;
+      if (videoRef.current) {
+        videoRef.current.src = initialFrameUrl;
+        videoRef.current.onload = () => {
+          console.log('Initial frame loaded successfully');
+          setLastUpdate(new Date());
         };
-        checkRef();
-      });
-
-      const video = videoRef.current;
-      if (!video) {
-        setError('Video element not available');
-        setIsStreaming(false);
-        return;
-      }
-
-      console.log('Video element found:', video);
-
-      // Load HLS stream directly from RPi (local dev) or via proxy (production)
-      const hlsUrl = `http://${RPI_IP}:8000/stream.m3u8`;
-      console.log('Loading HLS stream from RPi:', hlsUrl);
-
-      // Check if HLS.js is available
-      if (window.Hls) {
-        console.log('HLS.js available');
-        const hls = new window.Hls({
-          debug: false,
-          enableWorker: true,
-          lowLatencyMode: true,
-          backBufferLength: 1,
-          maxBufferLength: 2,
-          maxMaxBufferLength: 3,
-          targetLatency: 4
-        });
-        
-        hls.loadSource(hlsUrl);
-        hls.attachMedia(video);
-        
-        hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
-          console.log('HLS manifest parsed, starting playback');
-          video.play().catch(e => console.error('Play error:', e));
-        });
-
-        // Skip to live edge if player falls behind
-        hls.on(window.Hls.Events.FRAG_BUFFERED, () => {
-          if (video.buffered.length > 0) {
-            const bufferedEnd = video.buffered.end(video.buffered.length - 1);
-            const duration = video.duration;
-            
-            // If more than 6 seconds behind live edge, skip ahead
-            if (duration && bufferedEnd - video.currentTime > 6) {
-              console.log(`Skipping ahead: ${video.currentTime.toFixed(1)}s -> ${(bufferedEnd - 1).toFixed(1)}s`);
-              video.currentTime = bufferedEnd - 1;
-            }
-          }
-        });
-        
-        hls.on(window.Hls.Events.ERROR, (event, data) => {
-          console.error('HLS error:', data);
-          if (data.fatal) {
-            setError('HLS stream error: ' + data.reason);
-            setIsStreaming(false);
-          }
-        });
-      } else {
-        console.log('HLS.js not available, using native HLS');
-        video.src = hlsUrl;
-        video.addEventListener('loadedmetadata', () => {
-          console.log('Video metadata loaded');
-          video.play().catch(e => console.error('Play error:', e));
-        });
-        video.addEventListener('error', (e) => {
-          console.error('Video error:', e);
-          setError('Failed to load stream');
+        videoRef.current.onerror = (e) => {
+          console.error('Failed to load initial frame:', e);
+          setError('Failed to load camera frame');
           setIsStreaming(false);
-        });
+        };
       }
 
     } catch (err) {
       console.error('Stream error:', err);
-      setError('Failed to start stream: ' + err.message);
+      setError('Failed to start frame display: ' + err.message);
       setIsStreaming(false);
     }
   };
@@ -153,7 +113,13 @@ function CameraViewer() {
     setIsStreaming(false);
     
     if (videoRef.current) {
-      videoRef.current.pause();
+      // Clear frame refresh interval
+      if (videoRef.current.frameInterval) {
+        clearInterval(videoRef.current.frameInterval);
+        videoRef.current.frameInterval = null;
+      }
+      
+      // Clear image source
       videoRef.current.src = '';
     }
   };
@@ -161,8 +127,22 @@ function CameraViewer() {
   const startDetectionPolling = () => {
     detectionIntervalRef.current = setInterval(async () => {
       try {
-        // Try new vehicle detections endpoint first
-        let response = await fetchWithFallback('/api/detections/vehicle/recent?limit=5', {
+        // Check stream status for detection metadata
+        let response = await fetchWithFallback('/api/stream/status');
+        
+        if (response.ok) {
+          const streamData = await response.json();
+          console.log('Stream status:', streamData);
+          
+          // If we have recent detections from stream metadata, use those
+          if (streamData.latest_detections) {
+            setDetections(streamData.latest_detections);
+            return;
+          }
+        }
+
+        // Fallback: Try vehicle detections endpoint
+        response = await fetchWithFallback('/api/detections/vehicle/recent?limit=5', {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -237,18 +217,16 @@ function CameraViewer() {
         <>
           <div className="camera-stream-container">
             {isStreaming ? (
-              <video
+              <img
                 ref={videoRef}
                 className="camera-stream"
-                controls
-                muted
-                playsInline
+                alt="Live camera feed with AI detections"
               />
             ) : (
               <div className="camera-placeholder">
                 <div className="placeholder-icon">📹</div>
-                <p>Camera stream not active</p>
-                <p className="placeholder-hint">Click play to start streaming</p>
+                <p>Camera feed not active</p>
+                <p className="placeholder-hint">Click play to start frame updates</p>
               </div>
             )}
           </div>
@@ -262,16 +240,43 @@ function CameraViewer() {
                 {isStreaming ? (
                   <>
                     <Pause size={18} />
-                    <span>Stop Stream</span>
+                    <span>Stop Feed</span>
                   </>
                 ) : (
                   <>
                     <Play size={18} />
-                    <span>Start Stream</span>
+                    <span>Start Feed</span>
                   </>
                 )}
               </button>
             )}
+            
+            {/* Last Update Indicator */}
+            {isStreaming && lastUpdate && (
+              <div className="last-update">
+                <span className="update-label">Last update:</span>
+                <span className="update-time">{lastUpdate.toLocaleTimeString()}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Detection Statistics */}
+          <div className="detection-stats">
+            <div className="stat-item">
+              <span className="stat-icon">🔥</span>
+              <span className="stat-label">Smoke</span>
+              <span className="stat-count">{detections.filter(d => d.class_name?.includes('smoke')).length}</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-icon">🚗</span>
+              <span className="stat-label">Vehicles</span>
+              <span className="stat-count">{detections.filter(d => ['passenger', 'puv', 'services', 'two_wheel'].includes(d.class_name)).length}</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-icon">🔢</span>
+              <span className="stat-label">Plates</span>
+              <span className="stat-count">{detections.filter(d => d.class_name === 'license_plate').length}</span>
+            </div>
           </div>
 
           {detections.length > 0 && (

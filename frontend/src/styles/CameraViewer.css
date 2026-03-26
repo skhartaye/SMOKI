@@ -21,12 +21,26 @@
   flex: 1 !important;
   min-height: 0;
   gap: 0;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
-/* Dashboard camera feed styling */
+/* Dashboard specific camera styling */
 .dashboard .camera-viewer {
   max-width: 100%;
-  height: auto;
+  height: 100%;
+  flex: 1;
+}
+
+.dashboard .camera-stream-container {
+  height: 100%;
+  min-height: 400px;
+}
+
+.dashboard .camera-stream {
+  object-fit: cover !important;
+  width: 100% !important;
+  height: 100% !important;
 }
 
 .camera-feed-box .camera-header {
@@ -58,6 +72,31 @@
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
+}
+
+.last-update-text {
+  font-size: 12px;
+  color: #666;
+  margin-left: 8px;
+  font-family: 'Courier New', monospace;
+}
+
+.next-refresh-text {
+  font-size: 12px;
+  color: #2196f3;
+  margin-left: 8px;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+}
+
+.update-indicator {
+  margin-left: 4px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .status-icon {
@@ -160,17 +199,19 @@
   margin: 0 !important;
   padding: 0 !important;
   box-sizing: border-box;
+  min-height: 300px;
 }
 
-.camera-stream {
+.camera-feed-box .camera-stream {
   width: 100% !important;
   height: 100% !important;
-  object-fit: contain;
+  object-fit: cover !important;
   display: block;
   box-sizing: border-box;
   margin: 0 !important;
   padding: 0 !important;
   border: none !important;
+  border-radius: 0 !important;
 }
 
 .camera-placeholder {
@@ -227,6 +268,51 @@
   font-weight: 500;
   cursor: pointer;
   transition: all 0.3s ease;
+}
+
+.refresh-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.test-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #ff9800;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.stream-button:hover, .refresh-button:hover, .test-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+}
+
+.refresh-button:hover {
+  background: #45a049;
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+}
+
+.test-button:hover {
+  background: #f57c00;
+  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);
 }
 
 .stream-button:hover {
@@ -426,4 +512,104 @@
     flex: 1;
     justify-content: center;
   }
+}
+/* Detection Statistics */
+.detection-stats {
+  display: flex;
+  justify-content: space-around;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 16px 0;
+  backdrop-filter: blur(10px);
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-icon {
+  font-size: 24px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 500;
+}
+
+.stat-count {
+  font-size: 18px;
+  font-weight: bold;
+  color: #00ff88;
+}
+
+/* Camera Stream Styles - Updated for static frames */
+.camera-stream {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  background: #000;
+  max-width: 100%;
+  object-fit: contain;
+  transition: opacity 0.3s ease;
+}
+
+.camera-stream:hover {
+  opacity: 0.95;
+}
+
+.camera-stream-container {
+  position: relative;
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+  min-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Last Update Indicator */
+.last-update {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-left: 16px;
+}
+
+.update-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.update-time {
+  font-size: 13px;
+  color: #00ff88;
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+}
+
+/* Camera Controls Layout */
+.camera-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  gap: 16px;
+}
+
+/* Frame Update Animation */
+.camera-stream {
+  animation: frameUpdate 0.2s ease-in-out;
+}
+
+@keyframes frameUpdate {
+  0% { opacity: 0.8; }
+  100% { opacity: 1; }
 }

@@ -1,0 +1,26 @@
+[Unit]
+Description=Smoki Simple Detection System
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=sevi
+Group=sevi
+WorkingDirectory=/home/sevi/smoki_project/src/model-skhart-ready
+ExecStart=/usr/bin/python3 /home/sevi/smoki_project/src/model-skhart-ready/rpi_simple_detect.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Environment
+Environment=PYTHONPATH=/home/sevi/smoki_project/src/model-skhart-ready
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+
+# Resource limits
+MemoryMax=2G
+CPUQuota=80%
+
+[Install]
+WantedBy=multi-user.target

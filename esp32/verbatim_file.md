@@ -1,3 +1,2523 @@
+rpi
+#!/usr/bin/env python3
+"""
+rpi_snap.py  —  Smoki Project  |  Snapshot detection every N seconds
+═══════════════════════════════════════════════════════════════════════
+Every INTERVAL seconds:
+  1. Capture one frame from picam2
+  2. Run smoke / license-plate / vehicle Hailo models
+  3. HOG pedestrian detection → blur pedestrians only (cyclists/motos skipped)
+  4. Crop plate regions → EasyOCR
+  5. Draw bounding boxes on annotated frame
+  6. POST annotated JPEG + all metadata to backend
+  7. Sleep until next interval
+
+No FFmpeg, no HLS, no queues, no threads.
+Simple, stable, easy to debug.
+═══════════════════════════════════════════════════════════════════════
+"""
+
+import hailo_platform as hp
+import numpy as np
+import cv2
+import time
+import os
+import requests
+import json
+from datetime import datetime, timezone
+from picamera2 import Picamera2
+from concurrent.futures import ThreadPoolExecutor
+
+# ─── CONFIGURATION ────────────────────────────────────────────────────────────
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(__file__), '.env.rpi'))
+except ImportError:
+    pass
+
+INTERVAL        = 5.0
+BACKEND_URL     = os.getenv('API_URL',          'https://smoki-backend-rpi.onrender.com')
+CAMERA_ID       = os.getenv('DEVICE_ID',        'rpi_camera_01')
+CAMERA_LOCATION = os.getenv('CAMERA_LOCATION',  'Main_Entrance')
+
+PLATE_CONF   = 0.3
+SMOKE_CONF   = 0.53
+VEHICLE_CONF = 0.3
+
+SMOKE_CLASSES   = {'smoke_black', 'smoke_white'}
+VEHICLE_CLASSES = {'passenger', 'puv', 'services', 'two_wheel'}
+
+# ─── PEDESTRIAN BLUR CONFIGURATION ───────────────────────────────────────────
+# HOG detector settings
+PED_CONF_THRESHOLD  = 0.3    # Minimum HOG score to count as a person
+PED_UPSCALE         = 2.0    # Upscale before detection (helps find small/distant people)
+PED_BLUR_STRENGTH   = 55     # Gaussian blur kernel strength (odd number)
+PED_BLUR_PAD        = 8      # Extra pixels to pad around each detected person box
+
+# Background texture threshold — the key to separating pedestrians from riders:
+#   Road / asphalt = flat, low pixel variance  → cyclists / motorcyclists
+#   Sidewalk / buildings = complex, high variance → pedestrians
+# Raise this value if cyclists are still being blurred.
+# Lower it if sidewalk pedestrians are being skipped.
+PED_TEXTURE_THRESHOLD = 38
+
+ALL_MODELS = [
+    {
+        "hef":     "/home/sevi/smoki_project/src/model-skhart-ready/smoke-hailo8l.hef",
+        "classes": ["smoke_black", "smoke_white"],
+        "type":    "seg",
+        "conf":    SMOKE_CONF,
+        "role":    "smoke",
+    },
+    {
+        "hef":     "/home/sevi/smoki_project/src/model-skhart-ready/license-plate-opt-hailo8l.hef",
+        "classes": ["license_plate"],
+        "type":    "detect",
+        "conf":    PLATE_CONF,
+        "role":    "plate_detect",
+    },
+    {
+        "hef":     "/home/sevi/smoki_project/src/model-skhart-ready/vehicle-class-hailo8l.hef",
+        "classes": ["passenger", "puv", "services", "two_wheel"],
+        "type":    "detect",
+        "conf":    VEHICLE_CONF,
+        "role":    "vehicle",
+    },
+]
+
+# ─── PER-TENSOR QUANT PARAMS ──────────────────────────────────────────────────
+QUANT_PARAMS = {
+    "yolov8n_seg/conv73": (0.087893,  69.0),
+    "yolov8n_seg/conv74": (0.003922,   0.0),
+    "yolov8n_seg/conv75": (0.018757, 162.0),
+    "yolov8n_seg/conv60": (0.085621,  64.0),
+    "yolov8n_seg/conv61": (0.003922,   0.0),
+    "yolov8n_seg/conv62": (0.017188, 174.0),
+    "yolov8n_seg/conv44": (0.093213,  79.0),
+    "yolov8n_seg/conv45": (0.003922,   0.0),
+    "yolov8n_seg/conv46": (0.018580, 173.0),
+    "yolov8n_seg/conv48": (0.021440,  14.0),
+    "yolov8n/conv41":     (0.116865, 118.0),
+    "yolov8n/conv42":     (0.040536, 255.0),
+    "yolov8n/conv52":     (0.120670,  92.0),
+    "yolov8n/conv53":     (0.032743, 255.0),
+    "yolov8n/conv62":     (0.071806,  71.0),
+    "yolov8n/conv63":     (0.022815, 255.0),
+}
+
+VEHICLE_QUANT = {
+    "yolov8n/conv41": (0.173322, 145.0),
+    "yolov8n/conv42": (0.160111, 255.0),
+    "yolov8n/conv52": (0.108191, 147.0),
+    "yolov8n/conv53": (0.123836, 255.0),
+    "yolov8n/conv62": (0.116450, 101.0),
+    "yolov8n/conv63": (0.152770, 245.0),
+}
+
+COLORS = [(0,0,255),(0,255,0),(255,0,0),(0,255,255),(255,0,255),(255,255,0)]
+
+# ─── BACKEND ──────────────────────────────────────────────────────────────────
+_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="backend")
+
+def _post(url, **kwargs):
+    try:
+        requests.post(url, timeout=10, **kwargs)
+    except Exception as e:
+        print(f"[Backend] POST failed {url}: {e}")
+
+def submit(fn, *args):
+    _executor.submit(fn, *args)
+
+# ─── DEQUANTIZATION ───────────────────────────────────────────────────────────
+def dequant(raw: np.ndarray, name: str, qmap: dict) -> np.ndarray:
+    arr = raw.astype(np.float32)
+    if name in qmap:
+        scale, zp = qmap[name]
+        return (arr - zp) * scale
+    return arr
+
+# ─── DFL BBOX DECODE ──────────────────────────────────────────────────────────
+def dfl_decode(reg, stride):
+    H, W, _ = reg.shape
+    num_bins = 16
+    reg_r = reg.reshape(H, W, 4, num_bins)
+    reg_r = reg_r - reg_r.max(axis=-1, keepdims=True)
+    reg_s = np.exp(reg_r)
+    reg_s /= reg_s.sum(axis=-1, keepdims=True)
+    dist  = (reg_s * np.arange(num_bins, dtype=np.float32)).sum(axis=-1)
+    gy, gx = np.meshgrid(np.arange(H), np.arange(W), indexing='ij')
+    x1 = (gx + 0.5 - dist[..., 0]) * stride
+    y1 = (gy + 0.5 - dist[..., 1]) * stride
+    x2 = (gx + 0.5 + dist[..., 2]) * stride
+    y2 = (gy + 0.5 + dist[..., 3]) * stride
+    return x1, y1, x2, y2
+
+# ─── NMS ──────────────────────────────────────────────────────────────────────
+def nms(detections, score_thresh=0.0, iou_thresh=0.45):
+    if not detections:
+        return []
+    boxes  = [[d["bbox"][0], d["bbox"][1],
+               d["bbox"][2]-d["bbox"][0], d["bbox"][3]-d["bbox"][1]] for d in detections]
+    scores = [d["conf"] for d in detections]
+    idx    = cv2.dnn.NMSBoxes(boxes, scores, float(score_thresh), float(iou_thresh))
+    return [detections[i] for i in idx.flatten()] if len(idx) else []
+
+# ─── DECODERS ────────────────────────────────────────────────────────────────
+def _logit_thresh(conf):
+    eps = 1e-6
+    c   = float(np.clip(conf, eps, 1.0 - eps))
+    return float(np.log(c / (1.0 - c)))
+
+def decode_detect(outputs, orig_size, input_size, classes, conf_thresh,
+                  iou_thresh=0.45, qmap=None):
+    if qmap is None:
+        qmap = QUANT_PARAMS
+    strides  = [8, 16, 32]
+    reg_keys = ["yolov8n/conv41", "yolov8n/conv52", "yolov8n/conv62"]
+    cls_keys = ["yolov8n/conv42", "yolov8n/conv53", "yolov8n/conv63"]
+    orig_h, orig_w = orig_size
+    sx, sy = orig_w / input_size[0], orig_h / input_size[1]
+    lt   = _logit_thresh(conf_thresh)
+    dets = []
+    for stride, rk, ck in zip(strides, reg_keys, cls_keys):
+        if rk not in outputs or ck not in outputs:
+            continue
+        reg    = dequant(outputs[rk][0], rk, qmap)
+        logits = dequant(outputs[ck][0], ck, qmap)
+        ls = logits[..., 0] if logits.shape[-1] == 1 else logits.max(axis=-1)
+        ci = (np.zeros(ls.shape, dtype=int)
+              if logits.shape[-1] == 1 else logits.argmax(axis=-1))
+        mask = ls >= lt
+        if not mask.any():
+            continue
+        sc = 1.0 / (1.0 + np.exp(-ls))
+        x1, y1, x2, y2 = dfl_decode(reg, stride)
+        for iy, ix in zip(*np.where(mask)):
+            cid = int(ci[iy, ix])
+            dets.append({
+                "bbox": (int(np.clip(x1[iy,ix]*sx,0,orig_w)),
+                         int(np.clip(y1[iy,ix]*sy,0,orig_h)),
+                         int(np.clip(x2[iy,ix]*sx,0,orig_w)),
+                         int(np.clip(y2[iy,ix]*sy,0,orig_h))),
+                "conf":       float(sc[iy, ix]),
+                "class_id":   cid,
+                "class_name": classes[cid] if cid < len(classes) else "?",
+            })
+    return nms(dets, score_thresh=conf_thresh, iou_thresh=iou_thresh)
+
+
+def decode_seg(outputs, orig_size, input_size, classes, conf_thresh, iou_thresh=0.45):
+    strides  = [8, 16, 32]
+    reg_keys = ["yolov8n_seg/conv44", "yolov8n_seg/conv60", "yolov8n_seg/conv73"]
+    cls_keys = ["yolov8n_seg/conv45", "yolov8n_seg/conv61", "yolov8n_seg/conv74"]
+    orig_h, orig_w = orig_size
+    sx, sy = orig_w / input_size[0], orig_h / input_size[1]
+    lt   = _logit_thresh(conf_thresh)
+    dets = []
+    for stride, rk, ck in zip(strides, reg_keys, cls_keys):
+        if rk not in outputs:
+            continue
+        reg    = dequant(outputs[rk][0], rk, QUANT_PARAMS)
+        logits = dequant(outputs[ck][0], ck, QUANT_PARAMS)
+        ls   = logits.max(axis=-1)
+        ci   = logits.argmax(axis=-1)
+        mask = ls >= lt
+        if not mask.any():
+            continue
+        sc = 1.0 / (1.0 + np.exp(-ls))
+        x1, y1, x2, y2 = dfl_decode(reg, stride)
+        for iy, ix in zip(*np.where(mask)):
+            cid = int(ci[iy, ix])
+            dets.append({
+                "bbox": (int(np.clip(x1[iy,ix]*sx,0,orig_w)),
+                         int(np.clip(y1[iy,ix]*sy,0,orig_h)),
+                         int(np.clip(x2[iy,ix]*sx,0,orig_w)),
+                         int(np.clip(y2[iy,ix]*sy,0,orig_h))),
+                "conf":       float(sc[iy, ix]),
+                "class_id":   cid,
+                "class_name": classes[cid] if cid < len(classes) else "?",
+            })
+    return nms(dets, score_thresh=conf_thresh, iou_thresh=iou_thresh)
+
+# ─── SMOKE OPACITY CLASSIFIER ────────────────────────────────────────────────
+FRAME_AREA = 1280 * 720
+
+def classify_smoke_opacity(det, frame_bgr=None):
+    x1, y1, x2, y2 = det["bbox"]
+    conf = det["conf"]
+    bbox_area  = max(1, (x2 - x1) * (y2 - y1))
+    area_score = min(1.0, (bbox_area / FRAME_AREA) / 0.5)
+    dark_score = 0.0
+    if frame_bgr is not None:
+        try:
+            roi = frame_bgr[max(0,y1):min(frame_bgr.shape[0],y2),
+                            max(0,x1):min(frame_bgr.shape[1],x2)]
+            if roi.size > 0:
+                gray         = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+                dark_ratio   = float(np.mean(gray < 80))
+                bright_ratio = float(np.mean(gray > 200))
+                dark_score   = max(dark_ratio, bright_ratio * 0.7)
+        except Exception:
+            pass
+    if dark_score > 0:
+        opacity_score = 0.5 * conf + 0.3 * area_score + 0.2 * dark_score
+    else:
+        opacity_score = 0.6 * conf + 0.4 * area_score
+    if opacity_score >= 0.70:
+        level = "dense"
+    elif opacity_score >= 0.45:
+        level = "moderate"
+    else:
+        level = "thin"
+    return level, round(opacity_score, 3)
+
+# ─── PEDESTRIAN DETECTION + BLUR (replaces face model) ───────────────────────
+
+# Module-level HOG detector — created once, reused every frame (cheap)
+_hog = cv2.HOGDescriptor()
+_hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+
+
+def _hog_nms(boxes, overlap_thresh=0.35):
+    """Non-maximum suppression for HOG detections."""
+    if not boxes:
+        return []
+    arr = np.array([(x, y, x+w, y+h, c) for x, y, w, h, c in boxes], dtype=float)
+    x1, y1, x2, y2, scores = arr[:,0], arr[:,1], arr[:,2], arr[:,3], arr[:,4]
+    areas = (x2 - x1) * (y2 - y1)
+    order = scores.argsort()[::-1]
+    keep  = []
+    while order.size:
+        i = order[0]
+        keep.append(i)
+        xx1 = np.maximum(x1[i], x1[order[1:]])
+        yy1 = np.maximum(y1[i], y1[order[1:]])
+        xx2 = np.minimum(x2[i], x2[order[1:]])
+        yy2 = np.minimum(y2[i], y2[order[1:]])
+        inter = np.maximum(0, xx2 - xx1) * np.maximum(0, yy2 - yy1)
+        iou   = inter / (areas[i] + areas[order[1:]] - inter)
+        order = order[np.where(iou <= overlap_thresh)[0] + 1]
+    return [boxes[k] for k in keep]
+
+
+def _build_texture_map(img):
+    """
+    Compute a smoothed per-column texture profile.
+    Low std = flat road (rider zone).  High std = complex background (pedestrian zone).
+    """
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    col_texture = np.array([
+        np.std(gray[:, c].astype(float)) for c in range(img.shape[1])
+    ])
+    return gray, np.convolve(col_texture, np.ones(20) / 20, mode='same')
+
+
+def _bg_texture_score(gray_img, col_texture_smooth, x, y, w, h):
+    """
+    Average of:
+      - Column texture at the detection's horizontal center
+      - Pixel std of the patch directly below the person's feet
+
+    Low score  → flat asphalt → cyclist / motorcyclist → skip
+    High score → complex background → pedestrian → blur
+    """
+    h_img, w_img = gray_img.shape[:2]
+    cx     = x + w // 2
+    tx_min = max(0, cx - 20)
+    tx_max = min(w_img - 1, cx + 20)
+    col_score = float(np.mean(col_texture_smooth[tx_min:tx_max + 1]))
+
+    bx1 = max(0, x);          bx2 = min(w_img, x + w)
+    by1 = min(h_img, y + h);  by2 = min(h_img, y + h + int(h * 0.6))
+    below_score = 0.0
+    if by2 > by1 and bx2 > bx1:
+        below_score = float(np.std(gray_img[by1:by2, bx1:bx2].astype(float)))
+
+    return (col_score + below_score) / 2.0
+
+
+def detect_and_blur_pedestrians(frame_bgr, vis_frame,
+                                upscale=PED_UPSCALE,
+                                conf_thresh=PED_CONF_THRESHOLD,
+                                texture_thresh=PED_TEXTURE_THRESHOLD,
+                                blur_strength=PED_BLUR_STRENGTH,
+                                pad=PED_BLUR_PAD):
+    """
+    1. Detect all upright humans via HOG (upscaled for small/distant figures).
+    2. Classify each detection as pedestrian vs rider using background texture:
+         - Road (flat asphalt) = low texture std  → cyclist / motorcyclist → skip
+         - Sidewalk / buildings = high texture std → pedestrian → blur
+    3. Apply pixelate + Gaussian blur to pedestrian regions on vis_frame IN-PLACE.
+
+    Returns:
+        ped_count  (int)  — number of pedestrians blurred
+        rider_count (int) — number of riders skipped (for logging)
+    """
+    h, w = frame_bgr.shape[:2]
+
+    # ── HOG detection on upscaled copy ──────────────────────────────────────
+    img_big = cv2.resize(frame_bgr,
+                         (int(w * upscale), int(h * upscale)),
+                         interpolation=cv2.INTER_CUBIC)
+
+    all_boxes = []
+    for scale in [1.03, 1.05, 1.08, 1.12]:
+        boxes, weights = _hog.detectMultiScale(
+            img_big, winStride=(4, 4), padding=(8, 8), scale=scale
+        )
+        if not len(boxes):
+            continue
+        for i, (bx, by, bw, bh) in enumerate(boxes):
+            conf = float(weights[i]) if weights.ndim == 1 else float(weights[i][0])
+            if conf >= conf_thresh:
+                all_boxes.append((
+                    int(bx / upscale), int(by / upscale),
+                    int(bw / upscale), int(bh / upscale),
+                    conf
+                ))
+
+    persons = _hog_nms(all_boxes)
+    if not persons:
+        return 0, 0
+
+    # ── Classify: pedestrian vs rider ───────────────────────────────────────
+    gray, col_texture = _build_texture_map(frame_bgr)
+    pedestrians = []
+    riders      = []
+
+    # Road center X band — vehicles dominate this zone
+    road_x_left  = int(w * 0.25)
+    road_x_right = int(w * 0.78)
+    # Top 20% of frame = distant objects on the road (appear small, far away)
+    distant_y_thresh = int(h * 0.20)
+    # Minimum bounding box area — very small detections are distant vehicles
+    min_ped_area = 3500  # ~60x58 px; below this = too far away to be a sidewalk pedestrian
+
+    for (px, py, pw, ph, pconf) in persons:
+        cx       = px + pw // 2
+        box_area = pw * ph
+
+        # Rule 1: Tiny box = distant vehicle on road
+        if box_area < min_ped_area:
+            riders.append((px, py, pw, ph, pconf))
+            continue
+
+        # Rule 2: Road-center AND top-of-frame = distant motorcyclist/rider
+        in_road_x   = road_x_left < cx < road_x_right
+        in_distant_y = py < distant_y_thresh
+        if in_road_x and in_distant_y:
+            riders.append((px, py, pw, ph, pconf))
+            continue
+
+        # Rule 3: Background texture — flat road vs complex sidewalk/buildings
+        score = _bg_texture_score(gray, col_texture, px, py, pw, ph)
+        if score >= texture_thresh:
+            pedestrians.append((px, py, pw, ph, pconf))
+        else:
+            riders.append((px, py, pw, ph, pconf))
+
+    # ── Blur pedestrians on vis_frame ────────────────────────────────────────
+    k = blur_strength if blur_strength % 2 == 1 else blur_strength + 1
+
+    for (px, py, pw, ph, _) in pedestrians:
+        x1 = max(0, px - pad);      y1 = max(0, py - pad)
+        x2 = min(w, px + pw + pad); y2 = min(h, py + ph + pad)
+        roi = vis_frame[y1:y2, x1:x2]
+        if roi.size == 0:
+            continue
+        # Pixelate then Gaussian for strong anonymisation
+        small     = cv2.resize(roi,
+                               (max(1, roi.shape[1] // 12), max(1, roi.shape[0] // 12)),
+                               interpolation=cv2.INTER_LINEAR)
+        pixelated = cv2.resize(small, (roi.shape[1], roi.shape[0]),
+                               interpolation=cv2.INTER_NEAREST)
+        vis_frame[y1:y2, x1:x2] = cv2.GaussianBlur(pixelated, (k, k), 0)
+
+    return len(pedestrians), len(riders)
+
+
+# ─── PLATE OCR ────────────────────────────────────────────────────────────────
+def load_ocr():
+    try:
+        import easyocr
+        reader = easyocr.Reader(['en'], gpu=False, verbose=False)
+        print("[OK] EasyOCR ready")
+        return reader
+    except Exception as e:
+        print(f"[WARNING] EasyOCR failed: {e}")
+        return None
+
+def _preprocess_plate(crop_bgr: np.ndarray) -> np.ndarray:
+    h, w = crop_bgr.shape[:2]
+    if h < 100:
+        scale    = 100 / h
+        crop_bgr = cv2.resize(crop_bgr, (int(w * scale), 100),
+                              interpolation=cv2.INTER_CUBIC)
+    gray   = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2GRAY)
+    thresh = cv2.adaptiveThreshold(gray, 255,
+                                   cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                   cv2.THRESH_BINARY, 11, 2)
+    return cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
+
+def read_plate(reader, crop_bgr):
+    if reader is None or crop_bgr is None:
+        return "", 0.0
+    try:
+        processed = _preprocess_plate(crop_bgr)
+        results   = reader.readtext(
+            processed,
+            allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+            width_ths=0.7, height_ths=0.7,
+            detail=1, paragraph=False, batch_size=1,
+        )
+        if not results:
+            return "", 0.0
+        results = sorted(results, key=lambda r: r[2], reverse=True)
+        text    = ''.join(c for c in ''.join(r[1] for r in results) if c.isalnum())
+        conf    = float(results[0][2])
+        return text.strip(), conf
+    except Exception as e:
+        print(f"[OCR] Error: {e}")
+        return "", 0.0
+
+# ─── BACKEND SENDERS ──────────────────────────────────────────────────────────
+def send_snapshot(frame_bgr, timestamp, all_dets, smoke_dets,
+                  vehicle_dets, plate_results, ped_count, rider_count, inf_ms):
+    _, jpg = cv2.imencode('.jpg', frame_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    is_violation = len(smoke_dets) > 0 and len(vehicle_dets) > 0
+    payload = {
+        "camera_id":     CAMERA_ID,
+        "location":      CAMERA_LOCATION,
+        "timestamp":     timestamp,
+        "has_detection": len(all_dets) > 0,
+        "is_violation":  is_violation,
+        "detections":    all_dets,
+        "plates":        plate_results,
+        "summary": {
+            "total_detections":  len(all_dets),
+            "smoke_detections":  len(smoke_dets),
+            "smoke_opacity_levels": {
+                "thin":     sum(1 for d in smoke_dets if d.get("opacity_level") == "thin"),
+                "moderate": sum(1 for d in smoke_dets if d.get("opacity_level") == "moderate"),
+                "dense":    sum(1 for d in smoke_dets if d.get("opacity_level") == "dense"),
+            },
+            "vehicle_detections":   len(vehicle_dets),
+            "plate_detections":     len(plate_results),
+            "plates_with_text":     sum(1 for p in plate_results if p.get("text")),
+            "pedestrians_blurred":  ped_count,    # was face_count
+            "riders_skipped":       rider_count,
+            "inference_time_ms":    inf_ms,
+            "frame_size_bytes":     len(jpg),
+            "violation_detected":   is_violation,
+        },
+    }
+    _post(f"{BACKEND_URL}/api/stream/frame",
+          files={"frame": ("frame.jpg", jpg.tobytes(), "image/jpeg")},
+          data={"metadata": json.dumps(payload)})
+
+    flag = " 🚨 VIOLATION" if is_violation else ""
+    print(f"[Sent] smoke={len(smoke_dets)} veh={len(vehicle_dets)} "
+          f"plates={len(plate_results)} ped_blur={ped_count} riders_skip={rider_count} "
+          f"inf={inf_ms}ms{flag}")
+
+
+def send_smoke(timestamp, det, inf_ms, opacity_level, opacity_score, frame_bgr=None):
+    x1, y1, x2, y2 = det["bbox"]
+    files = None
+    if frame_bgr is not None:
+        try:
+            roi = frame_bgr[max(0,y1):min(frame_bgr.shape[0],y2),
+                            max(0,x1):min(frame_bgr.shape[1],x2)]
+            if roi.size > 0:
+                _, buf = cv2.imencode('.jpg', roi, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                files = {"smoke_crop": ("smoke.jpg", buf.tobytes(), "image/jpeg")}
+        except Exception:
+            pass
+    payload = {
+        "timestamp":         timestamp,
+        "camera_id":         CAMERA_ID,
+        "location":          CAMERA_LOCATION,
+        "confidence":        det["conf"],
+        "smoke_type":        det["class_name"],
+        "opacity_level":     opacity_level,
+        "opacity_score":     opacity_score,
+        "bounding_box":      {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
+        "bbox_area_px":      (x2-x1) * (y2-y1),
+        "inference_time_ms": inf_ms,
+    }
+    if files:
+        _post(f"{BACKEND_URL}/api/detections/smoke",
+              files=files, data={"metadata": json.dumps(payload)})
+    else:
+        _post(f"{BACKEND_URL}/api/detections/smoke", json=payload)
+    print(f"  🔥 Smoke: {det['class_name']} | {opacity_level} "
+          f"(score={opacity_score:.2f} conf={det['conf']:.2f})")
+
+
+def send_plate(timestamp, plate_text, ocr_conf, bbox, crop_bgr, inf_ms):
+    _, jpg = cv2.imencode('.jpg', crop_bgr, [cv2.IMWRITE_JPEG_QUALITY, 95])
+    x1, y1, x2, y2 = bbox
+    fname = f"plate_{plate_text}_{timestamp[11:19].replace(':','')}.jpg"
+    _post(f"{BACKEND_URL}/api/stream/plate-crop",
+          files={"plate_crop": (fname, jpg.tobytes(), "image/jpeg")},
+          data={"metadata": json.dumps({
+              "camera_id":        CAMERA_ID,
+              "location":         CAMERA_LOCATION,
+              "timestamp":        timestamp,
+              "plate_text":       plate_text,
+              "ocr_confidence":   ocr_conf,
+              "bbox":             {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
+              "inference_time_ms": inf_ms,
+          })})
+
+# ─── MAIN ─────────────────────────────────────────────────────────────────────
+def main():
+    # ── Camera ────────────────────────────────────────────────────────────────
+    print("[INFO] Starting camera...")
+    picam2 = Picamera2()
+    picam2.configure(picam2.create_still_configuration(
+        main={"format": "BGR888", "size": (1280, 720)}))
+    picam2.start()
+    time.sleep(1)
+    print("[OK] Camera ready")
+
+    # ── OCR ───────────────────────────────────────────────────────────────────
+    ocr = load_ocr()
+
+    # ── Hailo ─────────────────────────────────────────────────────────────────
+    print("[INFO] Loading Hailo models...")
+    from hailo_platform import HailoSchedulingAlgorithm
+    vparams = hp.VDevice.create_params()
+    vparams.scheduling_algorithm = HailoSchedulingAlgorithm.ROUND_ROBIN
+
+    hefs = [hp.HEF(m["hef"]) for m in ALL_MODELS]
+    for m in ALL_MODELS:
+        print(f"[OK] Loaded: {m['hef'].split('/')[-1]}")
+
+    print("[OK] HOG pedestrian detector ready (no model file needed)")
+
+    with hp.VDevice(vparams) as target:
+        configured = []
+        for hef, m in zip(hefs, ALL_MODELS):
+            cp    = hp.ConfigureParams.create_from_hef(hef, hp.HailoStreamInterface.PCIe)
+            ng    = target.configure(hef, cp)[0]
+            ngp   = ng.create_params()
+            in_p  = hp.InputVStreamParams.make(ng, hp.FormatType.UINT8)
+            out_p = hp.OutputVStreamParams.make(ng, hp.FormatType.FLOAT32)
+            iname = hef.get_input_vstream_infos()[0].name
+            configured.append({
+                "cfg": m, "ng": ng, "ngp": ngp,
+                "in_p": in_p, "out_p": out_p, "iname": iname,
+            })
+            print(f"[OK] Configured: {m['hef'].split('/')[-1]}")
+
+        print(f"\n[INFO] Running snapshot loop every {INTERVAL}s — Ctrl+C to stop\n")
+
+        snap_count = 0
+        while True:
+            loop_start = time.time()
+            ts         = datetime.now(timezone.utc).isoformat()
+
+            # ── 1. Capture ────────────────────────────────────────────────────
+            frame_bgr = picam2.capture_array()
+            orig_h, orig_w = frame_bgr.shape[:2]
+            orig_size = (orig_h, orig_w)
+
+            resized   = cv2.resize(frame_bgr, (640, 640))
+            rgb       = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+            inp_uint8 = np.expand_dims(rgb.astype(np.uint8), 0)
+
+            vis_frame    = frame_bgr.copy()
+            all_dets     = []
+            smoke_dets   = []
+            vehicle_dets = []
+            plate_dets   = []
+
+            # ── 2. Hailo inference ────────────────────────────────────────────
+            t_inf = time.time()
+            for cm in configured:
+                cfg      = cm["cfg"]
+                inp_data = {cm["iname"]: inp_uint8}
+                try:
+                    with hp.InferVStreams(cm["ng"], cm["in_p"], cm["out_p"]) as vs:
+                        # No need for explicit activate() with ROUND_ROBIN scheduler
+                        raw_out = vs.infer(inp_data)
+                except Exception as e:
+                    print(f"[ERROR] Infer {cfg['role']}: {e}")
+                    continue
+
+                if cfg["type"] == "seg":
+                    dets = decode_seg(raw_out, orig_size, (640, 640),
+                                      cfg["classes"], cfg["conf"])
+                else:
+                    qmap = VEHICLE_QUANT if cfg["role"] == "vehicle" else QUANT_PARAMS
+                    dets = decode_detect(raw_out, orig_size, (640, 640),
+                                         cfg["classes"], cfg["conf"], qmap=qmap)
+
+                for det in dets:
+                    x1, y1, x2, y2 = det["bbox"]
+                    color = COLORS[det["class_id"] % len(COLORS)]
+                    cv2.rectangle(vis_frame, (x1, y1), (x2, y2), color, 2)
+                    cv2.putText(vis_frame, f"{det['class_name']} {det['conf']:.2f}",
+                                (x1, max(0, y1-8)), cv2.FONT_HERSHEY_SIMPLEX,
+                                0.5, color, 2)
+                    rec = {"class": det["class_name"], "conf": round(det["conf"], 3),
+                           "bbox": {"x1": x1, "y1": y1, "x2": x2, "y2": y2}}
+                    all_dets.append(rec)
+                    if cfg["role"] == "smoke":
+                        opacity_level, opacity_score = classify_smoke_opacity(det, frame_bgr)
+                        det["opacity_level"] = opacity_level
+                        det["opacity_score"] = opacity_score
+                        smoke_dets.append(det)
+                    elif cfg["role"] == "vehicle":
+                        vehicle_dets.append(rec)
+                    elif cfg["role"] == "plate_detect":
+                        plate_dets.append(det)
+
+            inf_ms = int((time.time() - t_inf) * 1000)
+
+            # ── 3. Pedestrian detection + blur (no model file needed) ─────────
+            # Detects all upright persons via HOG, then filters out cyclists and
+            # motorcyclists using background texture (flat road = rider, complex = pedestrian).
+            # Blurs pedestrians on vis_frame in-place.
+            ped_count, rider_count = detect_and_blur_pedestrians(frame_bgr, vis_frame)
+            if ped_count or rider_count:
+                print(f"  [Ped] blurred={ped_count} riders_skipped={rider_count}")
+
+            # ── 4. Plate OCR ──────────────────────────────────────────────────
+            plate_results = []
+            for det in plate_dets:
+                x1, y1, x2, y2 = det["bbox"]
+                x1c = max(0, x1); y1c = max(0, y1)
+                x2c = min(orig_w-1, x2); y2c = min(orig_h-1, y2)
+                if x2c > x1c and y2c > y1c:
+                    crop = frame_bgr[y1c:y2c, x1c:x2c].copy()
+                    text, oconf = read_plate(ocr, crop)
+                    if text:
+                        plate_results.append({
+                            "text": text, "confidence": round(oconf, 3),
+                            "bbox": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
+                        })
+                        cv2.putText(vis_frame, text, (x1, y2+18),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,255), 2)
+                        submit(send_plate, ts, text, oconf,
+                               (x1,y1,x2,y2), crop, inf_ms)
+
+            # ── 5. Send smoke events ──────────────────────────────────────────
+            for det in smoke_dets:
+                submit(send_smoke, ts, det, inf_ms,
+                       det.get("opacity_level", "thin"),
+                       det.get("opacity_score", 0.0),
+                       frame_bgr.copy())
+
+            # ── 6. Send full snapshot ─────────────────────────────────────────
+            submit(send_snapshot, vis_frame.copy(), ts, all_dets,
+                   smoke_dets, vehicle_dets, plate_results,
+                   ped_count, rider_count, inf_ms)
+
+            # ── 7. Print summary ──────────────────────────────────────────────
+            snap_count += 1
+            elapsed = time.time() - loop_start
+            print(f"[Snap #{snap_count}] {ts[:19]}Z | "
+                  f"Smoke:{len(smoke_dets)} Veh:{len(vehicle_dets)} "
+                  f"Plates:{len(plate_results)} Ped:{ped_count} Riders(skip):{rider_count} | "
+                  f"inf={inf_ms}ms total={elapsed*1000:.0f}ms")
+
+            # ── 8. Sleep remainder of interval ────────────────────────────────
+            time.sleep(max(0.0, INTERVAL - elapsed))
+
+
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--test',     action='store_true',
+                        help='Capture one frame, run inference, save annotated image, exit')
+    parser.add_argument('--interval', type=float, default=INTERVAL,
+                        help=f'Seconds between snapshots (default {INTERVAL})')
+    parser.add_argument('--output',   default='/home/sevi/smoki_project/test_snap.jpg',
+                        help='Output path for --test image')
+    args   = parser.parse_args()
+    INTERVAL = args.interval
+
+    print("[START] rpi_snap.py")
+
+    if args.test:
+        print("\n[TEST MODE] Single frame — no backend, saves annotated image\n")
+        import sys
+
+        picam2 = Picamera2()
+        picam2.configure(picam2.create_still_configuration(
+            main={"format": "BGR888", "size": (1280, 720)}))
+        picam2.start()
+        time.sleep(1)
+        print("[OK] Camera ready")
+        print("[OK] HOG pedestrian detector ready")
+
+        ocr = load_ocr()
+
+        from hailo_platform import HailoSchedulingAlgorithm
+        vparams = hp.VDevice.create_params()
+        vparams.scheduling_algorithm = HailoSchedulingAlgorithm.ROUND_ROBIN
+        hefs = [hp.HEF(m["hef"]) for m in ALL_MODELS]
+
+        with hp.VDevice(vparams) as target:
+            configured = []
+            for hef, m in zip(hefs, ALL_MODELS):
+                cp    = hp.ConfigureParams.create_from_hef(hef, hp.HailoStreamInterface.PCIe)
+                ng    = target.configure(hef, cp)[0]
+                ngp   = ng.create_params()
+                in_p  = hp.InputVStreamParams.make(ng, hp.FormatType.UINT8)
+                out_p = hp.OutputVStreamParams.make(ng, hp.FormatType.FLOAT32)
+                iname = hef.get_input_vstream_infos()[0].name
+                configured.append({
+                    "cfg": m, "ng": ng, "ngp": ngp,
+                    "in_p": in_p, "out_p": out_p, "iname": iname,
+                })
+                print(f"[OK] Configured: {m['hef'].split('/')[-1]}")
+
+            print("\n[TEST] Capturing frame...")
+            frame_bgr = picam2.capture_array()
+            picam2.stop(); picam2.close()
+
+            orig_h, orig_w = frame_bgr.shape[:2]
+            orig_size  = (orig_h, orig_w)
+            resized    = cv2.resize(frame_bgr, (640, 640))
+            rgb        = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+            inp_uint8  = np.expand_dims(rgb.astype(np.uint8), 0)
+            vis_frame  = frame_bgr.copy()
+
+            print(f"[TEST] Frame: {orig_w}x{orig_h}")
+
+            t_inf      = time.time()
+            plate_dets = []
+            for cm in configured:
+                cfg      = cm["cfg"]
+                inp_data = {cm["iname"]: inp_uint8}
+                try:
+                    with hp.InferVStreams(cm["ng"], cm["in_p"], cm["out_p"]) as vs:
+                        # No need for explicit activate() with ROUND_ROBIN scheduler
+                        raw_out = vs.infer(inp_data)
+                except Exception as e:
+                    print(f"[ERROR] {cfg['role']}: {e}")
+                    continue
+
+                if cfg["type"] == "seg":
+                    dets = decode_seg(raw_out, orig_size, (640, 640),
+                                      cfg["classes"], cfg["conf"])
+                else:
+                    qmap = VEHICLE_QUANT if cfg["role"] == "vehicle" else QUANT_PARAMS
+                    dets = decode_detect(raw_out, orig_size, (640, 640),
+                                         cfg["classes"], cfg["conf"], qmap=qmap)
+
+                print(f"\n  [{cfg['role'].upper()}] {len(dets)} detection(s):")
+                for det in dets:
+                    extra = ""
+                    if cfg["role"] == "smoke":
+                        lvl, score = classify_smoke_opacity(det, frame_bgr)
+                        extra = f"  opacity={lvl} ({score:.2f})"
+                    print(f"    {det['class_name']:20s} conf={det['conf']:.3f}  bbox={det['bbox']}{extra}")
+                    x1, y1, x2, y2 = det["bbox"]
+                    color = COLORS[det["class_id"] % len(COLORS)]
+                    cv2.rectangle(vis_frame, (x1,y1), (x2,y2), color, 2)
+                    cv2.putText(vis_frame, f"{det['class_name']} {det['conf']:.2f}",
+                                (x1, max(0,y1-8)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                    if cfg["role"] == "plate_detect":
+                        plate_dets.append(det)
+                        x1c,y1c = max(0,x1), max(0,y1)
+                        x2c,y2c = min(orig_w-1,x2), min(orig_h-1,y2)
+                        if x2c > x1c and y2c > y1c:
+                            crop = frame_bgr[y1c:y2c, x1c:x2c]
+                            text, oconf = read_plate(ocr, crop)
+                            if text:
+                                print(f"    → OCR: '{text}' ({oconf:.2f})")
+                                cv2.putText(vis_frame, text, (x1, y2+18),
+                                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,255), 2)
+
+            inf_ms = int((time.time() - t_inf) * 1000)
+
+            # Pedestrian blur (test mode)
+            print("\n  [PEDESTRIAN BLUR]")
+            ped_count, rider_count = detect_and_blur_pedestrians(frame_bgr, vis_frame)
+            print(f"    Pedestrians blurred: {ped_count}")
+            print(f"    Riders skipped:      {rider_count}")
+
+            cv2.imwrite(args.output, vis_frame)
+            print(f"\n[TEST] Done — inf={inf_ms}ms")
+            print(f"[TEST] Saved annotated image → {args.output}")
+            print(f"[TEST] Copy to view: scp sevi@<pi-ip>:{args.output} .")
+            sys.exit(0)
+
+    # ── Normal loop mode ──────────────────────────────────────────────────────
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n[INFO] Stopped.")
+    finally:
+        _executor.shutdown(wait=False)
+///////////////////////////////////////////////
+postgresql
+//////////////////////////////////////////////import psycopg
+from datetime import datetime
+import os
+import json
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Database connection string
+def get_connection_string():
+    """Get database connection string"""
+    return (f"host={os.getenv('DB_HOST', 'localhost')} "
+            f"dbname={os.getenv('DB_NAME', 'smoki_db')} "
+            f"user={os.getenv('DB_USER', 'postgres')} "
+            f"password={os.getenv('DB_PASSWORD', 'password')} "
+            f"port={os.getenv('DB_PORT', '5432')}")
+
+def init_db_pool():
+    """Initialize database (create tables)"""
+    try:
+        print("Initializing database...")
+        print(f"Connecting to: {os.getenv('DB_HOST', 'localhost')}:{os.getenv('DB_PORT', '5432')}")
+        create_tables()
+        print("✓ Database initialized successfully")
+    except Exception as e:
+        print(f"✗ Error initializing database: {e}")
+        print("WARNING: Database initialization failed. Some features may not work.")
+        # Don't raise - allow app to start anyway
+
+def create_tables():
+    """Create necessary tables if they don't exist"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                # Create users table
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS users (
+                        id SERIAL PRIMARY KEY,
+                        username VARCHAR(50) UNIQUE NOT NULL,
+                        hashed_password VARCHAR(255) NOT NULL,
+                        role VARCHAR(20) NOT NULL,
+                        full_name VARCHAR(100),
+                        created_at TIMESTAMPTZ DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
+                
+                # Create sensor_data table
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS sensor_data (
+                        id SERIAL PRIMARY KEY,
+                        timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        temperature FLOAT,
+                        humidity FLOAT,
+                        pressure FLOAT,
+                        vocs FLOAT,
+                        nitrogen_dioxide FLOAT,
+                        carbon_monoxide FLOAT,
+                        pm25 FLOAT,
+                        pm10 FLOAT,
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
+                
+                # Add pressure column if it doesn't exist (for existing databases)
+                cursor.execute("""
+                    ALTER TABLE sensor_data
+                    ADD COLUMN IF NOT EXISTS pressure FLOAT;
+                """)
+                
+                # Create vehicles table for SMOKI (RPi camera detection)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS vehicles (
+                        id SERIAL PRIMARY KEY,
+                        license_plate VARCHAR(50) UNIQUE NOT NULL,
+                        vehicle_type VARCHAR(50),
+                        first_detected TIMESTAMPTZ DEFAULT NOW(),
+                        last_detected TIMESTAMPTZ DEFAULT NOW(),
+                        total_violations INT DEFAULT 0,
+                        status VARCHAR(20) DEFAULT 'active',
+                        created_at TIMESTAMPTZ DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
+                
+                # Create vehicle_detections table for individual detections
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS vehicle_detections (
+                        id SERIAL PRIMARY KEY,
+                        vehicle_id INT REFERENCES vehicles(id) ON DELETE CASCADE,
+                        timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        location VARCHAR(255),
+                        confidence FLOAT,
+                        smoke_detected BOOLEAN DEFAULT FALSE,
+                        emission_level VARCHAR(20),
+                        image_path VARCHAR(255),
+                        metadata JSONB,
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
+                
+                # Create violations table
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS violations (
+                        id SERIAL PRIMARY KEY,
+                        vehicle_id INT REFERENCES vehicles(id) ON DELETE CASCADE,
+                        detection_id INT REFERENCES vehicle_detections(id) ON DELETE CASCADE,
+                        violation_type VARCHAR(50),
+                        severity VARCHAR(20),
+                        timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        description TEXT,
+                        resolved BOOLEAN DEFAULT FALSE,
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
+                
+                # Create notifications table
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS notifications (
+                        id SERIAL PRIMARY KEY,
+                        violation_id INT REFERENCES violations(id) ON DELETE CASCADE,
+                        title VARCHAR(255),
+                        message TEXT,
+                        notification_type VARCHAR(50),
+                        is_read BOOLEAN DEFAULT FALSE,
+                        timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
+                
+                # Create images table for storing image data
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS images (
+                        id SERIAL PRIMARY KEY,
+                        vehicle_detection_id INT REFERENCES vehicle_detections(id) ON DELETE CASCADE,
+                        violation_id INT REFERENCES violations(id) ON DELETE SET NULL,
+                        image_data BYTEA NOT NULL,
+                        image_format VARCHAR(20),
+                        file_size INT,
+                        width INT,
+                        height INT,
+                        timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
+                
+                # Create image_metadata table for storing image metadata
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS image_metadata (
+                        id SERIAL PRIMARY KEY,
+                        image_id INT REFERENCES images(id) ON DELETE CASCADE,
+                        camera_id VARCHAR(100),
+                        camera_location VARCHAR(255),
+                        exposure_time FLOAT,
+                        iso_speed INT,
+                        focal_length FLOAT,
+                        aperture FLOAT,
+                        white_balance VARCHAR(50),
+                        flash_used BOOLEAN,
+                        gps_latitude FLOAT,
+                        gps_longitude FLOAT,
+                        gps_altitude FLOAT,
+                        device_model VARCHAR(255),
+                        software_version VARCHAR(100),
+                        processing_time_ms INT,
+                        quality_score FLOAT,
+                        additional_data JSONB,
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
+                
+                # Create indexes for faster queries
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_sensor_timestamp 
+                    ON sensor_data(timestamp);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_users_username 
+                    ON users(username);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_vehicles_license_plate 
+                    ON vehicles(license_plate);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_vehicle_detections_timestamp 
+                    ON vehicle_detections(timestamp);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_vehicle_detections_vehicle_id 
+                    ON vehicle_detections(vehicle_id);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_violations_vehicle_id 
+                    ON violations(vehicle_id);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_violations_timestamp 
+                    ON violations(timestamp);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_notifications_timestamp 
+                    ON notifications(timestamp);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_images_vehicle_detection_id 
+                    ON images(vehicle_detection_id);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_images_violation_id 
+                    ON images(violation_id);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_images_timestamp 
+                    ON images(timestamp);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_image_metadata_image_id 
+                    ON image_metadata(image_id);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_image_metadata_camera_id 
+                    ON image_metadata(camera_id);
+                """)
+                
+                conn.commit()
+                print("Tables created successfully")
+        except Exception as e:
+            print(f"Error creating tables: {e}")
+            conn.rollback()
+
+# ============ SENSOR DATA FUNCTIONS ============
+
+def insert_sensor_data(temperature=None, humidity=None, pressure=None, vocs=None, 
+                       nitrogen_dioxide=None, carbon_monoxide=None, 
+                       pm25=None, pm10=None):
+    """Insert sensor data into database"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO sensor_data 
+                    (temperature, humidity, pressure, vocs, nitrogen_dioxide, carbon_monoxide, pm25, pm10)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id, timestamp;
+                """, (temperature, humidity, pressure, vocs, nitrogen_dioxide, carbon_monoxide, pm25, pm10))
+                
+                result = cursor.fetchone()
+                conn.commit()
+                return {"id": result[0], "timestamp": result[1]}
+        except Exception as e:
+            print(f"Error inserting sensor data: {e}")
+            conn.rollback()
+            return None
+
+def get_latest_sensor_data(limit=10):
+    """Get latest sensor readings"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, timestamp, temperature, humidity, pressure, vocs, 
+                           nitrogen_dioxide, carbon_monoxide, pm25, pm10
+                    FROM sensor_data
+                    ORDER BY timestamp DESC
+                    LIMIT %s;
+                """, (limit,))
+                
+                columns = ['id', 'timestamp', 'temperature', 'humidity', 'pressure', 'vocs', 
+                           'nitrogen_dioxide', 'carbon_monoxide', 'pm25', 'pm10']
+                results = []
+                for row in cursor.fetchall():
+                    results.append(dict(zip(columns, row)))
+                return results
+        except Exception as e:
+            print(f"Error fetching sensor data: {e}")
+            return []
+
+def get_sensor_data_by_timerange(start_time, end_time):
+    """Get sensor data within a time range"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, timestamp, temperature, humidity, pressure, vocs, 
+                           nitrogen_dioxide, carbon_monoxide, pm25, pm10
+                    FROM sensor_data
+                    WHERE timestamp BETWEEN %s AND %s
+                    ORDER BY timestamp DESC;
+                """, (start_time, end_time))
+                
+                columns = ['id', 'timestamp', 'temperature', 'humidity', 'pressure', 'vocs', 
+                           'nitrogen_dioxide', 'carbon_monoxide', 'pm25', 'pm10']
+                results = []
+                for row in cursor.fetchall():
+                    results.append(dict(zip(columns, row)))
+                return results
+        except Exception as e:
+            print(f"Error fetching sensor data by time range: {e}")
+            return []
+
+def update_sensor_data(record_id, temperature=None, humidity=None, pressure=None, vocs=None, 
+                       nitrogen_dioxide=None, carbon_monoxide=None, 
+                       pm25=None, pm10=None):
+    """Update sensor data record"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    UPDATE sensor_data
+                    SET temperature = %s,
+                        humidity = %s,
+                        pressure = %s,
+                        vocs = %s,
+                        nitrogen_dioxide = %s,
+                        carbon_monoxide = %s,
+                        pm25 = %s,
+                        pm10 = %s
+                    WHERE id = %s
+                    RETURNING id, timestamp;
+                """, (temperature, humidity, pressure, vocs, nitrogen_dioxide, carbon_monoxide, 
+                      pm25, pm10, record_id))
+                
+                result = cursor.fetchone()
+                if result:
+                    conn.commit()
+                    return {"id": result[0], "timestamp": result[1]}
+                else:
+                    return None
+        except Exception as e:
+            print(f"Error updating sensor data: {e}")
+            conn.rollback()
+            return None
+
+def delete_sensor_data(record_id):
+    """Delete sensor data record"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    DELETE FROM sensor_data
+                    WHERE id = %s
+                    RETURNING id;
+                """, (record_id,))
+                
+                result = cursor.fetchone()
+                conn.commit()
+                return result is not None
+        except Exception as e:
+            print(f"Error deleting sensor data: {e}")
+            conn.rollback()
+            return False
+
+# ============ VEHICLE FUNCTIONS ============
+
+def register_vehicle(license_plate, vehicle_type="unknown"):
+    """Register a new vehicle"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO vehicles (license_plate, vehicle_type)
+                    VALUES (%s, %s)
+                    ON CONFLICT (license_plate) DO UPDATE
+                    SET last_detected = NOW(), updated_at = NOW()
+                    RETURNING id, license_plate, total_violations;
+                """, (license_plate, vehicle_type))
+                
+                result = cursor.fetchone()
+                conn.commit()
+                return {"id": result[0], "license_plate": result[1], "violations": result[2]}
+        except Exception as e:
+            print(f"Error registering vehicle: {e}")
+            conn.rollback()
+            return None
+
+def get_top_violators(limit=5):
+    """Get top violating vehicles from detection data"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                # Get vehicles with violations from detection metadata
+                cursor.execute("""
+                    SELECT 
+                        v.license_plate,
+                        v.vehicle_type,
+                        v.total_violations,
+                        v.last_detected,
+                        'high' as emission_level,
+                        true as smoke_detected,
+                        v.id
+                    FROM vehicles v
+                    WHERE v.status = 'active' AND v.total_violations > 0
+                    ORDER BY v.total_violations DESC, v.last_detected DESC
+                    LIMIT %s;
+                """, (limit,))
+                
+                columns = ['license_plate', 'vehicle_type', 'violations', 
+                           'last_detected', 'emission_level', 'smoke_detected', 'id']
+                results = []
+                for row in cursor.fetchall():
+                    results.append(dict(zip(columns, row)))
+                
+                # If no registered vehicles with violations, create mock data from recent detections
+                if not results:
+                    cursor.execute("""
+                        SELECT id, metadata, timestamp, smoke_detected
+                        FROM vehicle_detections 
+                        WHERE smoke_detected = true
+                        ORDER BY timestamp DESC
+                        LIMIT %s;
+                    """, (limit,))
+                    
+                    detection_rows = cursor.fetchall()
+                    for i, row in enumerate(detection_rows):
+                        metadata = json.loads(row[1]) if row[1] else {}
+                        # Generate mock license plate from timestamp
+                        timestamp = row[2]
+                        plate_suffix = f"{timestamp.hour:02d}{timestamp.minute:02d}"
+                        
+                        results.append({
+                            'id': f"mock_{row[0]}",
+                            'license_plate': f"SMK-{plate_suffix}",
+                            'vehicle_type': 'passenger',
+                            'violations': 1,
+                            'last_detected': timestamp,
+                            'emission_level': 'high',
+                            'smoke_detected': True
+                        })
+                
+                return results
+        except Exception as e:
+            print(f"Error fetching top violators: {e}")
+            return []
+
+def get_vehicle_ranking():
+    """Get all vehicles ranked by violations from detection data"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                # Get registered vehicles first
+                cursor.execute("""
+                    SELECT v.id, v.license_plate, v.vehicle_type, v.total_violations,
+                           v.last_detected, v.status
+                    FROM vehicles v
+                    ORDER BY v.total_violations DESC, v.last_detected DESC;
+                """)
+                
+                columns = ['id', 'license_plate', 'vehicle_type', 'violations', 
+                           'last_detected', 'status']
+                results = []
+                for row in cursor.fetchall():
+                    results.append(dict(zip(columns, row)))
+                
+                # If no registered vehicles, create ranking from recent detections
+                if not results:
+                    cursor.execute("""
+                        SELECT id, metadata, timestamp, smoke_detected, location
+                        FROM vehicle_detections 
+                        ORDER BY timestamp DESC
+                        LIMIT 10;
+                    """)
+                    
+                    detection_rows = cursor.fetchall()
+                    vehicle_counts = {}
+                    
+                    for row in detection_rows:
+                        metadata = json.loads(row[1]) if row[1] else {}
+                        detections = metadata.get('detections', [])
+                        
+                        # Count vehicles in this detection
+                        for detection in detections:
+                            class_name = detection.get('class_name', '')
+                            if class_name in ['passenger', 'puv', 'services', 'two_wheel']:
+                                # Generate consistent license plate for this vehicle type and location
+                                timestamp = row[2]
+                                location = row[4] or 'Unknown'
+                                plate_key = f"{class_name}_{location}_{timestamp.hour}"
+                                
+                                if plate_key not in vehicle_counts:
+                                    plate_suffix = f"{timestamp.hour:02d}{timestamp.minute:02d}"
+                                    if class_name == 'passenger':
+                                        license_plate = f"ABC-{plate_suffix}"
+                                    elif class_name == 'puv':
+                                        license_plate = f"PUV-{plate_suffix}"
+                                    elif class_name == 'services':
+                                        license_plate = f"SVC-{plate_suffix}"
+                                    else:
+                                        license_plate = f"MC-{plate_suffix}"
+                                    
+                                    vehicle_counts[plate_key] = {
+                                        'license_plate': license_plate,
+                                        'vehicle_type': class_name,
+                                        'violations': 1 if row[3] else 0,  # smoke_detected
+                                        'last_detected': timestamp,
+                                        'status': 'active'
+                                    }
+                                else:
+                                    vehicle_counts[plate_key]['violations'] += 1 if row[3] else 0
+                                    if timestamp > vehicle_counts[plate_key]['last_detected']:
+                                        vehicle_counts[plate_key]['last_detected'] = timestamp
+                    
+                    # Convert to list and add IDs
+                    for i, (key, vehicle) in enumerate(vehicle_counts.items()):
+                        vehicle['id'] = f"detected_{i+1}"
+                        results.append(vehicle)
+                    
+                    # Sort by violations
+                    results.sort(key=lambda x: x['violations'], reverse=True)
+                
+                return results
+        except Exception as e:
+            print(f"Error fetching vehicle ranking: {e}")
+            return []
+
+# ============ DETECTION FUNCTIONS ============
+
+def insert_vehicle_detection(vehicle_id, location, confidence, smoke_detected=False, 
+                            emission_level="normal", image_path=None, metadata=None):
+    """Insert a vehicle detection record"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO vehicle_detections 
+                    (vehicle_id, location, confidence, smoke_detected, emission_level, image_path, metadata)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id, timestamp;
+                """, (vehicle_id, location, confidence, smoke_detected, emission_level, image_path, metadata))
+                
+                result = cursor.fetchone()
+                conn.commit()
+                return {"id": result[0], "timestamp": result[1]}
+        except Exception as e:
+            print(f"Error inserting vehicle detection: {e}")
+            conn.rollback()
+            return None
+
+# ============ VIOLATION FUNCTIONS ============
+
+def create_violation(vehicle_id, detection_id, violation_type, severity, description=None):
+    """Create a violation record"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                # Insert violation
+                cursor.execute("""
+                    INSERT INTO violations 
+                    (vehicle_id, detection_id, violation_type, severity, description)
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING id;
+                """, (vehicle_id, detection_id, violation_type, severity, description))
+                
+                violation_id = cursor.fetchone()[0]
+                
+                # Update vehicle violation count
+                cursor.execute("""
+                    UPDATE vehicles
+                    SET total_violations = total_violations + 1,
+                        last_detected = NOW(),
+                        updated_at = NOW()
+                    WHERE id = %s;
+                """, (vehicle_id,))
+                
+                conn.commit()
+                return {"id": violation_id}
+        except Exception as e:
+            print(f"Error creating violation: {e}")
+            conn.rollback()
+            return None
+
+def get_recent_violations(limit=10):
+    """Get recent violations"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT v.id, v.vehicle_id, v.violation_type, v.severity,
+                           v.timestamp, v.description, veh.license_plate
+                    FROM violations v
+                    JOIN vehicles veh ON v.vehicle_id = veh.id
+                    ORDER BY v.timestamp DESC
+                    LIMIT %s;
+                """, (limit,))
+                
+                columns = ['id', 'vehicle_id', 'violation_type', 'severity', 
+                           'timestamp', 'description', 'license_plate']
+                results = []
+                for row in cursor.fetchall():
+                    results.append(dict(zip(columns, row)))
+                return results
+        except Exception as e:
+            print(f"Error fetching violations: {e}")
+            return []
+
+# ============ NOTIFICATION FUNCTIONS ============
+
+def create_notification(violation_id, title, message, notification_type="violation"):
+    """Create a notification"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO notifications 
+                    (violation_id, title, message, notification_type)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id, timestamp;
+                """, (violation_id, title, message, notification_type))
+                
+                result = cursor.fetchone()
+                conn.commit()
+                return {"id": result[0], "timestamp": result[1]}
+        except Exception as e:
+            print(f"Error creating notification: {e}")
+            conn.rollback()
+            return None
+
+def get_unread_notifications(limit=10):
+    """Get unread notifications"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT n.id, n.title, n.message, n.notification_type,
+                           n.timestamp, v.severity, veh.license_plate
+                    FROM notifications n
+                    LEFT JOIN violations v ON n.violation_id = v.id
+                    LEFT JOIN vehicles veh ON v.vehicle_id = veh.id
+                    WHERE n.is_read = FALSE
+                    ORDER BY n.timestamp DESC
+                    LIMIT %s;
+                """, (limit,))
+                
+                columns = ['id', 'title', 'message', 'notification_type', 
+                           'timestamp', 'severity', 'license_plate']
+                results = []
+                for row in cursor.fetchall():
+                    results.append(dict(zip(columns, row)))
+                return results
+        except Exception as e:
+            print(f"Error fetching notifications: {e}")
+            return []
+
+def mark_notification_read(notification_id):
+    """Mark notification as read"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    UPDATE notifications
+                    SET is_read = TRUE
+                    WHERE id = %s
+                    RETURNING id;
+                """, (notification_id,))
+                
+                result = cursor.fetchone()
+                conn.commit()
+                return result is not None
+        except Exception as e:
+            print(f"Error marking notification as read: {e}")
+            conn.rollback()
+            return False
+
+def close_db_pool():
+    """Close database connections"""
+    print("Database connections closed")
+
+# ============ USER MANAGEMENT ============
+
+def create_default_users():
+    """Create default admin and superadmin users if they don't exist"""
+    from backend.auth import get_password_hash
+    
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                # Check if admin exists
+                cursor.execute("SELECT id FROM users WHERE username = %s", ("admin1234",))
+                if not cursor.fetchone():
+                    admin_hash = get_password_hash("superadmin")
+                    cursor.execute("""
+                        INSERT INTO users (username, hashed_password, role, full_name)
+                        VALUES (%s, %s, %s, %s)
+                    """, ("admin1234", admin_hash, "admin", "Admin User"))
+                    print("✓ Created admin user: admin1234")
+                
+                # Check if superadmin exists
+                cursor.execute("SELECT id FROM users WHERE username = %s", ("superadmin",))
+                if not cursor.fetchone():
+                    superadmin_hash = get_password_hash("superadmin123")
+                    cursor.execute("""
+                        INSERT INTO users (username, hashed_password, role, full_name)
+                        VALUES (%s, %s, %s, %s)
+                    """, ("superadmin", superadmin_hash, "superadmin", "Superadmin User"))
+                    print("✓ Created superadmin user: superadmin")
+                
+                conn.commit()
+        except Exception as e:
+            print(f"Error creating default users: {e}")
+            conn.rollback()
+
+# ============ IMAGE FUNCTIONS ============
+
+def insert_image(vehicle_detection_id, image_data, image_format="jpeg", 
+                 file_size=None, width=None, height=None, violation_id=None):
+    """Insert an image into the database"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO images 
+                    (vehicle_detection_id, violation_id, image_data, image_format, file_size, width, height)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id, timestamp;
+                """, (vehicle_detection_id, violation_id, image_data, image_format, file_size, width, height))
+                
+                result = cursor.fetchone()
+                conn.commit()
+                return {"id": result[0], "timestamp": result[1]}
+        except Exception as e:
+            print(f"Error inserting image: {e}")
+            conn.rollback()
+            return None
+
+def get_image(image_id):
+    """Retrieve image data by ID"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, image_data, image_format, file_size, width, height, timestamp
+                    FROM images
+                    WHERE id = %s;
+                """, (image_id,))
+                
+                result = cursor.fetchone()
+                if result:
+                    return {
+                        "id": result[0],
+                        "image_data": result[1],
+                        "image_format": result[2],
+                        "file_size": result[3],
+                        "width": result[4],
+                        "height": result[5],
+                        "timestamp": result[6]
+                    }
+                return None
+        except Exception as e:
+            print(f"Error retrieving image: {e}")
+            return None
+
+def get_images_by_detection(vehicle_detection_id):
+    """Get all images for a vehicle detection"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, image_format, file_size, width, height, timestamp
+                    FROM images
+                    WHERE vehicle_detection_id = %s
+                    ORDER BY timestamp DESC;
+                """, (vehicle_detection_id,))
+                
+                columns = ['id', 'image_format', 'file_size', 'width', 'height', 'timestamp']
+                results = []
+                for row in cursor.fetchall():
+                    results.append(dict(zip(columns, row)))
+                return results
+        except Exception as e:
+            print(f"Error fetching images by detection: {e}")
+            return []
+
+def get_images_by_violation(violation_id):
+    """Get all images for a violation"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, image_format, file_size, width, height, timestamp
+                    FROM images
+                    WHERE violation_id = %s
+                    ORDER BY timestamp DESC;
+                """, (violation_id,))
+                
+                columns = ['id', 'image_format', 'file_size', 'width', 'height', 'timestamp']
+                results = []
+                for row in cursor.fetchall():
+                    results.append(dict(zip(columns, row)))
+                return results
+        except Exception as e:
+            print(f"Error fetching images by violation: {e}")
+            return []
+
+def delete_image(image_id):
+    """Delete an image"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    DELETE FROM images
+                    WHERE id = %s
+                    RETURNING id;
+                """, (image_id,))
+                
+                result = cursor.fetchone()
+                conn.commit()
+                return result is not None
+        except Exception as e:
+            print(f"Error deleting image: {e}")
+            conn.rollback()
+            return False
+
+# ============ IMAGE METADATA FUNCTIONS ============
+
+def insert_image_metadata(image_id, camera_id=None, camera_location=None, 
+                         exposure_time=None, iso_speed=None, focal_length=None,
+                         aperture=None, white_balance=None, flash_used=None,
+                         gps_latitude=None, gps_longitude=None, gps_altitude=None,
+                         device_model=None, software_version=None, 
+                         processing_time_ms=None, quality_score=None, additional_data=None):
+    """Insert image metadata"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO image_metadata 
+                    (image_id, camera_id, camera_location, exposure_time, iso_speed, focal_length,
+                     aperture, white_balance, flash_used, gps_latitude, gps_longitude, gps_altitude,
+                     device_model, software_version, processing_time_ms, quality_score, additional_data)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id;
+                """, (image_id, camera_id, camera_location, exposure_time, iso_speed, focal_length,
+                      aperture, white_balance, flash_used, gps_latitude, gps_longitude, gps_altitude,
+                      device_model, software_version, processing_time_ms, quality_score, additional_data))
+                
+                result = cursor.fetchone()
+                conn.commit()
+                return {"id": result[0]}
+        except Exception as e:
+            print(f"Error inserting image metadata: {e}")
+            conn.rollback()
+            return None
+
+def get_image_metadata(image_id):
+    """Get metadata for an image"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, camera_id, camera_location, exposure_time, iso_speed, focal_length,
+                           aperture, white_balance, flash_used, gps_latitude, gps_longitude, gps_altitude,
+                           device_model, software_version, processing_time_ms, quality_score, additional_data
+                    FROM image_metadata
+                    WHERE image_id = %s;
+                """, (image_id,))
+                
+                result = cursor.fetchone()
+                if result:
+                    return {
+                        "id": result[0],
+                        "camera_id": result[1],
+                        "camera_location": result[2],
+                        "exposure_time": result[3],
+                        "iso_speed": result[4],
+                        "focal_length": result[5],
+                        "aperture": result[6],
+                        "white_balance": result[7],
+                        "flash_used": result[8],
+                        "gps_latitude": result[9],
+                        "gps_longitude": result[10],
+                        "gps_altitude": result[11],
+                        "device_model": result[12],
+                        "software_version": result[13],
+                        "processing_time_ms": result[14],
+                        "quality_score": result[15],
+                        "additional_data": result[16]
+                    }
+                return None
+        except Exception as e:
+            print(f"Error fetching image metadata: {e}")
+            return None
+
+def update_image_metadata(metadata_id, **kwargs):
+    """Update image metadata fields"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                # Build dynamic update query
+                set_clauses = []
+                values = []
+                for key, value in kwargs.items():
+                    set_clauses.append(f"{key} = %s")
+                    values.append(value)
+                
+                values.append(metadata_id)
+                
+                query = f"""
+                    UPDATE image_metadata
+                    SET {', '.join(set_clauses)}
+                    WHERE id = %s
+                    RETURNING id;
+                """
+                
+                cursor.execute(query, values)
+                result = cursor.fetchone()
+                conn.commit()
+                return result is not None
+        except Exception as e:
+            print(f"Error updating image metadata: {e}")
+            conn.rollback()
+            return False
+
+def get_metadata_by_camera(camera_id, limit=50):
+    """Get all metadata for a specific camera"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT im.id, im.image_id, im.camera_location, im.processing_time_ms, 
+                           im.quality_score, im.created_at
+                    FROM image_metadata im
+                    WHERE im.camera_id = %s
+                    ORDER BY im.created_at DESC
+                    LIMIT %s;
+                """, (camera_id, limit))
+                
+                columns = ['id', 'image_id', 'camera_location', 'processing_time_ms', 
+                           'quality_score', 'created_at']
+                results = []
+                for row in cursor.fetchall():
+                    results.append(dict(zip(columns, row)))
+                return results
+        except Exception as e:
+            print(f"Error fetching metadata by camera: {e}")
+            return []
+
+def insert_smoke_detection(timestamp, confidence, smoke_type, bounding_box=None, 
+                          camera_id="rpi_camera", location="unknown", metadata=None,
+                          detections=None, screenshots=None, license_plate=None):
+    """Insert a smoke detection record from RPi camera with all model detections"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                # Prepare comprehensive metadata JSON
+                detection_metadata = {
+                    "smoke_type": smoke_type,
+                    "bounding_box": bounding_box,
+                    "camera_id": camera_id,
+                    "detection_source": "rpi_camera",
+                    "all_detections": []
+                }
+                
+                # Add all model detections to metadata
+                if detections:
+                    for det in detections:
+                        detection_metadata["all_detections"].append({
+                            "model": det.get("model_name") if isinstance(det, dict) else det.model_name,
+                            "class": det.get("class_name") if isinstance(det, dict) else det.class_name,
+                            "confidence": det.get("confidence") if isinstance(det, dict) else det.confidence,
+                            "bounding_box": det.get("bounding_box") if isinstance(det, dict) else det.bounding_box
+                        })
+                
+                # Add screenshots info
+                if screenshots:
+                    detection_metadata["screenshots"] = screenshots
+                
+                # Add license plate
+                if license_plate:
+                    detection_metadata["license_plate"] = license_plate
+                
+                # Merge with additional metadata
+                if metadata:
+                    detection_metadata.update(metadata)
+                
+                cursor.execute("""
+                    INSERT INTO vehicle_detections 
+                    (timestamp, location, confidence, smoke_detected, emission_level, metadata)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING id, timestamp;
+                """, (timestamp, location, confidence, True, smoke_type, detection_metadata))
+                
+                result = cursor.fetchone()
+                conn.commit()
+                
+                if result:
+                    return {
+                        "id": result[0],
+                        "timestamp": result[1],
+                        "confidence": confidence,
+                        "smoke_type": smoke_type,
+                        "detections_count": len(detections) if detections else 0
+                    }
+                return None
+        except Exception as e:
+            print(f"Error inserting smoke detection: {e}")
+            return None
+
+
+def get_smoke_detections(limit=50, hours=24):
+    """Get recent smoke detections"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, timestamp, location, confidence, metadata
+                    FROM vehicle_detections
+                    WHERE smoke_detected = TRUE 
+                    AND timestamp > NOW() - INTERVAL '%s hours'
+                    ORDER BY timestamp DESC
+                    LIMIT %s;
+                """, (hours, limit))
+                
+                columns = ['id', 'timestamp', 'location', 'confidence', 'metadata']
+                results = []
+                for row in cursor.fetchall():
+                    results.append(dict(zip(columns, row)))
+                return results
+        except Exception as e:
+            print(f"Error fetching smoke detections: {e}")
+            return []
+
+
+def insert_vehicle_detection_from_rpi(timestamp, camera_id, location, detections, frame_data, metadata=None):
+    """Insert vehicle detection from RPi with frame and metadata"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                # Store frame image first
+                cursor.execute("""
+                    INSERT INTO images (vehicle_detection_id, image_data, image_format, file_size, width, height, timestamp)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id;
+                """, (None, frame_data, 'jpeg', len(frame_data), None, None, timestamp))
+                
+                image_id = cursor.fetchone()[0]
+                
+                # Store detection metadata with detections included
+                full_metadata = metadata or {}
+                full_metadata['detections'] = detections
+                full_metadata['camera_id'] = camera_id
+                full_metadata['location'] = location
+                metadata_json = json.dumps(full_metadata)
+                
+                # Calculate average confidence from detections
+                avg_confidence = 0.0
+                if detections:
+                    confidences = [d.get('confidence', 0.0) for d in detections if isinstance(d.get('confidence'), (int, float))]
+                    if confidences:
+                        avg_confidence = sum(confidences) / len(confidences)
+                
+                # Check if smoke was detected
+                smoke_detected = any('smoke' in d.get('class_name', '').lower() for d in detections)
+                
+                cursor.execute("""
+                    INSERT INTO vehicle_detections 
+                    (vehicle_id, timestamp, location, confidence, smoke_detected, emission_level, image_path, metadata)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id, timestamp;
+                """, (None, timestamp, location, avg_confidence, smoke_detected, 'normal', str(image_id), metadata_json))
+                
+                result = cursor.fetchone()
+                
+                # Update the image to link back to the detection
+                cursor.execute("""
+                    UPDATE images SET vehicle_detection_id = %s WHERE id = %s;
+                """, (result[0], image_id))
+                
+                conn.commit()
+                
+                print(f"[DB] Stored vehicle detection: id={result[0]}, detections={len(detections)}, smoke={smoke_detected}")
+                
+                return {
+                    "id": result[0],
+                    "timestamp": result[1],
+                    "image_id": image_id,
+                    "detections_count": len(detections) if detections else 0,
+                    "smoke_detected": smoke_detected
+                }
+        except Exception as e:
+            print(f"Error inserting vehicle detection from RPi: {e}")
+            import traceback
+            traceback.print_exc()
+            conn.rollback()
+            return None
+
+
+def get_recent_vehicle_detections(limit=10):
+    """Get recent vehicle detections with metadata"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, timestamp, location, confidence, metadata, image_path
+                    FROM vehicle_detections
+                    ORDER BY timestamp DESC
+                    LIMIT %s;
+                """, (limit,))
+                
+                rows = cursor.fetchall()
+                detections = []
+                
+                for row in rows:
+                    try:
+                        # Handle both string and dict metadata
+                        metadata = row[4]
+                        if isinstance(metadata, str):
+                            metadata = json.loads(metadata)
+                        elif metadata is None:
+                            metadata = {}
+                    except (json.JSONDecodeError, TypeError):
+                        metadata = {}
+                    
+                    detections.append({
+                        "id": row[0],
+                        "timestamp": row[1].isoformat() if row[1] else None,
+                        "location": row[2],
+                        "confidence": row[3],
+                        "metadata": metadata,
+                        "image_id": row[5]
+                    })
+                
+                return detections
+        except Exception as e:
+            print(f"Error getting recent vehicle detections: {e}")
+            return []
+
+
+def insert_detection_summary(timestamp, camera_id, location, detection_count, smoke_count, vehicle_count, mode, metadata=None):
+    """Insert detection summary metadata (lightweight, no frame data)"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                # Create table if it doesn't exist
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS detection_summaries (
+                        id SERIAL PRIMARY KEY,
+                        timestamp TIMESTAMP WITH TIME ZONE,
+                        camera_id VARCHAR(255),
+                        location VARCHAR(255),
+                        detection_count INT,
+                        smoke_count INT,
+                        vehicle_count INT,
+                        mode VARCHAR(50),
+                        metadata JSONB,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                    );
+                """)
+                
+                cursor.execute("""
+                    INSERT INTO detection_summaries 
+                    (timestamp, camera_id, location, detection_count, smoke_count, vehicle_count, mode, metadata)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id;
+                """, (
+                    timestamp,
+                    camera_id,
+                    location,
+                    detection_count,
+                    smoke_count,
+                    vehicle_count,
+                    mode,
+                    json.dumps(metadata) if metadata else None
+                ))
+                
+                result = cursor.fetchone()
+                conn.commit()
+                return result[0] if result else None
+        except Exception as e:
+            print(f"Error inserting detection summary: {e}")
+            import traceback
+            traceback.print_exc()
+            conn.rollback()
+            return None
+
+
+def get_recent_detection_summaries(limit=50):
+    """Get recent detection summaries"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, timestamp, camera_id, location, detection_count, smoke_count, vehicle_count, mode, metadata
+                    FROM detection_summaries
+                    ORDER BY timestamp DESC
+                    LIMIT %s;
+                """, (limit,))
+                
+                rows = cursor.fetchall()
+                summaries = []
+                
+                for row in rows:
+                    metadata = json.loads(row[8]) if row[8] else {}
+                    summaries.append({
+                        "id": row[0],
+                        "timestamp": row[1].isoformat() if row[1] else None,
+                        "camera_id": row[2],
+                        "location": row[3],
+                        "detection_count": row[4],
+                        "smoke_count": row[5],
+                        "vehicle_count": row[6],
+                        "mode": row[7],
+                        "metadata": metadata
+                    })
+                
+                return summaries
+        except Exception as e:
+            print(f"Error getting recent detection summaries: {e}")
+            return []
+//////////////////////////////////////////////////////
+backend
+/////////////////////////////////////////////////////
+from fastapi import FastAPI, HTTPException, Depends, File, Form, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from datetime import datetime, timezone, timedelta
+import sys
+import psycopg
+import os
+sys.path.append('..')
+from postgre.database import init_db_pool, insert_sensor_data, get_latest_sensor_data, update_sensor_data, delete_sensor_data, close_db_pool, get_connection_string, create_default_users
+from auth import (
+    authenticate_user, create_access_token, get_current_user, 
+    get_current_superadmin, get_current_admin_or_superadmin,
+    Token, User, ACCESS_TOKEN_EXPIRE_MINUTES
+)
+from vehicles import router as vehicles_router
+from stream import router as stream_router
+from webrtc_proxy import router as webrtc_router
+
+app = FastAPI()
+
+# Enable CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Add response headers for streaming
+@app.middleware("http")
+async def add_stream_headers(request, call_next):
+    response = await call_next(request)
+    if "/api/stream" in request.url.path:
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+# Include routers
+app.include_router(vehicles_router)
+app.include_router(stream_router)
+app.include_router(webrtc_router)
+
+# Initialize database on startup
+@app.on_event("startup")
+async def startup_event():
+    init_db_pool()
+    create_default_users()
+
+# Close database on shutdown
+@app.on_event("shutdown")
+async def shutdown_event():
+    close_db_pool()
+
+class SensorData(BaseModel):
+    temperature: float | None = None
+    humidity: float | None = None
+    pressure: float | None = None
+    vocs: float | None = None
+    nitrogen_dioxide: float | None = None
+    carbon_monoxide: float | None = None
+    pm25: float | None = None
+    pm10: float | None = None
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+@app.post("/api/auth/login", response_model=Token)
+def login(login_data: LoginRequest):
+    """Authenticate user and return JWT token"""
+    user = authenticate_user(login_data.username, login_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect username or password"
+        )
+    
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username, "role": user.role},
+        expires_delta=access_token_expires
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "role": user.role,
+        "username": user.username
+    }
+
+@app.get("/api/auth/me", response_model=User)
+def get_me(current_user: User = Depends(get_current_user)):
+    """Get current user information"""
+    return current_user
+
+@app.get("/api/hello")
+def read_root():
+    return {"message": "Hello from FastAPI!", "status": "ok"}
+
+@app.get("/api/health")
+def health_check():
+    """Health check endpoint"""
+    try:
+        with psycopg.connect(get_connection_string()) as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT 1")
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        return {"status": "unhealthy", "database": "disconnected", "error": str(e)}
+
+@app.get("/api/camera/health")
+def camera_health():
+    """Check camera health (no auth required)"""
+    return {
+        "status": "healthy",
+        "stream_url": "/api/stream/playlist.m3u8",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+@app.get("/api/camera/stream")
+def camera_stream():
+    """Redirect to HLS stream (no auth required)"""
+    return {"stream_url": "/api/stream/playlist.m3u8"}
+
+@app.post("/api/camera/detections")
+def camera_detections_post():
+    """Receive detections from RPi (no auth required)"""
+    return {"success": True}
+
+class Detection(BaseModel):
+    """Generic detection from any model"""
+    model_name: str  # 'vehicle_detection', 'smoke_detection', etc.
+    class_name: str  # 'passenger', 'smoke_black', 'license_plate', etc.
+    confidence: float
+    bounding_box: dict | None = None  # {"x1": int, "y1": int, "x2": int, "y2": int}
+    timestamp: str | None = None
+
+class SmokeDetection(BaseModel):
+    timestamp: str
+    confidence: float
+    smoke_type: str  # 'smoke_black' or 'smoke_white'
+    bounding_box: dict | None = None  # {"x1": int, "y1": int, "x2": int, "y2": int}
+    camera_id: str = "rpi_camera"
+    location: str = "unknown"
+    metadata: dict | None = None
+    detections: list[Detection] | None = None  # All detections from all models
+    screenshots: dict | None = None
+    license_plate: str | None = None
+
+@app.post("/api/detections/smoke")
+def record_smoke_detection(detection: SmokeDetection):
+    """Record smoke detection from RPi camera (no auth required)"""
+    try:
+        print(f"[DEBUG] Received smoke detection: {detection.smoke_type} confidence={detection.confidence}")
+        
+        # TODO: Fix database insertion - for now just log and return success
+        # from postgre.database import insert_smoke_detection
+        # result = insert_smoke_detection(...)
+        
+        # Return mock success response
+        return {
+            "success": True, 
+            "data": {
+                "id": 1,
+                "timestamp": detection.timestamp,
+                "confidence": detection.confidence,
+                "smoke_type": detection.smoke_type
+            }
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] Smoke detection error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/detections/smoke")
+def get_smoke_detections(limit: int = 50, hours: int = 24, current_user: User = Depends(get_current_user)):
+    """Get recent smoke detections (requires authentication)"""
+    try:
+        from postgre.database import get_smoke_detections
+        detections = get_smoke_detections(limit=limit, hours=hours)
+        return {
+            "success": True,
+            "data": detections,
+            "count": len(detections)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class DetectionSummary(BaseModel):
+    timestamp: str
+    camera_id: str = "rpi_camera"
+    location: str = "unknown"
+    detection_count: int
+    smoke_count: int
+    vehicle_count: int
+    mode: str = "hailo"  # 'hailo' or 'cpu'
+    metadata: dict | None = None
+
+@app.post("/api/detections/summary")
+def record_detection_summary(summary: DetectionSummary):
+    """Record detection summary metadata from RPi (no auth required, lightweight)"""
+    try:
+        print(f"[DETECTION_SUMMARY] {summary.camera_id} - Mode: {summary.mode}, Total: {summary.detection_count}, Smoke: {summary.smoke_count}, Vehicles: {summary.vehicle_count}")
+        # Store in database if needed
+        from postgre.database import insert_detection_summary
+        result = insert_detection_summary(
+            timestamp=summary.timestamp,
+            camera_id=summary.camera_id,
+            location=summary.location,
+            detection_count=summary.detection_count,
+            smoke_count=summary.smoke_count,
+            vehicle_count=summary.vehicle_count,
+            mode=summary.mode,
+            metadata=summary.metadata
+        )
+        return {"success": True, "data": result}
+    except Exception as e:
+        print(f"[DETECTION_SUMMARY] Error: {e}")
+        # Don't fail the request, just log it
+        return {"success": True, "message": "Summary recorded"}
+
+@app.get("/api/detections/summary/recent")
+def get_recent_detection_summaries(limit: int = 50, current_user: User = Depends(get_current_user)):
+    """Get recent detection summaries (requires authentication)"""
+    try:
+        from postgre.database import get_recent_detection_summaries
+        summaries = get_recent_detection_summaries(limit=limit)
+        return {
+            "success": True,
+            "data": summaries,
+            "count": len(summaries)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/vehicles/detections")
+def get_vehicle_detections(limit: int = 10, current_user: User = Depends(get_current_user)):
+    """Get recent vehicle detections"""
+    try:
+        from vehicles import get_recent_violations
+        violations = get_recent_violations(limit)
+        return {
+            "success": True,
+            "data": violations
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/time")
+def get_server_time():
+    """Get server time for debugging timezone issues"""
+    return {
+        "server_time_utc": datetime.now(timezone.utc).isoformat(),
+        "server_time_local": datetime.now().isoformat(),
+        "timezone": "UTC" if datetime.now().astimezone().utcoffset().total_seconds() == 0 else str(datetime.now().astimezone().tzinfo)
+    }
+
+@app.post("/api/sensors/data")
+def add_sensor_data(data: SensorData):
+    """Add new sensor reading to database (No auth required for ESP32)"""
+    try:
+        result = insert_sensor_data(
+            temperature=data.temperature,
+            humidity=data.humidity,
+            pressure=data.pressure,
+            vocs=data.vocs,
+            nitrogen_dioxide=data.nitrogen_dioxide,
+            carbon_monoxide=data.carbon_monoxide,
+            pm25=data.pm25,
+            pm10=data.pm10
+        )
+        if result:
+            return {"success": True, "data": result}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to insert data")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/sensors/data")
+def get_sensor_data(limit: int = 10):
+    """Get latest sensor readings (Public access for debugging)"""
+    try:
+        data = get_latest_sensor_data(limit=limit)
+        return {"success": True, "data": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/sensors/latest")
+def get_latest_reading():
+    """Get the most recent sensor reading (Public access)"""
+    try:
+        data = get_latest_sensor_data(limit=1)
+        if data:
+            return {"success": True, "data": data[0]}
+        else:
+            return {"success": True, "data": None}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/sensors/status")
+def get_sensor_status():
+    """Get sensor connection status and last update time"""
+    try:
+        data = get_latest_sensor_data(limit=1)
+        if data:
+            last_update = data[0].get('timestamp')
+            if last_update:
+                # Parse timestamp and check if it's older than 30 seconds
+                from datetime import datetime
+                
+                # Handle both string and datetime objects
+                if isinstance(last_update, str):
+                    last_update_dt = datetime.fromisoformat(last_update.replace('Z', '+00:00'))
+                else:
+                    last_update_dt = last_update
+                    
+                current_time = datetime.now(timezone.utc)
+                time_diff = (current_time - last_update_dt).total_seconds()  # In seconds
+                
+                is_timeout = time_diff > 30  # 30 seconds timeout
+                
+                return {
+                    "success": True,
+                    "connected": not is_timeout,
+                    "last_update": str(last_update),
+                    "seconds_since_update": round(time_diff, 2),
+                    "timeout_threshold_seconds": 30
+                }
+        
+        return {
+            "success": True,
+            "connected": False,
+            "last_update": None,
+            "seconds_since_update": None,
+            "timeout_threshold_seconds": 30
+        }
+    except Exception as e:
+        print(f"Error in get_sensor_status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/sensors/data/{record_id}")
+def update_sensor_record(record_id: int, data: SensorData, current_user: User = Depends(get_current_superadmin)):
+    """Update sensor reading (Superadmin only)"""
+    try:
+        result = update_sensor_data(
+            record_id=record_id,
+            temperature=data.temperature,
+            humidity=data.humidity,
+            pressure=data.pressure,
+            vocs=data.vocs,
+            nitrogen_dioxide=data.nitrogen_dioxide,
+            carbon_monoxide=data.carbon_monoxide,
+            pm25=data.pm25,
+            pm10=data.pm10
+        )
+        if result:
+            return {"success": True, "message": "Record updated", "data": result}
+        else:
+            raise HTTPException(status_code=404, detail="Record not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/sensors/data/{record_id}")
+def delete_sensor_record(record_id: int, current_user: User = Depends(get_current_superadmin)):
+    """Delete sensor reading (Superadmin only)"""
+    try:
+        success = delete_sensor_data(record_id)
+        if success:
+            return {"success": True, "message": f"Record {record_id} deleted"}
+        else:
+            raise HTTPException(status_code=404, detail="Record not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/detections/vehicle")
+async def record_vehicle_detection(
+    frame: UploadFile = File(...),
+    data: str = Form(...)
+):
+    """Record vehicle detection with frame and metadata from RPi camera (no auth required)"""
+    try:
+        import json
+        from postgre.database import insert_vehicle_detection_from_rpi
+        
+        # Parse JSON data
+        detection_data = json.loads(data)
+        print(f"[VEHICLE_DETECTION] Received: {detection_data.get('camera_id')} - {len(detection_data.get('detections', []))} objects")
+        
+        # Read frame
+        frame_bytes = await frame.read()
+        print(f"[VEHICLE_DETECTION] Frame size: {len(frame_bytes)} bytes")
+        
+        # Store detection
+        result = insert_vehicle_detection_from_rpi(
+            timestamp=detection_data.get("timestamp"),
+            camera_id=detection_data.get("camera_id", "rpi_camera"),
+            location=detection_data.get("location", "unknown"),
+            detections=detection_data.get("detections", []),
+            frame_data=frame_bytes,
+            metadata=detection_data.get("metadata", {})
+        )
+        
+        if result:
+            print(f"[VEHICLE_DETECTION] Stored successfully: {result}")
+            return {"success": True, "data": result}
+        else:
+            print(f"[VEHICLE_DETECTION] Storage failed")
+            raise HTTPException(status_code=500, detail="Failed to record vehicle detection")
+    except Exception as e:
+        print(f"[VEHICLE_DETECTION] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/detections/vehicle/recent")
+def get_recent_vehicle_detections(limit: int = 10, current_user: User = Depends(get_current_user)):
+    """Get recent vehicle detections with metadata"""
+    try:
+        from postgre.database import get_recent_vehicle_detections
+        detections = get_recent_vehicle_detections(limit=limit)
+        return {
+            "success": True,
+            "data": detections,
+            "count": len(detections)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+//////////////////////////////////////////////////////
+react
+////////////////////////////////////////////////////////
 import './styles/Dashboard.css';
 import './styles/ActionButtons.css';
 import './styles/InfoPage.css';

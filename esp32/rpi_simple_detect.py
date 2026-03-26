@@ -5,7 +5,7 @@ rpi_snap.py  —  Smoki Project  |  Snapshot detection every N seconds
 Every INTERVAL seconds:
   1. Capture one frame from picam2
   2. Run smoke / license-plate / vehicle Hailo models
-  3. Run YOLOv8 face detection → blur faces on frame
+  3. HOG pedestrian detection → blur pedestrians only (cyclists/motos skipped)
   4. Crop plate regions → EasyOCR
   5. Draw bounding boxes on annotated frame
   6. POST annotated JPEG + all metadata to backend
@@ -28,7 +28,6 @@ from picamera2 import Picamera2
 from concurrent.futures import ThreadPoolExecutor
 
 # ─── CONFIGURATION ────────────────────────────────────────────────────────────
-# Load .env.rpi if present
 try:
     from dotenv import load_dotenv
     load_dotenv(os.path.join(os.path.dirname(__file__), '.env.rpi'))
@@ -40,7 +39,6 @@ BACKEND_URL     = os.getenv('API_URL',          'https://smoki-backend-rpi.onren
 CAMERA_ID       = os.getenv('DEVICE_ID',        'rpi_camera_01')
 CAMERA_LOCATION = os.getenv('CAMERA_LOCATION',  'Main_Entrance')
 
-FACE_CONF    = 0.4
 PLATE_CONF   = 0.3
 SMOKE_CONF   = 0.53
 VEHICLE_CONF = 0.3
@@ -48,7 +46,19 @@ VEHICLE_CONF = 0.3
 SMOKE_CLASSES   = {'smoke_black', 'smoke_white'}
 VEHICLE_CLASSES = {'passenger', 'puv', 'services', 'two_wheel'}
 
-FACE_MODEL_PT = "/home/sevi/smoki_project/src/model_despro1/face_detection_blur.pt"
+# ─── PEDESTRIAN BLUR CONFIGURATION ───────────────────────────────────────────
+# HOG detector settings
+PED_CONF_THRESHOLD  = 0.3    # Minimum HOG score to count as a person
+PED_UPSCALE         = 2.0    # Upscale before detection (helps find small/distant people)
+PED_BLUR_STRENGTH   = 55     # Gaussian blur kernel strength (odd number)
+PED_BLUR_PAD        = 8      # Extra pixels to pad around each detected person box
+
+# Background texture threshold — the key to separating pedestrians from riders:
+#   Road / asphalt = flat, low pixel variance  → cyclists / motorcyclists
+#   Sidewalk / buildings = complex, high variance → pedestrians
+# Raise this value if cyclists are still being blurred.
+# Lower it if sidewalk pedestrians are being skipped.
+PED_TEXTURE_THRESHOLD = 38
 
 ALL_MODELS = [
     {
@@ -74,10 +84,8 @@ ALL_MODELS = [
     },
 ]
 
-# ─── PER-TENSOR QUANT PARAMS (from hef.get_output_vstream_infos()) ────────────
-# float_value = (raw_uint8 - zp) * scale
+# ─── PER-TENSOR QUANT PARAMS ──────────────────────────────────────────────────
 QUANT_PARAMS = {
-    # smoke
     "yolov8n_seg/conv73": (0.087893,  69.0),
     "yolov8n_seg/conv74": (0.003922,   0.0),
     "yolov8n_seg/conv75": (0.018757, 162.0),
@@ -88,7 +96,6 @@ QUANT_PARAMS = {
     "yolov8n_seg/conv45": (0.003922,   0.0),
     "yolov8n_seg/conv46": (0.018580, 173.0),
     "yolov8n_seg/conv48": (0.021440,  14.0),
-    # plate
     "yolov8n/conv41":     (0.116865, 118.0),
     "yolov8n/conv42":     (0.040536, 255.0),
     "yolov8n/conv52":     (0.120670,  92.0),
@@ -231,6 +238,203 @@ def decode_seg(outputs, orig_size, input_size, classes, conf_thresh, iou_thresh=
             })
     return nms(dets, score_thresh=conf_thresh, iou_thresh=iou_thresh)
 
+# ─── SMOKE OPACITY CLASSIFIER ────────────────────────────────────────────────
+FRAME_AREA = 1280 * 720
+
+def classify_smoke_opacity(det, frame_bgr=None):
+    x1, y1, x2, y2 = det["bbox"]
+    conf = det["conf"]
+    bbox_area  = max(1, (x2 - x1) * (y2 - y1))
+    area_score = min(1.0, (bbox_area / FRAME_AREA) / 0.5)
+    dark_score = 0.0
+    if frame_bgr is not None:
+        try:
+            roi = frame_bgr[max(0,y1):min(frame_bgr.shape[0],y2),
+                            max(0,x1):min(frame_bgr.shape[1],x2)]
+            if roi.size > 0:
+                gray         = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+                dark_ratio   = float(np.mean(gray < 80))
+                bright_ratio = float(np.mean(gray > 200))
+                dark_score   = max(dark_ratio, bright_ratio * 0.7)
+        except Exception:
+            pass
+    if dark_score > 0:
+        opacity_score = 0.5 * conf + 0.3 * area_score + 0.2 * dark_score
+    else:
+        opacity_score = 0.6 * conf + 0.4 * area_score
+    if opacity_score >= 0.70:
+        level = "dense"
+    elif opacity_score >= 0.45:
+        level = "moderate"
+    else:
+        level = "thin"
+    return level, round(opacity_score, 3)
+
+# ─── PEDESTRIAN DETECTION + BLUR (replaces face model) ───────────────────────
+
+# Module-level HOG detector — created once, reused every frame (cheap)
+_hog = cv2.HOGDescriptor()
+_hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+
+
+def _hog_nms(boxes, overlap_thresh=0.35):
+    """Non-maximum suppression for HOG detections."""
+    if not boxes:
+        return []
+    arr = np.array([(x, y, x+w, y+h, c) for x, y, w, h, c in boxes], dtype=float)
+    x1, y1, x2, y2, scores = arr[:,0], arr[:,1], arr[:,2], arr[:,3], arr[:,4]
+    areas = (x2 - x1) * (y2 - y1)
+    order = scores.argsort()[::-1]
+    keep  = []
+    while order.size:
+        i = order[0]
+        keep.append(i)
+        xx1 = np.maximum(x1[i], x1[order[1:]])
+        yy1 = np.maximum(y1[i], y1[order[1:]])
+        xx2 = np.minimum(x2[i], x2[order[1:]])
+        yy2 = np.minimum(y2[i], y2[order[1:]])
+        inter = np.maximum(0, xx2 - xx1) * np.maximum(0, yy2 - yy1)
+        iou   = inter / (areas[i] + areas[order[1:]] - inter)
+        order = order[np.where(iou <= overlap_thresh)[0] + 1]
+    return [boxes[k] for k in keep]
+
+
+def _build_texture_map(img):
+    """
+    Compute a smoothed per-column texture profile.
+    Low std = flat road (rider zone).  High std = complex background (pedestrian zone).
+    """
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    col_texture = np.array([
+        np.std(gray[:, c].astype(float)) for c in range(img.shape[1])
+    ])
+    return gray, np.convolve(col_texture, np.ones(20) / 20, mode='same')
+
+
+def _bg_texture_score(gray_img, col_texture_smooth, x, y, w, h):
+    """
+    Average of:
+      - Column texture at the detection's horizontal center
+      - Pixel std of the patch directly below the person's feet
+
+    Low score  → flat asphalt → cyclist / motorcyclist → skip
+    High score → complex background → pedestrian → blur
+    """
+    h_img, w_img = gray_img.shape[:2]
+    cx     = x + w // 2
+    tx_min = max(0, cx - 20)
+    tx_max = min(w_img - 1, cx + 20)
+    col_score = float(np.mean(col_texture_smooth[tx_min:tx_max + 1]))
+
+    bx1 = max(0, x);          bx2 = min(w_img, x + w)
+    by1 = min(h_img, y + h);  by2 = min(h_img, y + h + int(h * 0.6))
+    below_score = 0.0
+    if by2 > by1 and bx2 > bx1:
+        below_score = float(np.std(gray_img[by1:by2, bx1:bx2].astype(float)))
+
+    return (col_score + below_score) / 2.0
+
+
+def detect_and_blur_pedestrians(frame_bgr, vis_frame,
+                                upscale=PED_UPSCALE,
+                                conf_thresh=PED_CONF_THRESHOLD,
+                                texture_thresh=PED_TEXTURE_THRESHOLD,
+                                blur_strength=PED_BLUR_STRENGTH,
+                                pad=PED_BLUR_PAD):
+    """
+    1. Detect all upright humans via HOG (upscaled for small/distant figures).
+    2. Classify each detection as pedestrian vs rider using background texture:
+         - Road (flat asphalt) = low texture std  → cyclist / motorcyclist → skip
+         - Sidewalk / buildings = high texture std → pedestrian → blur
+    3. Apply pixelate + Gaussian blur to pedestrian regions on vis_frame IN-PLACE.
+
+    Returns:
+        ped_count  (int)  — number of pedestrians blurred
+        rider_count (int) — number of riders skipped (for logging)
+    """
+    h, w = frame_bgr.shape[:2]
+
+    # ── HOG detection on upscaled copy ──────────────────────────────────────
+    img_big = cv2.resize(frame_bgr,
+                         (int(w * upscale), int(h * upscale)),
+                         interpolation=cv2.INTER_CUBIC)
+
+    all_boxes = []
+    for scale in [1.03, 1.05, 1.08, 1.12]:
+        boxes, weights = _hog.detectMultiScale(
+            img_big, winStride=(4, 4), padding=(8, 8), scale=scale
+        )
+        if not len(boxes):
+            continue
+        for i, (bx, by, bw, bh) in enumerate(boxes):
+            conf = float(weights[i]) if weights.ndim == 1 else float(weights[i][0])
+            if conf >= conf_thresh:
+                all_boxes.append((
+                    int(bx / upscale), int(by / upscale),
+                    int(bw / upscale), int(bh / upscale),
+                    conf
+                ))
+
+    persons = _hog_nms(all_boxes)
+    if not persons:
+        return 0, 0
+
+    # ── Classify: pedestrian vs rider ───────────────────────────────────────
+    gray, col_texture = _build_texture_map(frame_bgr)
+    pedestrians = []
+    riders      = []
+
+    # Road center X band — vehicles dominate this zone
+    road_x_left  = int(w * 0.25)
+    road_x_right = int(w * 0.78)
+    # Top 20% of frame = distant objects on the road (appear small, far away)
+    distant_y_thresh = int(h * 0.20)
+    # Minimum bounding box area — very small detections are distant vehicles
+    min_ped_area = 3500  # ~60x58 px; below this = too far away to be a sidewalk pedestrian
+
+    for (px, py, pw, ph, pconf) in persons:
+        cx       = px + pw // 2
+        box_area = pw * ph
+
+        # Rule 1: Tiny box = distant vehicle on road
+        if box_area < min_ped_area:
+            riders.append((px, py, pw, ph, pconf))
+            continue
+
+        # Rule 2: Road-center AND top-of-frame = distant motorcyclist/rider
+        in_road_x   = road_x_left < cx < road_x_right
+        in_distant_y = py < distant_y_thresh
+        if in_road_x and in_distant_y:
+            riders.append((px, py, pw, ph, pconf))
+            continue
+
+        # Rule 3: Background texture — flat road vs complex sidewalk/buildings
+        score = _bg_texture_score(gray, col_texture, px, py, pw, ph)
+        if score >= texture_thresh:
+            pedestrians.append((px, py, pw, ph, pconf))
+        else:
+            riders.append((px, py, pw, ph, pconf))
+
+    # ── Blur pedestrians on vis_frame ────────────────────────────────────────
+    k = blur_strength if blur_strength % 2 == 1 else blur_strength + 1
+
+    for (px, py, pw, ph, _) in pedestrians:
+        x1 = max(0, px - pad);      y1 = max(0, py - pad)
+        x2 = min(w, px + pw + pad); y2 = min(h, py + ph + pad)
+        roi = vis_frame[y1:y2, x1:x2]
+        if roi.size == 0:
+            continue
+        # Pixelate then Gaussian for strong anonymisation
+        small     = cv2.resize(roi,
+                               (max(1, roi.shape[1] // 12), max(1, roi.shape[0] // 12)),
+                               interpolation=cv2.INTER_LINEAR)
+        pixelated = cv2.resize(small, (roi.shape[1], roi.shape[0]),
+                               interpolation=cv2.INTER_NEAREST)
+        vis_frame[y1:y2, x1:x2] = cv2.GaussianBlur(pixelated, (k, k), 0)
+
+    return len(pedestrians), len(riders)
+
+
 # ─── PLATE OCR ────────────────────────────────────────────────────────────────
 def load_ocr():
     try:
@@ -242,53 +446,68 @@ def load_ocr():
         print(f"[WARNING] EasyOCR failed: {e}")
         return None
 
+def _preprocess_plate(crop_bgr: np.ndarray) -> np.ndarray:
+    h, w = crop_bgr.shape[:2]
+    if h < 100:
+        scale    = 100 / h
+        crop_bgr = cv2.resize(crop_bgr, (int(w * scale), 100),
+                              interpolation=cv2.INTER_CUBIC)
+    gray   = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2GRAY)
+    thresh = cv2.adaptiveThreshold(gray, 255,
+                                   cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                   cv2.THRESH_BINARY, 11, 2)
+    return cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
+
 def read_plate(reader, crop_bgr):
     if reader is None or crop_bgr is None:
         return "", 0.0
     try:
-        h, w = crop_bgr.shape[:2]
-        scale = max(1, 120 // max(h, 1))
-        if scale > 1:
-            crop_bgr = cv2.resize(crop_bgr, (w*scale, h*scale),
-                                  interpolation=cv2.INTER_CUBIC)
-        results = reader.readtext(crop_bgr,
-                                  allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
-                                  detail=1, paragraph=False, batch_size=1)
+        processed = _preprocess_plate(crop_bgr)
+        results   = reader.readtext(
+            processed,
+            allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+            width_ths=0.7, height_ths=0.7,
+            detail=1, paragraph=False, batch_size=1,
+        )
         if not results:
             return "", 0.0
         results = sorted(results, key=lambda r: r[2], reverse=True)
-        text = ''.join(r[1] for r in results).strip()
-        conf = float(results[0][2])
-        return text, conf
+        text    = ''.join(c for c in ''.join(r[1] for r in results) if c.isalnum())
+        conf    = float(results[0][2])
+        return text.strip(), conf
     except Exception as e:
         print(f"[OCR] Error: {e}")
         return "", 0.0
 
 # ─── BACKEND SENDERS ──────────────────────────────────────────────────────────
 def send_snapshot(frame_bgr, timestamp, all_dets, smoke_dets,
-                  vehicle_dets, plate_results, face_count, inf_ms):
+                  vehicle_dets, plate_results, ped_count, rider_count, inf_ms):
     _, jpg = cv2.imencode('.jpg', frame_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
-
     is_violation = len(smoke_dets) > 0 and len(vehicle_dets) > 0
-
     payload = {
-        "camera_id":       CAMERA_ID,
-        "location":        CAMERA_LOCATION,
-        "timestamp":       timestamp,
-        "has_detection":   len(all_dets) > 0,
-        "is_violation":    is_violation,
-        "detections":      all_dets,
-        "plates":          plate_results,
+        "camera_id":     CAMERA_ID,
+        "location":      CAMERA_LOCATION,
+        "timestamp":     timestamp,
+        "has_detection": len(all_dets) > 0,
+        "is_violation":  is_violation,
+        "detections":    all_dets,
+        "plates":        plate_results,
         "summary": {
             "total_detections":  len(all_dets),
             "smoke_detections":  len(smoke_dets),
-            "vehicle_detections": len(vehicle_dets),
-            "plate_detections":  len(plate_results),
-            "plates_with_text":  sum(1 for p in plate_results if p.get("text")),
-            "face_count":        face_count,
-            "inference_time_ms": inf_ms,
-            "frame_size_bytes":  len(jpg),
-            "violation_detected": is_violation,
+            "smoke_opacity_levels": {
+                "thin":     sum(1 for d in smoke_dets if d.get("opacity_level") == "thin"),
+                "moderate": sum(1 for d in smoke_dets if d.get("opacity_level") == "moderate"),
+                "dense":    sum(1 for d in smoke_dets if d.get("opacity_level") == "dense"),
+            },
+            "vehicle_detections":   len(vehicle_dets),
+            "plate_detections":     len(plate_results),
+            "plates_with_text":     sum(1 for p in plate_results if p.get("text")),
+            "pedestrians_blurred":  ped_count,    # was face_count
+            "riders_skipped":       rider_count,
+            "inference_time_ms":    inf_ms,
+            "frame_size_bytes":     len(jpg),
+            "violation_detected":   is_violation,
         },
     }
     _post(f"{BACKEND_URL}/api/stream/frame",
@@ -297,21 +516,41 @@ def send_snapshot(frame_bgr, timestamp, all_dets, smoke_dets,
 
     flag = " 🚨 VIOLATION" if is_violation else ""
     print(f"[Sent] smoke={len(smoke_dets)} veh={len(vehicle_dets)} "
-          f"plates={len(plate_results)} faces={face_count} "
+          f"plates={len(plate_results)} ped_blur={ped_count} riders_skip={rider_count} "
           f"inf={inf_ms}ms{flag}")
 
 
-def send_smoke(timestamp, det, inf_ms):
+def send_smoke(timestamp, det, inf_ms, opacity_level, opacity_score, frame_bgr=None):
     x1, y1, x2, y2 = det["bbox"]
-    _post(f"{BACKEND_URL}/api/detections/smoke", json={
-        "timestamp":    timestamp,
-        "camera_id":    CAMERA_ID,
-        "location":     CAMERA_LOCATION,
-        "confidence":   det["conf"],
-        "smoke_type":   det["class_name"],
-        "bounding_box": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
+    files = None
+    if frame_bgr is not None:
+        try:
+            roi = frame_bgr[max(0,y1):min(frame_bgr.shape[0],y2),
+                            max(0,x1):min(frame_bgr.shape[1],x2)]
+            if roi.size > 0:
+                _, buf = cv2.imencode('.jpg', roi, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                files = {"smoke_crop": ("smoke.jpg", buf.tobytes(), "image/jpeg")}
+        except Exception:
+            pass
+    payload = {
+        "timestamp":         timestamp,
+        "camera_id":         CAMERA_ID,
+        "location":          CAMERA_LOCATION,
+        "confidence":        det["conf"],
+        "smoke_type":        det["class_name"],
+        "opacity_level":     opacity_level,
+        "opacity_score":     opacity_score,
+        "bounding_box":      {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
+        "bbox_area_px":      (x2-x1) * (y2-y1),
         "inference_time_ms": inf_ms,
-    })
+    }
+    if files:
+        _post(f"{BACKEND_URL}/api/detections/smoke",
+              files=files, data={"metadata": json.dumps(payload)})
+    else:
+        _post(f"{BACKEND_URL}/api/detections/smoke", json=payload)
+    print(f"  🔥 Smoke: {det['class_name']} | {opacity_level} "
+          f"(score={opacity_score:.2f} conf={det['conf']:.2f})")
 
 
 def send_plate(timestamp, plate_text, ocr_conf, bbox, crop_bgr, inf_ms):
@@ -321,12 +560,12 @@ def send_plate(timestamp, plate_text, ocr_conf, bbox, crop_bgr, inf_ms):
     _post(f"{BACKEND_URL}/api/stream/plate-crop",
           files={"plate_crop": (fname, jpg.tobytes(), "image/jpeg")},
           data={"metadata": json.dumps({
-              "camera_id":    CAMERA_ID,
-              "location":     CAMERA_LOCATION,
-              "timestamp":    timestamp,
-              "plate_text":   plate_text,
-              "ocr_confidence": ocr_conf,
-              "bbox":         {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
+              "camera_id":        CAMERA_ID,
+              "location":         CAMERA_LOCATION,
+              "timestamp":        timestamp,
+              "plate_text":       plate_text,
+              "ocr_confidence":   ocr_conf,
+              "bbox":             {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
               "inference_time_ms": inf_ms,
           })})
 
@@ -336,20 +575,10 @@ def main():
     print("[INFO] Starting camera...")
     picam2 = Picamera2()
     picam2.configure(picam2.create_still_configuration(
-        main={"format": "RGB888", "size": (1280, 720)}))
+        main={"format": "BGR888", "size": (1280, 720)}))
     picam2.start()
-    time.sleep(1)   # warm up
+    time.sleep(1)
     print("[OK] Camera ready")
-
-    # ── Face model ────────────────────────────────────────────────────────────
-    face_model = None
-    try:
-        from ultralytics import YOLO
-        face_model = YOLO(FACE_MODEL_PT)
-        face_model.to('cpu')
-        print("[OK] Face model loaded")
-    except Exception as e:
-        print(f"[WARNING] Face model: {e}")
 
     # ── OCR ───────────────────────────────────────────────────────────────────
     ocr = load_ocr()
@@ -363,6 +592,8 @@ def main():
     hefs = [hp.HEF(m["hef"]) for m in ALL_MODELS]
     for m in ALL_MODELS:
         print(f"[OK] Loaded: {m['hef'].split('/')[-1]}")
+
+    print("[OK] HOG pedestrian detector ready (no model file needed)")
 
     with hp.VDevice(vparams) as target:
         configured = []
@@ -408,8 +639,8 @@ def main():
                 inp_data = {cm["iname"]: inp_uint8}
                 try:
                     with hp.InferVStreams(cm["ng"], cm["in_p"], cm["out_p"]) as vs:
-                        with cm["ng"].activate(cm["ngp"]):
-                            raw_out = vs.infer(inp_data)
+                        # No need for explicit activate() with ROUND_ROBIN scheduler
+                        raw_out = vs.infer(inp_data)
                 except Exception as e:
                     print(f"[ERROR] Infer {cfg['role']}: {e}")
                     continue
@@ -433,6 +664,9 @@ def main():
                            "bbox": {"x1": x1, "y1": y1, "x2": x2, "y2": y2}}
                     all_dets.append(rec)
                     if cfg["role"] == "smoke":
+                        opacity_level, opacity_score = classify_smoke_opacity(det, frame_bgr)
+                        det["opacity_level"] = opacity_level
+                        det["opacity_score"] = opacity_score
                         smoke_dets.append(det)
                     elif cfg["role"] == "vehicle":
                         vehicle_dets.append(rec)
@@ -441,23 +675,13 @@ def main():
 
             inf_ms = int((time.time() - t_inf) * 1000)
 
-            # ── 3. Face detection + blur ──────────────────────────────────────
-            face_count = 0
-            if face_model is not None:
-                try:
-                    for result in face_model(frame_bgr, conf=FACE_CONF, verbose=False):
-                        for box in result.boxes:
-                            fx1, fy1, fx2, fy2 = map(int, box.xyxy[0])
-                            fx1 = max(0, fx1); fy1 = max(0, fy1)
-                            fx2 = min(orig_w-1, fx2); fy2 = min(orig_h-1, fy2)
-                            if fx2 > fx1 and fy2 > fy1:
-                                roi   = vis_frame[fy1:fy2, fx1:fx2]
-                                ksize = max(15, ((fx2-fx1)//5) | 1)
-                                vis_frame[fy1:fy2, fx1:fx2] = cv2.GaussianBlur(
-                                    roi, (ksize, ksize), 0)
-                                face_count += 1
-                except Exception as e:
-                    print(f"[Face] Error: {e}")
+            # ── 3. Pedestrian detection + blur (no model file needed) ─────────
+            # Detects all upright persons via HOG, then filters out cyclists and
+            # motorcyclists using background texture (flat road = rider, complex = pedestrian).
+            # Blurs pedestrians on vis_frame in-place.
+            ped_count, rider_count = detect_and_blur_pedestrians(frame_bgr, vis_frame)
+            if ped_count or rider_count:
+                print(f"  [Ped] blurred={ped_count} riders_skipped={rider_count}")
 
             # ── 4. Plate OCR ──────────────────────────────────────────────────
             plate_results = []
@@ -473,32 +697,33 @@ def main():
                             "text": text, "confidence": round(oconf, 3),
                             "bbox": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
                         })
-                        # Draw plate text on frame
                         cv2.putText(vis_frame, text, (x1, y2+18),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,255), 2)
-                        # Send individual plate event
                         submit(send_plate, ts, text, oconf,
                                (x1,y1,x2,y2), crop, inf_ms)
 
             # ── 5. Send smoke events ──────────────────────────────────────────
             for det in smoke_dets:
-                submit(send_smoke, ts, det, inf_ms)
+                submit(send_smoke, ts, det, inf_ms,
+                       det.get("opacity_level", "thin"),
+                       det.get("opacity_score", 0.0),
+                       frame_bgr.copy())
 
             # ── 6. Send full snapshot ─────────────────────────────────────────
             submit(send_snapshot, vis_frame.copy(), ts, all_dets,
-                   smoke_dets, vehicle_dets, plate_results, face_count, inf_ms)
+                   smoke_dets, vehicle_dets, plate_results,
+                   ped_count, rider_count, inf_ms)
 
             # ── 7. Print summary ──────────────────────────────────────────────
             snap_count += 1
             elapsed = time.time() - loop_start
             print(f"[Snap #{snap_count}] {ts[:19]}Z | "
                   f"Smoke:{len(smoke_dets)} Veh:{len(vehicle_dets)} "
-                  f"Plates:{len(plate_results)} Faces:{face_count} | "
+                  f"Plates:{len(plate_results)} Ped:{ped_count} Riders(skip):{rider_count} | "
                   f"inf={inf_ms}ms total={elapsed*1000:.0f}ms")
 
             # ── 8. Sleep remainder of interval ────────────────────────────────
-            sleep_for = max(0.0, INTERVAL - elapsed)
-            time.sleep(sleep_for)
+            time.sleep(max(0.0, INTERVAL - elapsed))
 
 
 if __name__ == '__main__':
@@ -510,14 +735,12 @@ if __name__ == '__main__':
                         help=f'Seconds between snapshots (default {INTERVAL})')
     parser.add_argument('--output',   default='/home/sevi/smoki_project/test_snap.jpg',
                         help='Output path for --test image')
-    args = parser.parse_args()
-
+    args   = parser.parse_args()
     INTERVAL = args.interval
 
     print("[START] rpi_snap.py")
 
     if args.test:
-        # ── Single-frame test ─────────────────────────────────────────────────
         print("\n[TEST MODE] Single frame — no backend, saves annotated image\n")
         import sys
 
@@ -527,15 +750,7 @@ if __name__ == '__main__':
         picam2.start()
         time.sleep(1)
         print("[OK] Camera ready")
-
-        face_model = None
-        try:
-            from ultralytics import YOLO
-            face_model = YOLO(FACE_MODEL_PT)
-            face_model.to('cpu')
-            print("[OK] Face model loaded")
-        except Exception as e:
-            print(f"[WARNING] Face model: {e}")
+        print("[OK] HOG pedestrian detector ready")
 
         ocr = load_ocr()
 
@@ -572,14 +787,15 @@ if __name__ == '__main__':
 
             print(f"[TEST] Frame: {orig_w}x{orig_h}")
 
-            t_inf = time.time()
+            t_inf      = time.time()
+            plate_dets = []
             for cm in configured:
                 cfg      = cm["cfg"]
                 inp_data = {cm["iname"]: inp_uint8}
                 try:
                     with hp.InferVStreams(cm["ng"], cm["in_p"], cm["out_p"]) as vs:
-                        with cm["ng"].activate(cm["ngp"]):
-                            raw_out = vs.infer(inp_data)
+                        # No need for explicit activate() with ROUND_ROBIN scheduler
+                        raw_out = vs.infer(inp_data)
                 except Exception as e:
                     print(f"[ERROR] {cfg['role']}: {e}")
                     continue
@@ -594,15 +810,18 @@ if __name__ == '__main__':
 
                 print(f"\n  [{cfg['role'].upper()}] {len(dets)} detection(s):")
                 for det in dets:
-                    print(f"    {det['class_name']:20s} conf={det['conf']:.3f}  bbox={det['bbox']}")
+                    extra = ""
+                    if cfg["role"] == "smoke":
+                        lvl, score = classify_smoke_opacity(det, frame_bgr)
+                        extra = f"  opacity={lvl} ({score:.2f})"
+                    print(f"    {det['class_name']:20s} conf={det['conf']:.3f}  bbox={det['bbox']}{extra}")
                     x1, y1, x2, y2 = det["bbox"]
                     color = COLORS[det["class_id"] % len(COLORS)]
                     cv2.rectangle(vis_frame, (x1,y1), (x2,y2), color, 2)
                     cv2.putText(vis_frame, f"{det['class_name']} {det['conf']:.2f}",
                                 (x1, max(0,y1-8)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-
-                    # OCR on plate crops
                     if cfg["role"] == "plate_detect":
+                        plate_dets.append(det)
                         x1c,y1c = max(0,x1), max(0,y1)
                         x2c,y2c = min(orig_w-1,x2), min(orig_h-1,y2)
                         if x2c > x1c and y2c > y1c:
@@ -615,24 +834,11 @@ if __name__ == '__main__':
 
             inf_ms = int((time.time() - t_inf) * 1000)
 
-            # Face blur
-            face_count = 0
-            if face_model is not None:
-                try:
-                    for result in face_model(frame_bgr, conf=FACE_CONF, verbose=False):
-                        for box in result.boxes:
-                            fx1,fy1,fx2,fy2 = map(int, box.xyxy[0])
-                            fx1=max(0,fx1); fy1=max(0,fy1)
-                            fx2=min(orig_w-1,fx2); fy2=min(orig_h-1,fy2)
-                            if fx2>fx1 and fy2>fy1:
-                                roi = vis_frame[fy1:fy2, fx1:fx2]
-                                ksize = max(15, ((fx2-fx1)//5)|1)
-                                vis_frame[fy1:fy2,fx1:fx2] = cv2.GaussianBlur(roi,(ksize,ksize),0)
-                                face_count += 1
-                    if face_count:
-                        print(f"\n  [FACE] {face_count} face(s) blurred")
-                except Exception as e:
-                    print(f"[Face] {e}")
+            # Pedestrian blur (test mode)
+            print("\n  [PEDESTRIAN BLUR]")
+            ped_count, rider_count = detect_and_blur_pedestrians(frame_bgr, vis_frame)
+            print(f"    Pedestrians blurred: {ped_count}")
+            print(f"    Riders skipped:      {rider_count}")
 
             cv2.imwrite(args.output, vis_frame)
             print(f"\n[TEST] Done — inf={inf_ms}ms")

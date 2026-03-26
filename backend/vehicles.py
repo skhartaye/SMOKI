@@ -123,7 +123,7 @@ async def report_violation(request: ViolationRequest, current_user = Depends(get
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/top-violators")
-async def get_top_violators_endpoint(limit: int = 5, current_user = Depends(get_current_user)):
+async def get_top_violators_endpoint(limit: int = 5):
     """
     Get top violating vehicles
     """
@@ -138,7 +138,7 @@ async def get_top_violators_endpoint(limit: int = 5, current_user = Depends(get_
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/ranking")
-async def get_vehicle_ranking_endpoint(current_user = Depends(get_current_user)):
+async def get_vehicle_ranking_endpoint():
     """
     Get all vehicles ranked by violations
     """
@@ -153,7 +153,7 @@ async def get_vehicle_ranking_endpoint(current_user = Depends(get_current_user))
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/violations/recent")
-async def get_recent_violations_endpoint(limit: int = 10, current_user = Depends(get_current_user)):
+async def get_recent_violations_endpoint(limit: int = 10):
     """
     Get recent violations
     """
@@ -163,6 +163,21 @@ async def get_recent_violations_endpoint(limit: int = 10, current_user = Depends
             "success": True,
             "data": violations,
             "count": len(violations)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/detections/recent")
+async def get_recent_detections_endpoint(limit: int = 10):
+    """
+    Get recent vehicle detections from RPi
+    """
+    try:
+        detections = get_recent_vehicle_detections(limit)
+        return {
+            "success": True,
+            "data": detections,
+            "count": len(detections)
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

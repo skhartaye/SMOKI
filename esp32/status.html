@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RPi Camera Status</title>
+    <meta http-equiv="refresh" content="5">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+        .container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .status { padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .online { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        h1 { color: #333; }
+        .stream-link { display: inline-block; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; margin: 10px 0; }
+        .stream-link:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎥 RPi AI Camera System</h1>
+        
+        <div class="status online">
+            ✅ Camera Status: ONLINE
+        </div>
+        
+        <div class="status info">
+            📊 AI Models: Smoke Detection, Vehicle Detection, License Plate Recognition
+        </div>
+        
+        <div class="status info">
+            🔄 Backend: Frames uploaded every 5 seconds to https://smoki-backend-rpi.onrender.com
+        </div>
+        
+        <div class="status info">
+            ⚡ Performance: Continuous AI inference, periodic frame uploads
+        </div>
+        
+        <h2>📺 View Live Stream</h2>
+        <p>Access your live camera stream with AI detections:</p>
+        
+        <a href="https://smoki-backend-rpi.onrender.com/api/stream/stream.mjpeg" class="stream-link" target="_blank">
+            🎬 Open Live MJPEG Stream
+        </a>
+        
+        <a href="https://smoki-backend-rpi.onrender.com/api/stream/latest.jpg" class="stream-link" target="_blank">
+            📸 View Latest Frame
+        </a>
+        
+        <h2>📈 Dashboard</h2>
+        <p>View detection data and analytics:</p>
+        
+        <a href="https://smoki-backend-rpi.onrender.com" class="stream-link" target="_blank">
+            📊 Open Dashboard
+        </a>
+        
+        <div class="status info">
+            🔄 This page auto-refreshes every 5 seconds
+        </div>
+    </div>
+</body>
+</html>
