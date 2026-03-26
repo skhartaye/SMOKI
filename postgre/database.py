@@ -937,3 +937,43 @@ def get_smoke_detections(limit=50, hours=24):
         except Exception as e:
             print(f"Error fetching smoke detections: {e}")
             return []
+
+
+def insert_vehicle_detection_from_rpi(timestamp, camera_id, location, detections, frame_data, metadata=None):
+    """Insert vehicle detection from RPi with frame and metadata"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                # Store frame image first
+                cursor.execute("""
+                    INSERT INTO images (image_data, image_format, camera_id, camera_location, timestamp)
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING id;
+                """, (frame_data, 'jpeg', camera_id, location, timestamp))
+                
+                image_id = cursor.fetchone()[0]
+                
+                # Store detection metadata
+                detection_json = json.dumps(detections) if detections else None
+                metadata_json = json.dumps(metadata) if metadata else None
+                
+                cursor.execute("""
+                    INSERT INTO vehicle_detections 
+                    (location, confidence, metadata, image_path)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id, timestamp;
+                """, (location, 0.0, metadata_json, str(image_id)))
+                
+                result = cursor.fetchone()
+                conn.commit()
+                
+                return {
+                    "id": result[0],
+                    "timestamp": result[1],
+                    "image_id": image_id,
+                    "detections_count": len(detections) if detections else 0
+                }
+        except Exception as e:
+            print(f"Error inserting vehicle detection from RPi: {e}")
+            conn.rollback()
+            return None

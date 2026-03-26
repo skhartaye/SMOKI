@@ -328,3 +328,37 @@ def delete_sensor_record(record_id: int, current_user: User = Depends(get_curren
             raise HTTPException(status_code=404, detail="Record not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/detections/vehicle")
+async def record_vehicle_detection(
+    frame: UploadFile = File(...),
+    data: str = Form(...)
+):
+    """Record vehicle detection with frame and metadata from RPi camera (no auth required)"""
+    try:
+        import json
+        from postgre.database import insert_vehicle_detection_from_rpi
+        
+        # Parse JSON data
+        detection_data = json.loads(data)
+        
+        # Read frame
+        frame_bytes = await frame.read()
+        
+        # Store detection
+        result = insert_vehicle_detection_from_rpi(
+            timestamp=detection_data.get("timestamp"),
+            camera_id=detection_data.get("camera_id", "rpi_camera"),
+            location=detection_data.get("location", "unknown"),
+            detections=detection_data.get("detections", []),
+            frame_data=frame_bytes,
+            metadata=detection_data.get("metadata", {})
+        )
+        
+        if result:
+            return {"success": True, "data": result}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to record vehicle detection")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -534,7 +534,17 @@ def run_inference():
                                 "bbox": {"x1": x1, "y1": y1, "x2": x2, "y2": y2}
                             })
 
-                    # 3. Push frame to backend
+                    # 3. Send vehicle detections to backend
+                    if all_dets:
+                        timestamp = datetime.now(timezone.utc).isoformat()
+                        inference_time_ms = (time.time() - start_time) * 1000
+                        threading.Thread(
+                            target=send_vehicle_detection,
+                            args=(timestamp, vis_frame.copy(), all_dets, int(inference_time_ms)),
+                            daemon=True
+                        ).start()
+                    
+                    # 4. Push frame to backend
                     if not push_queue.full():
                         push_queue.put_nowait((vis_frame.copy(), all_dets))
 
@@ -590,3 +600,41 @@ if __name__ == '__main__':
         print(f"[FATAL] {e}")
         traceback.print_exc()
 
+
+
+def send_vehicle_detection(timestamp, frame_data, detections, inference_time_ms):
+    """Send vehicle detection with frame and metadata to backend"""
+    try:
+        # Encode frame to JPEG
+        _, frame_jpg = cv2.imencode('.jpg', frame_data)
+        frame_bytes = frame_jpg.tobytes()
+        
+        payload = {
+            "timestamp": timestamp,
+            "camera_id": CAMERA_ID,
+            "location": CAMERA_LOCATION,
+            "detections": detections,
+            "metadata": {
+                "inference_time_ms": inference_time_ms,
+                "frame_size": len(frame_bytes),
+                "detection_count": len(detections)
+            }
+        }
+        
+        files = {
+            'frame': ('frame.jpg', frame_bytes, 'image/jpeg'),
+            'data': (None, json.dumps(payload), 'application/json')
+        }
+        
+        response = requests.post(
+            f"{BACKEND_URL}/api/detections/vehicle",
+            files=files,
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            print(f"✓ Vehicle detection recorded: {len(detections)} objects")
+        else:
+            print(f"✗ Failed to record vehicle detection: {response.status_code}")
+    except Exception as e:
+        print(f"✗ Error sending vehicle detection: {e}")
