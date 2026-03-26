@@ -342,9 +342,11 @@ async def record_vehicle_detection(
         
         # Parse JSON data
         detection_data = json.loads(data)
+        print(f"[VEHICLE_DETECTION] Received: {detection_data.get('camera_id')} - {len(detection_data.get('detections', []))} objects")
         
         # Read frame
         frame_bytes = await frame.read()
+        print(f"[VEHICLE_DETECTION] Frame size: {len(frame_bytes)} bytes")
         
         # Store detection
         result = insert_vehicle_detection_from_rpi(
@@ -357,10 +359,15 @@ async def record_vehicle_detection(
         )
         
         if result:
+            print(f"[VEHICLE_DETECTION] Stored successfully: {result}")
             return {"success": True, "data": result}
         else:
+            print(f"[VEHICLE_DETECTION] Storage failed")
             raise HTTPException(status_code=500, detail="Failed to record vehicle detection")
     except Exception as e:
+        print(f"[VEHICLE_DETECTION] Error: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 

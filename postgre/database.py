@@ -953,9 +953,10 @@ def insert_vehicle_detection_from_rpi(timestamp, camera_id, location, detections
                 
                 image_id = cursor.fetchone()[0]
                 
-                # Store detection metadata
-                detection_json = json.dumps(detections) if detections else None
-                metadata_json = json.dumps(metadata) if metadata else None
+                # Store detection metadata with detections included
+                full_metadata = metadata or {}
+                full_metadata['detections'] = detections
+                metadata_json = json.dumps(full_metadata)
                 
                 cursor.execute("""
                     INSERT INTO vehicle_detections 
@@ -967,6 +968,8 @@ def insert_vehicle_detection_from_rpi(timestamp, camera_id, location, detections
                 result = cursor.fetchone()
                 conn.commit()
                 
+                print(f"[DB] Stored vehicle detection: id={result[0]}, detections={len(detections)}")
+                
                 return {
                     "id": result[0],
                     "timestamp": result[1],
@@ -975,6 +978,8 @@ def insert_vehicle_detection_from_rpi(timestamp, camera_id, location, detections
                 }
         except Exception as e:
             print(f"Error inserting vehicle detection from RPi: {e}")
+            import traceback
+            traceback.print_exc()
             conn.rollback()
             return None
 
