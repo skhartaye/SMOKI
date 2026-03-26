@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { User, Lock, LogIn, Zap } from 'lucide-react'
 import './styles/App.css'
+import { fetchWithFallback } from './utils/apiClient'
 
 function App() {
   const [username, setUsername] = useState('')
@@ -16,8 +17,7 @@ function App() {
     setError('')
 
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
-      const response = await fetch(`${API_URL}/api/auth/login`, {
+      const response = await fetchWithFallback('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -16,6 +16,7 @@ import TriangleLoader from './component/TriangleLoader';
 import TutorialModal from './component/TutorialModal';
 import WebRTCViewer from './component/WebRTCViewer';
 import { useSensorStatus } from './context/SensorStatusContext';
+import { fetchWithFallback } from './utils/apiClient';
 
 const InfoIcon = () => (
   <svg height="16" stroke-linejoin="round" viewBox="0 0 16 16" width="16" style={{color: 'currentcolor'}}><path d="M14 8C14 11.3137 11.3137 14 8 14C4.68629 14 2 11.3137 2 8C2 4.68629 4.68629 2 8 2C11.3137 2 14 4.68629 14 8Z" fill="currentColor" fillOpacity="0.08"></path><path fillRule="evenodd" clipRule="evenodd" d="M8 6C8.55228 6 9 5.55228 9 5C9 4.44772 8.55228 4 8 4C7.44771 4 7 4.44772 7 5C7 5.55228 7.44771 6 8 6ZM7 7H6.25V8.5H7H7.24999V10.5V11.25H8.74999V10.5V8C8.74999 7.44772 8.30227 7 7.74999 7H7Z" fill="currentColor"></path></svg>
@@ -115,9 +116,8 @@ function Dashboard() {
   // Fetch latest sensor data for sensors page
   const fetchLatestSensorData = async () => {
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/sensors/latest`, {
+      const response = await fetchWithFallback('/api/sensors/latest', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -146,9 +146,8 @@ function Dashboard() {
 
   const fetchRecords = async () => {
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/sensors/data?limit=50`, {
+      const response = await fetchWithFallback('/api/sensors/data?limit=50', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -172,9 +171,8 @@ function Dashboard() {
 
   const fetchGraphData = async () => {
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/sensors/data?limit=500`, {
+      const response = await fetchWithFallback('/api/sensors/data?limit=500', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -298,9 +296,8 @@ function Dashboard() {
 
   const fetchTopViolators = async () => {
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/vehicles/top-violators?limit=3`, {
+      const response = await fetchWithFallback('/api/vehicles/top-violators?limit=3', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -323,9 +320,8 @@ function Dashboard() {
 
   const fetchVehicleRanking = async () => {
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/vehicles/ranking`, {
+      const response = await fetchWithFallback('/api/vehicles/ranking', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -373,9 +369,8 @@ function Dashboard() {
     if (!recordToDelete) return;
 
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/sensors/data/${recordToDelete}`, {
+      const response = await fetchWithFallback(`/api/sensors/data/${recordToDelete}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -410,7 +405,6 @@ function Dashboard() {
   const handleCreateRecord = async (e) => {
     e.preventDefault();
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
       const token = localStorage.getItem('token');
       
       const data = {
@@ -423,7 +417,7 @@ function Dashboard() {
         pm10: formData.pm10 ? parseFloat(formData.pm10) : null
       };
 
-      const response = await fetch(`${API_URL}/api/sensors/data`, {
+      const response = await fetchWithFallback('/api/sensors/data', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -452,7 +446,6 @@ function Dashboard() {
   const handleUpdateRecord = async (e) => {
     e.preventDefault();
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
       const token = localStorage.getItem('token');
       
       const data = {
@@ -465,7 +458,7 @@ function Dashboard() {
         pm10: formData.pm10 ? parseFloat(formData.pm10) : null
       };
 
-      const response = await fetch(`${API_URL}/api/sensors/data/${editingRecord.id}`, {
+      const response = await fetchWithFallback(`/api/sensors/data/${editingRecord.id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -745,11 +738,10 @@ function Dashboard() {
 
   const downloadDataAsCSV = () => {
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
       const token = localStorage.getItem('token');
       
       // Fetch all data with a very large limit
-      fetch(`${API_URL}/api/sensors/data?limit=999999`, {
+      fetchWithFallback('/api/sensors/data?limit=999999', {
         headers: {
           'Authorization': `Bearer ${token}`
         }

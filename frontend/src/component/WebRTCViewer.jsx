@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AlertCircle, Wifi, WifiOff, Play, Pause, Zap } from 'lucide-react';
+import { AlertCircle, Wifi, WifiOff, Play, Pause } from 'lucide-react';
 import '../styles/CameraViewer.css';
+import { fetchWithFallback } from '../utils/apiClient';
 
 function WebRTCViewer() {
   const [isStreaming, setIsStreaming] = useState(false);
@@ -11,8 +12,8 @@ function WebRTCViewer() {
   const videoRef = useRef(null);
   const detectionIntervalRef = useRef(null);
 
-  const API_URL = import.meta.env.VITE_API_URL || 'https://smoki-backend-rpi.onrender.com';
-  const RPI_IP = import.meta.env.VITE_RPI_IP || '192.168.100.198';
+  const API_URL = import.meta.env.VITE_API_URL || 'https://smoki-backend.onrender.com';
+  const RPI_IP = import.meta.env.VITE_RPI_IP || '192.168.1.35';
   const token = localStorage.getItem('token');
 
   useEffect(() => {
@@ -42,7 +43,7 @@ function WebRTCViewer() {
 
   const checkCameraHealth = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/camera/health`);
+      const response = await fetchWithFallback('/api/camera/health');
       if (response.ok) {
         setIsHealthy(true);
         setError(null);
@@ -84,9 +85,9 @@ function WebRTCViewer() {
 
       console.log('Video element found:', video);
 
-      // Load HLS stream via backend proxy (HTTPS safe)
-      const hlsUrl = `${API_URL}/api/stream/hls-proxy`;
-      console.log('Loading HLS stream via proxy:', hlsUrl);
+      // Load HLS stream directly from RPi (local dev) or via proxy (production)
+      const hlsUrl = `http://${RPI_IP}:8000/stream.m3u8`;
+      console.log('Loading HLS stream from RPi:', hlsUrl);
 
       // Check if HLS.js is available
       if (window.Hls) {
@@ -164,7 +165,7 @@ function WebRTCViewer() {
     detectionIntervalRef.current = setInterval(async () => {
       try {
         // Try new vehicle detections endpoint first
-        let response = await fetch(`${API_URL}/api/detections/vehicle/recent?limit=5`, {
+        let response = await fetchWithFallback('/api/detections/vehicle/recent?limit=5', {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -179,7 +180,7 @@ function WebRTCViewer() {
         }
         
         // Fallback to violations endpoint
-        response = await fetch(`${API_URL}/api/vehicles/violations/recent?limit=5`, {
+        response = await fetchWithFallback('/api/vehicles/violations/recent?limit=5', {
           headers: {
             'Authorization': `Bearer ${token}`
           }

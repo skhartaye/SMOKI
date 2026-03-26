@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, AlertTriangle, AlertCircle, CheckCircle } from 'lucide-react';
 import '../styles/NotificationRibbon.css';
+import { fetchWithFallback } from '../utils/apiClient';
 
 export default function NotificationRibbon() {
   const [visibleNotifications, setVisibleNotifications] = useState([]);
@@ -8,9 +9,8 @@ export default function NotificationRibbon() {
   const fetchNotifications = async () => {
     try {
       const token = localStorage.getItem('token');
-      const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
       
-      const response = await fetch(`${API_URL}/api/vehicles/notifications/unread?limit=5`, {
+      const response = await fetchWithFallback('/api/vehicles/notifications/unread?limit=5', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -62,9 +62,8 @@ export default function NotificationRibbon() {
   const markAsRead = async (notificationId) => {
     try {
       const token = localStorage.getItem('token');
-      const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
       
-      await fetch(`${API_URL}/api/vehicles/notifications/${notificationId}/read`, {
+      await fetchWithFallback(`/api/vehicles/notifications/${notificationId}/read`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`

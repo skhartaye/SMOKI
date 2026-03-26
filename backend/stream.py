@@ -146,8 +146,10 @@ def hls_proxy():
     hls_url = f"http://{rpi_ip}:8000/stream.m3u8"
     
     try:
-        response = requests.get(hls_url, timeout=10)
+        print(f"[HLS PROXY] Fetching from {hls_url}")
+        response = requests.get(hls_url, timeout=5)
         response.raise_for_status()
+        print(f"[HLS PROXY] Success: {len(response.content)} bytes")
         
         return StreamingResponse(
             iter([response.content]),
@@ -157,6 +159,12 @@ def hls_proxy():
                 "Cache-Control": "no-cache, no-store, must-revalidate"
             }
         )
+    except requests.exceptions.Timeout:
+        print(f"[HLS PROXY] Timeout connecting to {hls_url}")
+        raise HTTPException(status_code=504, detail="RPi stream timeout")
+    except requests.exceptions.ConnectionError as e:
+        print(f"[HLS PROXY] Connection error: {e}")
+        raise HTTPException(status_code=503, detail="Cannot reach RPi stream")
     except Exception as e:
-        print(f"HLS proxy error: {e}")
+        print(f"[HLS PROXY] Error: {e}")
         raise HTTPException(status_code=503, detail=f"Failed to fetch HLS stream: {str(e)}")

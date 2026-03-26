@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { fetchWithFallback } from '../utils/apiClient';
 
 const SensorStatusContext = createContext();
 
@@ -9,8 +10,7 @@ export const SensorStatusProvider = ({ children }) => {
   // Check sensor connection status
   const checkSensorStatus = useCallback(async () => {
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
-      const response = await fetch(`${API_URL}/api/sensors/status`);
+      const response = await fetchWithFallback('/api/sensors/status');
       
       const result = await response.json();
       if (result.success) {

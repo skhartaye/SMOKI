@@ -28,7 +28,7 @@ from socketserver import ThreadingMixIn
 
 
 
-# â”€â”€â”€ CONFIGURATION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# CONFIGURATION
 
 HEF_PATH    = os.getenv('HEF_PATH', r'/home/sevi/smoki_project/src/model-skhart-ready/smoke-seg-v3.hef')
 
@@ -68,7 +68,7 @@ ALL_MODELS = [
 
 # Backend API configuration
 
-BACKEND_URL = os.getenv('BACKEND_URL', 'https://smoki-backend-rpi.onrender.com')
+BACKEND_URL = os.getenv('BACKEND_URL', 'http://192.168.1.20:8000')
 
 CAMERA_ID = os.getenv('CAMERA_ID', 'rpi_camera_01')
 
@@ -84,7 +84,7 @@ os.makedirs(HLS_DIR, exist_ok=True)
 
 
 
-# â”€â”€â”€ HLS SERVER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# HLS SERVER
 
 class HLSHandler(SimpleHTTPRequestHandler):
 
@@ -122,7 +122,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 
 
-# â”€â”€â”€ HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# HELPERS
 
 def letterbox(img, size=640):
 
@@ -344,19 +344,57 @@ def send_smoke_detection(timestamp, confidence, smoke_type, bounding_box, infere
 
         if response.status_code == 200:
 
-            print(f"âœ“ Smoke detection recorded: {smoke_type} ({confidence:.2f})")
+            print(f"✓ Smoke detection recorded: {smoke_type} ({confidence:.2f})")
 
         else:
 
-            print(f"âœ— Failed to record detection: {response.status_code}")
+            print(f"✗ Failed to record detection: {response.status_code}")
 
     except Exception as e:
 
-        print(f"âœ— Error sending detection: {e}")
+        print(f"✗ Error sending detection: {e}")
+
+
+def send_vehicle_detection(timestamp, frame_data, detections, inference_time_ms):
+    """Send vehicle detection with frame and metadata to backend"""
+    try:
+        # Encode frame to JPEG
+        _, frame_jpg = cv2.imencode('.jpg', frame_data)
+        frame_bytes = frame_jpg.tobytes()
+        
+        payload = {
+            "timestamp": timestamp,
+            "camera_id": CAMERA_ID,
+            "location": CAMERA_LOCATION,
+            "detections": detections,
+            "metadata": {
+                "inference_time_ms": inference_time_ms,
+                "frame_size": len(frame_bytes),
+                "detection_count": len(detections)
+            }
+        }
+        
+        files = {
+            'frame': ('frame.jpg', frame_bytes, 'image/jpeg'),
+            'data': (None, json.dumps(payload), 'application/json')
+        }
+        
+        response = requests.post(
+            f"{BACKEND_URL}/api/detections/vehicle",
+            files=files,
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            print(f"✓ Vehicle detection recorded: {len(detections)} objects")
+        else:
+            print(f"✗ Failed to record vehicle detection: {response.status_code}")
+    except Exception as e:
+        print(f"✗ Error sending vehicle detection: {e}")
 
 
 
-# â”€â”€â”€ LOW-LATENCY FFmpeg ENCODER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# LOW-LATENCY FFmpeg ENCODER
 
 def start_ffmpeg(w, h, fps=15):
 
@@ -386,7 +424,7 @@ def start_ffmpeg(w, h, fps=15):
 
 
 
-# â”€â”€â”€ MAIN PIPELINE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# MAIN PIPELINE
 
 def run_inference():
     from rpi_hailo_inference import decode_seg, decode_detect, COLORS
@@ -599,42 +637,3 @@ if __name__ == '__main__':
         import traceback
         print(f"[FATAL] {e}")
         traceback.print_exc()
-
-
-
-def send_vehicle_detection(timestamp, frame_data, detections, inference_time_ms):
-    """Send vehicle detection with frame and metadata to backend"""
-    try:
-        # Encode frame to JPEG
-        _, frame_jpg = cv2.imencode('.jpg', frame_data)
-        frame_bytes = frame_jpg.tobytes()
-        
-        payload = {
-            "timestamp": timestamp,
-            "camera_id": CAMERA_ID,
-            "location": CAMERA_LOCATION,
-            "detections": detections,
-            "metadata": {
-                "inference_time_ms": inference_time_ms,
-                "frame_size": len(frame_bytes),
-                "detection_count": len(detections)
-            }
-        }
-        
-        files = {
-            'frame': ('frame.jpg', frame_bytes, 'image/jpeg'),
-            'data': (None, json.dumps(payload), 'application/json')
-        }
-        
-        response = requests.post(
-            f"{BACKEND_URL}/api/detections/vehicle",
-            files=files,
-            timeout=10
-        )
-        
-        if response.status_code == 200:
-            print(f"✓ Vehicle detection recorded: {len(detections)} objects")
-        else:
-            print(f"✗ Failed to record vehicle detection: {response.status_code}")
-    except Exception as e:
-        print(f"✗ Error sending vehicle detection: {e}")
