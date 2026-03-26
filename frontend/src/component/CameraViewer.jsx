@@ -80,9 +80,9 @@ function CameraViewer() {
 
       console.log('Video element found:', video);
 
-      // Load HLS stream
-      const hlsUrl = `http://${RPI_IP}:8000/stream.m3u8`;
-      console.log('Loading HLS stream:', hlsUrl);
+      // Load HLS stream via backend proxy (HTTPS safe)
+      const hlsUrl = `${API_URL}/api/stream/hls-proxy`;
+      console.log('Loading HLS stream via proxy:', hlsUrl);
 
       // Check if HLS.js is available
       if (window.Hls) {
