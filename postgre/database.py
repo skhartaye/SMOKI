@@ -977,3 +977,35 @@ def insert_vehicle_detection_from_rpi(timestamp, camera_id, location, detections
             print(f"Error inserting vehicle detection from RPi: {e}")
             conn.rollback()
             return None
+
+
+def get_recent_vehicle_detections(limit=10):
+    """Get recent vehicle detections with metadata"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, timestamp, location, confidence, metadata, image_path
+                    FROM vehicle_detections
+                    ORDER BY timestamp DESC
+                    LIMIT %s;
+                """, (limit,))
+                
+                rows = cursor.fetchall()
+                detections = []
+                
+                for row in rows:
+                    metadata = json.loads(row[4]) if row[4] else {}
+                    detections.append({
+                        "id": row[0],
+                        "timestamp": row[1].isoformat() if row[1] else None,
+                        "location": row[2],
+                        "confidence": row[3],
+                        "metadata": metadata,
+                        "image_id": row[5]
+                    })
+                
+                return detections
+        except Exception as e:
+            print(f"Error getting recent vehicle detections: {e}")
+            return []

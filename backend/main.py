@@ -362,3 +362,18 @@ async def record_vehicle_detection(
             raise HTTPException(status_code=500, detail="Failed to record vehicle detection")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/detections/vehicle/recent")
+def get_recent_vehicle_detections(limit: int = 10, current_user: User = Depends(get_current_user)):
+    """Get recent vehicle detections with metadata"""
+    try:
+        from postgre.database import get_recent_vehicle_detections
+        detections = get_recent_vehicle_detections(limit=limit)
+        return {
+            "success": True,
+            "data": detections,
+            "count": len(detections)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

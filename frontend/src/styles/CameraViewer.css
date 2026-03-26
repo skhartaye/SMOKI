@@ -320,6 +320,46 @@
   flex: 1;
 }
 
+.detection-timestamp {
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+}
+
+.detection-location {
+  font-size: 12px;
+  color: #666;
+}
+
+.detection-objects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.object-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #e8f5e9;
+  color: #2e7d32;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.object-class {
+  text-transform: capitalize;
+}
+
+.object-conf {
+  background: rgba(0, 0, 0, 0.1);
+  padding: 2px 4px;
+  border-radius: 2px;
+}
+
 /* Dark mode support */
 .dark-mode .camera-viewer {
   background: #2d2d2d;

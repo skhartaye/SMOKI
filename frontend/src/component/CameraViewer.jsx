@@ -159,7 +159,23 @@ function CameraViewer() {
   const startDetectionPolling = () => {
     detectionIntervalRef.current = setInterval(async () => {
       try {
-        const response = await fetch(`${API_URL}/api/vehicles/violations/recent?limit=5`, {
+        // Try new vehicle detections endpoint first
+        let response = await fetch(`${API_URL}/api/detections/vehicle/recent?limit=5`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data) {
+            setDetections(data.data);
+            return;
+          }
+        }
+        
+        // Fallback to violations endpoint
+        response = await fetch(`${API_URL}/api/vehicles/violations/recent?limit=5`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -258,21 +274,26 @@ function CameraViewer() {
 
           {detections.length > 0 && (
             <div className="detections-panel">
-              <h3>Detected Vehicles ({detections.length})</h3>
+              <h3>Detected Objects ({detections.length})</h3>
               <div className="detections-list">
                 {detections.map((detection, idx) => (
                   <div key={idx} className="detection-item">
-                    <div className="detection-plate">
-                      {detection.license_plate}
-                    </div>
                     <div className="detection-info">
-                      <span className="confidence">
-                        {(detection.confidence * 100).toFixed(1)}%
-                      </span>
-                      {detection.smoke_detected && (
-                        <span className="smoke-badge">
-                          🔴 Smoke: {detection.emission_level}
-                        </span>
+                      <div className="detection-timestamp">
+                        {new Date(detection.timestamp).toLocaleTimeString()}
+                      </div>
+                      <div className="detection-location">
+                        📍 {detection.location}
+                      </div>
+                      {detection.metadata && detection.metadata.detections && (
+                        <div className="detection-objects">
+                          {detection.metadata.detections.map((obj, i) => (
+                            <div key={i} className="object-item">
+                              <span className="object-class">{obj.class}</span>
+                              <span className="object-conf">{(obj.conf * 100).toFixed(0)}%</span>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>
