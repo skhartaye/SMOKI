@@ -84,9 +84,9 @@ function WebRTCViewer() {
 
       console.log('Video element found:', video);
 
-      // Load HLS stream
-      const hlsUrl = `http://${RPI_IP}:8000/stream.m3u8`;
-      console.log('Loading HLS stream:', hlsUrl);
+      // Load HLS stream via backend proxy (HTTPS safe)
+      const hlsUrl = `${API_URL}/api/stream/hls-proxy`;
+      console.log('Loading HLS stream via proxy:', hlsUrl);
 
       // Check if HLS.js is available
       if (window.Hls) {
@@ -163,7 +163,23 @@ function WebRTCViewer() {
   const startDetectionPolling = () => {
     detectionIntervalRef.current = setInterval(async () => {
       try {
-        const response = await fetch(`${API_URL}/api/vehicles/violations/recent?limit=5`, {
+        // Try new vehicle detections endpoint first
+        let response = await fetch(`${API_URL}/api/detections/vehicle/recent?limit=5`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data) {
+            setDetections(data.data);
+            return;
+          }
+        }
+        
+        // Fallback to violations endpoint
+        response = await fetch(`${API_URL}/api/vehicles/violations/recent?limit=5`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -262,21 +278,26 @@ function WebRTCViewer() {
 
           {detections.length > 0 && (
             <div className="detections-panel">
-              <h3>Detected Vehicles ({detections.length})</h3>
+              <h3>Detected Objects ({detections.length})</h3>
               <div className="detections-list">
                 {detections.map((detection, idx) => (
                   <div key={idx} className="detection-item">
-                    <div className="detection-plate">
-                      {detection.license_plate}
-                    </div>
                     <div className="detection-info">
-                      <span className="confidence">
-                        {(detection.confidence * 100).toFixed(1)}%
-                      </span>
-                      {detection.smoke_detected && (
-                        <span className="smoke-badge">
-                          🔴 Smoke: {detection.emission_level}
-                        </span>
+                      <div className="detection-timestamp">
+                        {new Date(detection.timestamp).toLocaleTimeString()}
+                      </div>
+                      <div className="detection-location">
+                        📍 {detection.location}
+                      </div>
+                      {detection.metadata && detection.metadata.detections && (
+                        <div className="detection-objects">
+                          {detection.metadata.detections.map((obj, i) => (
+                            <div key={i} className="object-item">
+                              <span className="object-class">{obj.class}</span>
+                              <span className="object-conf">{(obj.conf * 100).toFixed(0)}%</span>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>
