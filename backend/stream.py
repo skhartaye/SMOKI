@@ -137,27 +137,26 @@ async def debug_stream():
 
 # ============ HLS PROXY ENDPOINTS ============
 
-import httpx
+import requests
 
 @router.get("/hls-proxy")
-async def hls_proxy():
+def hls_proxy():
     """Proxy HLS stream from RPi over HTTPS"""
     rpi_ip = os.getenv('RPI_IP', '192.168.1.35')
     hls_url = f"http://{rpi_ip}:8000/stream.m3u8"
     
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.get(hls_url)
-            response.raise_for_status()
-            
-            return StreamingResponse(
-                iter([response.content]),
-                media_type="application/vnd.apple.mpegurl",
-                headers={
-                    "Access-Control-Allow-Origin": "*",
-                    "Cache-Control": "no-cache, no-store, must-revalidate"
-                }
-            )
+        response = requests.get(hls_url, timeout=10)
+        response.raise_for_status()
+        
+        return StreamingResponse(
+            iter([response.content]),
+            media_type="application/vnd.apple.mpegurl",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "no-cache, no-store, must-revalidate"
+            }
+        )
     except Exception as e:
         print(f"HLS proxy error: {e}")
         raise HTTPException(status_code=503, detail=f"Failed to fetch HLS stream: {str(e)}")

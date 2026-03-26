@@ -42,6 +42,28 @@ CLASS_NAMES = ['smoke_black', 'smoke_white']
 
 SMOKE_CLASSES = {'smoke_black', 'smoke_white'}
 
+# All models to run consecutively per frame
+ALL_MODELS = [
+    {
+        "hef": "/home/sevi/smoki_project/src/model-skhart-ready/smoke-seg-v3.hef",
+        "classes": ["smoke_black", "smoke_white"],
+        "type": "seg",
+        "conf": 0.1
+    },
+    {
+        "hef": "/home/sevi/smoki_project/src/model-skhart-ready/license-plate-v2.hef",
+        "classes": ["license_plate"],
+        "type": "detect",
+        "conf": 0.3
+    },
+    {
+        "hef": "/home/sevi/smoki_project/src/model-skhart-ready/vehicle-class-v2.hef",
+        "classes": ["passenger", "puv", "services", "two_wheel"],
+        "type": "detect",
+        "conf": 0.3
+    }
+]
+
 
 
 # Backend API configuration
@@ -258,6 +280,26 @@ def nms(boxes, scores, thresh):
 
 
 
+def send_frame_to_backend(frame, detections):
+    """Push annotated frame as JPEG to backend"""
+    try:
+        _, buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
+        payload = {
+            "camera_id": CAMERA_ID,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "has_detection": len(detections) > 0,
+            "detections": detections
+        }
+        requests.post(
+            f"{BACKEND_URL}/api/stream/frame",
+            files={"frame": ("frame.jpg", buf.tobytes(), "image/jpeg")},
+            data={"metadata": json.dumps(payload)},
+            timeout=2
+        )
+    except Exception:
+        pass  # Don't block inference on network errors
+
+
 def send_smoke_detection(timestamp, confidence, smoke_type, bounding_box, inference_time_ms):
 
     """Send smoke detection metadata to backend"""
@@ -347,175 +389,204 @@ def start_ffmpeg(w, h, fps=15):
 # â”€â”€â”€ MAIN PIPELINE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def run_inference():
+    from rpi_hailo_inference import decode_seg, decode_detect, COLORS
+    import queue as q
 
-    picam2 = Picamera2()
-
-    config = picam2.create_video_configuration(main={"format": "BGR888", "size": (640, 480)})
-
-    picam2.configure(config)
-
-    picam2.start()
-
-    ffmpeg_proc = start_ffmpeg(640, 480, fps=15)
-
+    print("[INFO] run_inference() called")
     
+    try:
+        print("[INFO] Initializing Picamera2...")
+        picam2 = Picamera2()
+        config = picam2.create_video_configuration(main={"format": "BGR888", "size": (640, 480)})
+        picam2.configure(config)
+        picam2.start()
+        print("[OK] Camera started")
+    except Exception as e:
+        print(f"[ERROR] Camera init failed: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
+    
+    try:
+        print("[INFO] Starting FFmpeg encoder...")
+        ffmpeg_proc = start_ffmpeg(640, 480, fps=15)
+        print("[OK] FFmpeg started")
+    except Exception as e:
+        print(f"[ERROR] FFmpeg init failed: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
-    with hp.VDevice() as target:
+    # Frame push queue (non-blocking)
+    push_queue = q.Queue(maxsize=2)
 
-        hef = hp.HEF(HEF_PATH)
+    def frame_pusher():
+        while True:
+            try:
+                frame, dets = push_queue.get(timeout=1)
+                send_frame_to_backend(frame, dets)
+            except Exception:
+                pass
 
-        network_group = target.configure(hef, hp.ConfigureParams.create_from_hef(hef, hp.HailoStreamInterface.PCIe))[0]
+    threading.Thread(target=frame_pusher, daemon=True).start()
 
-        input_w = network_group.get_input_vstream_infos()[0].shape[1]
+    # Load all models
+    print("[INFO] Loading HEF models...")
+    loaded_models = []
+    for m in ALL_MODELS:
+        try:
+            hef = hp.HEF(m["hef"])
+            loaded_models.append({"cfg": m, "hef": hef})
+            print(f"[OK] Loaded: {m['hef'].split('/')[-1]}")
+        except Exception as e:
+            print(f"[ERROR] Failed to load {m['hef']}: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
-        output_v_infos = network_group.get_output_vstream_infos()
+    print(f"[INFO] All {len(loaded_models)} models loaded")
 
-        in_params = hp.InputVStreamParams.make_from_network_group(network_group, hp.FormatType.UINT8)
+    try:
+        with hp.VDevice() as target:
+            print("[INFO] Configuring network groups...")
+            # Configure all network groups
+            configured = []
+            for lm in loaded_models:
+                try:
+                    cp = hp.ConfigureParams.create_from_hef(lm["hef"], hp.HailoStreamInterface.PCIe)
+                    ng = target.configure(lm["hef"], cp)[0]
+                    ngp = ng.create_params()
+                    in_p = hp.InputVStreamParams.make(ng, hp.FormatType.UINT8)
+                    out_p = hp.OutputVStreamParams.make(ng, hp.FormatType.UINT8)
+                    iname = lm["hef"].get_input_vstream_infos()[0].name
+                    configured.append({
+                        "cfg": lm["cfg"], "ng": ng, "ngp": ngp,
+                        "in_p": in_p, "out_p": out_p, "iname": iname
+                    })
+                    print(f"[OK] Configured: {lm['cfg']['hef'].split('/')[-1]}")
+                except Exception as e:
+                    print(f"[ERROR] Failed to configure model: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    raise
 
-        out_params = hp.OutputVStreamParams.make_from_network_group(network_group, hp.FormatType.UINT8)
-
-        
-
-        with network_group.activate(), hp.InferVStreams(network_group, in_params, out_params) as vstreams:
-
-            print(f"--- Low-Latency HLS Active ---")
-
+            print(f"--- Low-Latency HLS Active (Sequential Multi-Model) ---")
             print(f"URL: http://localhost:8000/stream.m3u8")
 
-            
-
+            frame_count = 0
             while True:
-
-                start_time = time.time()
-
-                
-
-                # 1. Capture
-
-                frame_rgb = picam2.capture_array()
-
-                
-
-                # 2. Pre-process
-
-                input_frame, ratio, pad_left, pad_top = letterbox(frame_rgb, input_w)
-
-                input_data = np.expand_dims(input_frame, axis=0).astype(np.uint8)
-
-                
-
-                # 3. Inference
-
-                raw_outputs = vstreams.infer(input_data)
-
-                
-
-                # 4. Post-process
-
-                final_feats = []
-
-                sorted_names = sorted(raw_outputs.keys(), key=lambda n: raw_outputs[n].shape[1], reverse=True)
-
-                for name in sorted_names:
-
-                    v_info = [v for v in output_v_infos if v.name == name][0]
-
-                    zp, scale = v_info.quant_info.qp_zp, v_info.quant_info.qp_scale
-
-                    dequantized = (raw_outputs[name].astype(np.float32) - zp) * scale
-
-                    squeezed = np.squeeze(dequantized)
-
-                    print(f"Output {name}: shape={squeezed.shape}, ndim={squeezed.ndim}")
-
-                    # Handle different output shapes - transpose only if 3D
-                    if squeezed.ndim == 3:
-
-                        squeezed = squeezed.transpose(2, 0, 1)
-
-                    final_feats.append(squeezed)
-
-                
-
-                boxes, scores, classes = decode(final_feats, conf_thresh=CONF_THRESH)
-
-                
-
-                # 5. Drawing and Detection Recording
-
-                vis_frame = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
-
-                inference_time_ms = (time.time() - start_time) * 1000
-
-                
-
-                if len(boxes) > 0:
-
-                    keep = nms(boxes, scores, IOU_THRESH)
-
-                    for b, s, c in zip(boxes[keep], scores[keep], classes[keep]):
-
-                        if c >= len(CLASS_NAMES):
-
-                            continue
-
-                        
-
-                        x1, y1, x2, y2 = map(int, (b - [pad_left, pad_top, pad_left, pad_top]) / ratio)
-
-                        class_name = CLASS_NAMES[c]
-
-                        color = (0, 0, 255)  # Red for smoke
-
-                        cv2.rectangle(vis_frame, (x1, y1), (x2, y2), color, 2)
-
-                        label = f"{class_name} {s:.2f}"
-
-                        cv2.putText(vis_frame, label, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-
-                        
-
-                        # Send detection to backend
-
-                        timestamp = datetime.now(timezone.utc).isoformat()
-
-                        bounding_box = {"x1": x1, "y1": y1, "x2": x2, "y2": y2}
-
-                        send_smoke_detection(timestamp, float(s), class_name, bounding_box, int(inference_time_ms))
-
-                
-
-                # 6. Push to Stream
-
                 try:
+                    start_time = time.time()
 
-                    ffmpeg_proc.stdin.write(vis_frame.tobytes())
+                    # 1. Capture
+                    frame_bgr = picam2.capture_array()
+                    resized = cv2.resize(frame_bgr, (640, 640))
+                    rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+                    orig_size = (frame_bgr.shape[0], frame_bgr.shape[1])
 
-                except BrokenPipeError:
+                    vis_frame = frame_bgr.copy()
+                    all_dets = []
 
-                    break
+                    # 2. Run each model consecutively
+                    for model_idx, cm in enumerate(configured):
+                        cfg = cm["cfg"]
+                        input_data = {cm["iname"]: np.expand_dims(rgb.astype(np.uint8), 0)}
 
-                
+                        with hp.InferVStreams(cm["ng"], cm["in_p"], cm["out_p"]) as vstreams:
+                            with cm["ng"].activate(cm["ngp"]):
+                                raw_outputs = vstreams.infer(input_data)
 
-                # Performance Monitor
+                        # Debug: print output keys and shapes
+                        if frame_count % 50 == 0:
+                            print(f"\n[DEBUG] Model {model_idx} ({cfg['hef'].split('/')[-1]}) outputs:")
+                            for key, val in raw_outputs.items():
+                                print(f"  {key}: shape={val.shape}, dtype={val.dtype}, min={val.min():.3f}, max={val.max():.3f}")
 
-                elapsed = time.time() - start_time
+                        if cfg["type"] == "seg":
+                            dets = decode_seg(raw_outputs, orig_size, (640, 640), cfg["classes"], cfg["conf"])
+                        else:
+                            dets = decode_detect(raw_outputs, orig_size, (640, 640), cfg["classes"], cfg["conf"])
 
-                print(f"Inference FPS: {1.0/elapsed:.2f} ", end='\r')
+                        # Draw detections
+                        for det in dets:
+                            x1, y1, x2, y2 = det["bbox"]
+                            color = COLORS[det["class_id"] % len(COLORS)]
+                            label = f"{det['class_name']} {det['conf']:.2f}"
+                            cv2.rectangle(vis_frame, (x1, y1), (x2, y2), color, 2)
+                            cv2.putText(vis_frame, label, (x1, y1-10),
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+                            # Send smoke detections to backend
+                            if det["class_name"] in SMOKE_CLASSES:
+                                timestamp = datetime.now(timezone.utc).isoformat()
+                                bounding_box = {"x1": x1, "y1": y1, "x2": x2, "y2": y2}
+                                inference_time_ms = (time.time() - start_time) * 1000
+                                threading.Thread(
+                                    target=send_smoke_detection,
+                                    args=(timestamp, det["conf"], det["class_name"],
+                                          bounding_box, int(inference_time_ms)),
+                                    daemon=True
+                                ).start()
+
+                            all_dets.append({
+                                "class": det["class_name"],
+                                "conf": round(det["conf"], 3),
+                                "bbox": {"x1": x1, "y1": y1, "x2": x2, "y2": y2}
+                            })
+
+                    # 3. Push frame to backend
+                    if not push_queue.full():
+                        push_queue.put_nowait((vis_frame.copy(), all_dets))
+
+                    # 4. Push to HLS stream
+                    try:
+                        ffmpeg_proc.stdin.write(vis_frame.tobytes())
+                        ffmpeg_proc.stdin.flush()
+                    except (BrokenPipeError, OSError):
+                        print("\n[WARNING] FFmpeg pipe broken, restarting...")
+                        ffmpeg_proc = start_ffmpeg(640, 480, fps=15)
+
+                    elapsed = time.time() - start_time
+                    frame_count += 1
+                    if frame_count % 10 == 0:
+                        print(f"FPS: {1.0/elapsed:.2f} | Dets: {len(all_dets)} | Frame: {frame_count}")
+                except Exception as e:
+                    print(f"[ERROR] Frame processing failed: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    raise
+    except Exception as e:
+        print(f"[ERROR] VDevice context failed: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 
 
 if __name__ == '__main__':
-
-    # Start HLS File Server
-
-    threading.Thread(target=lambda: ThreadedHTTPServer(('', 8000), HLSHandler).serve_forever(), daemon=True).start()
-
+    print("[START] rpi_stream.py initializing...")
+    
     try:
+        # Start HLS File Server
+        print("[OK] Starting HLS server on port 8000...")
+        threading.Thread(target=lambda: ThreadedHTTPServer(('', 8000), HLSHandler).serve_forever(), daemon=True).start()
+        print("[OK] HLS server started")
 
-        run_inference()
-
-    except KeyboardInterrupt:
-
-        print("\nStopping...")
+        while True:
+            try:
+                print("[INFO] Starting inference loop...")
+                run_inference()
+            except KeyboardInterrupt:
+                print("\nStopping...")
+                break
+            except Exception as e:
+                import traceback
+                print(f"\n[ERROR] {e}")
+                traceback.print_exc()
+                print(f"[INFO] Restarting in 3s...")
+                time.sleep(3)
+    except Exception as e:
+        import traceback
+        print(f"[FATAL] {e}")
+        traceback.print_exc()
 
