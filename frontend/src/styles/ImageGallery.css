@@ -303,3 +303,32 @@
     max-height: 200px;
   }
 }
+/* Sample badge styling */
+.sample-badge {
+  font-size: 10px;
+  color: #3b82f6;
+  background: #eff6ff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid #bfdbfe;
+  font-weight: 500;
+}
+
+.sample-images-notice {
+  grid-column: 1 / -1;
+}
+
+/* Loading animation for images */
+.image-thumbnail img {
+  transition: opacity 0.3s ease;
+}
+
+.image-thumbnail img[src*="data:image/svg"] {
+  opacity: 0.9;
+}
+
+/* Better error state styling */
+.image-card:hover .sample-badge {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}

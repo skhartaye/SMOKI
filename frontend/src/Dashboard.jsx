@@ -15,7 +15,6 @@ import SensorDetailModal from './component/SensorDetailModal';
 import TriangleLoader from './component/TriangleLoader';
 import TutorialModal from './component/TutorialModal';
 import WebRTCViewer from './component/WebRTCViewer';
-import ImageGallery from './component/ImageGallery';
 import { useSensorStatus } from './context/SensorStatusContext';
 import { fetchWithFallback } from './utils/apiClient';
 
@@ -110,10 +109,53 @@ function Dashboard() {
   const [showSensorDetailModal, setShowSensorDetailModal] = useState(false);
   const [selectedSensorType, setSelectedSensorType] = useState(null);
   const [triggerTutorialOnLogin, setTriggerTutorialOnLogin] = useState(false);
-  const [showImageGallery, setShowImageGallery] = useState(false);
+  const [reportingSmoke, setReportingSmoke] = useState(null);
   
   const navigate = useNavigate();
   const { sensorConnected, lastSensorUpdate, updateLastSensorTime } = useSensorStatus();
+
+  // Report smoke event function
+  const reportSmokeEvent = async (detection) => {
+    try {
+      setReportingSmoke(detection.id);
+      
+      const token = localStorage.getItem('token');
+      const headers = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const reportData = {
+        detection_id: detection.id,
+        timestamp: detection.timestamp,
+        location: detection.location || 'Main Camera',
+        smoke_level: detection.smoke_level || 'Unknown',
+        confidence: detection.confidence,
+        reported_by: localStorage.getItem('username') || 'User',
+        report_time: new Date().toISOString()
+      };
+
+      const response = await fetchWithFallback('/api/smoke/report', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...headers
+        },
+        body: JSON.stringify(reportData)
+      });
+
+      if (response.status === 200 || response.status === 201) {
+        showToast('Smoke event reported successfully', 'success');
+      } else {
+        showToast('Failed to report smoke event', 'error');
+      }
+    } catch (error) {
+      console.error('Error reporting smoke event:', error);
+      showToast('Error reporting smoke event', 'error');
+    } finally {
+      setReportingSmoke(null);
+    }
+  };
 
   // Fetch latest sensor data for sensors page
   const fetchLatestSensorData = async () => {
@@ -530,8 +572,8 @@ function Dashboard() {
         console.log('[DEBUG] Stream error details:', error);
       }
       
-      // If no real data is available, show empty state
-      console.log('[DEBUG] No real detection data available - showing empty state');
+      // If no real data is available, set empty array
+      console.log('[DEBUG] No real detection data available');
       setAllDetections([]);
       
     } catch (error) {
@@ -1499,13 +1541,6 @@ function Dashboard() {
                           <h2>Live Detections</h2>
                           <p className="section-subtitle">Real-time AI detection results with timestamps</p>
                         </div>
-                        <button 
-                          className="image-gallery-button"
-                          onClick={() => setShowImageGallery(true)}
-                          title="View Image History"
-                        >
-                          📷 Images
-                        </button>
                       </div>
                     </div>
                     <div className="detections-table-container">
@@ -1518,37 +1553,49 @@ function Dashboard() {
                       </div>
                       <div className="detections-table-body">
                         {allDetections.length > 0 ? (
-                          allDetections.slice(0, 10).map((detection) => (
-                            <div key={detection.id} className="detection-row">
-                              <div className="detection-col timestamp">
-                                {new Date(detection.timestamp).toLocaleTimeString()}
-                              </div>
-                              <div className="detection-col type">
-                                <span className={`detection-type-badge ${(detection.detection_type || 'unknown').toLowerCase().replace(' ', '-')}`}>
-                                  {detection.detection_type || 'Unknown'}
-                                </span>
-                              </div>
-                              <div className="detection-col object">
-                                {detection.class_name || 'Unknown'}
-                              </div>
-                              <div className="detection-col confidence">
-                                {detection.confidence || '0.0'}%
-                              </div>
-                              <div className="detection-col details">
-                                {detection.detection_type === 'Vehicle' && detection.license_plate && detection.license_plate !== 'N/A' && (
-                                  <span className="license-plate">{detection.license_plate}</span>
-                                )}
-                                {detection.detection_type === 'Smoke' && (
-                                  <span className={`smoke-level ${(detection.smoke_level || 'none').toLowerCase()}`}>
-                                    {detection.smoke_level || 'None'} Level
+                          <>
+                            {allDetections.slice(0, 10).map((detection) => (
+                              <div key={detection.id} className="detection-row">
+                                <div className="detection-col timestamp">
+                                  {new Date(detection.timestamp).toLocaleTimeString()}
+                                </div>
+                                <div className="detection-col type">
+                                  <span className={`detection-type-badge ${(detection.detection_type || 'unknown').toLowerCase().replace(' ', '-')}`}>
+                                    {detection.detection_type || 'Unknown'}
                                   </span>
-                                )}
-                                {detection.detection_type === 'License Plate' && (
-                                  <span className="plate-detected">Plate Detected</span>
-                                )}
+                                </div>
+                                <div className="detection-col object">
+                                  {detection.class_name || 'Unknown'}
+                                </div>
+                                <div className="detection-col confidence">
+                                  {detection.confidence || '0.0'}%
+                                </div>
+                                <div className="detection-col details">
+                                  {detection.detection_type === 'Vehicle' && detection.license_plate && detection.license_plate !== 'N/A' && (
+                                    <span className="license-plate">{detection.license_plate}</span>
+                                  )}
+                                  {detection.detection_type === 'Smoke' && (
+                                    <div className="smoke-details">
+                                      <span className={`smoke-level ${(detection.smoke_level || 'none').toLowerCase()}`}>
+                                        {detection.smoke_level || 'None'} Level
+                                      </span>
+                                      <button 
+                                        className="report-smoke-btn"
+                                        onClick={() => reportSmokeEvent(detection)}
+                                        disabled={reportingSmoke === detection.id}
+                                        title="Report this smoke event"
+                                      >
+                                        {reportingSmoke === detection.id ? '⏳' : '📧'} Report
+                                      </button>
+                                    </div>
+                                  )}
+                                  {detection.detection_type === 'License Plate' && (
+                                    <span className="plate-detected">Plate Detected</span>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          ))
+                            ))}
+                          </>
                         ) : (
                           <div className="no-detections">
                             <div>No detections available</div>
@@ -3237,12 +3284,6 @@ function Dashboard() {
           <span>Info</span>
         </button>
       </nav>
-      
-      {/* Image Gallery Modal */}
-      <ImageGallery 
-        isOpen={showImageGallery}
-        onClose={() => setShowImageGallery(false)}
-      />
     </div>
   )
 }

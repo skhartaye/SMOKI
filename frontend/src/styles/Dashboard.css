@@ -4031,59 +4031,109 @@ chatgpt-sidebar {
 /* Detections Table Styles */
 .detections-table-container {
   background: white;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  overflow-x: auto;
+  width: 100%;
 }
 
 .detections-table-header {
   display: grid;
-  grid-template-columns: 80px 80px 1fr 80px 120px;
-  background: #f8f9fa;
-  border-bottom: 1px solid #e9ecef;
-  font-weight: 600;
+  grid-template-columns: 120px 100px 140px 100px 160px;
+  background: #f5f5f5;
+  border-bottom: 1px solid #ddd;
+  padding: 12px 16px;
+  font-weight: bold;
   font-size: 12px;
-  color: #495057;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  color: #666;
+  align-items: center;
+  gap: 12px;
+  min-width: 620px;
+}
+
+/* Custom scrollbar for detections table */
+.detections-table-container::-webkit-scrollbar {
+  height: 8px;
+}
+
+.detections-table-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.detections-table-container::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.detections-table-container::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
 }
 
 .detections-table-body {
-  max-height: 300px;
+  max-height: 400px;
   overflow-y: auto;
+  min-width: 620px;
 }
 
 .detection-row {
   display: grid;
-  grid-template-columns: 80px 80px 1fr 80px 120px;
-  border-bottom: 1px solid #f1f3f4;
-  transition: background-color 0.2s;
+  grid-template-columns: 120px 100px 140px 100px 160px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #eee;
+  align-items: center;
+  gap: 12px;
+  min-width: 620px;
 }
 
 .detection-row:hover {
-  background-color: #f8f9fa;
+  background: #f9f9f9;
+}
+
+.detection-row:last-child {
+  border-bottom: none;
 }
 
 .detection-col {
-  padding: 12px 8px;
   font-size: 13px;
+  color: #333;
   display: flex;
   align-items: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .detection-col.timestamp {
-  font-family: 'Courier New', monospace;
-  font-size: 11px;
-  color: #6c757d;
+  color: #666;
+  justify-content: flex-start;
 }
 
+.detection-col.type {
+  justify-content: flex-start;
+}
+
+.detection-col.object {
+  justify-content: flex-start;
+}
+
+.detection-col.confidence {
+  font-weight: bold;
+  color: #28a745;
+  justify-content: center;
+  text-align: center;
+}
+
+.detection-col.details {
+  justify-content: flex-start;
+}
+
+/* Detection Type Badges */
 .detection-type-badge {
-  padding: 4px 8px;
+  padding: 2px 8px;
   border-radius: 12px;
   font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-weight: bold;
 }
 
 .detection-type-badge.vehicle {
@@ -4097,56 +4147,112 @@ chatgpt-sidebar {
 }
 
 .detection-type-badge.license-plate {
-  background: #f3e5f5;
-  color: #7b1fa2;
-}
-
-.license-plate {
   background: #e8f5e8;
-  color: #2e7d32;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-family: 'Courier New', monospace;
-  font-size: 11px;
-  font-weight: 600;
+  color: #388e3c;
 }
 
+.detection-type-badge.unknown {
+  background: #f5f5f5;
+  color: #666;
+}
+
+/* License Plate Styling */
+.license-plate {
+  background: #333;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+/* Smoke Level Styling */
 .smoke-level {
   padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: bold;
 }
 
 .smoke-level.high {
-  background: #ffcdd2;
-  color: #c62828;
+  background: #ffebee;
+  color: #d32f2f;
 }
 
 .smoke-level.medium {
   background: #fff3e0;
-  color: #ef6c00;
+  color: #f57c00;
 }
 
 .smoke-level.low {
-  background: #f1f8e9;
-  color: #558b2f;
+  background: #e8f5e8;
+  color: #388e3c;
 }
 
+.smoke-level.none {
+  background: #f5f5f5;
+  color: #666;
+}
+
+/* Plate Detected Badge */
 .plate-detected {
-  background: #f3e5f5;
-  color: #7b1fa2;
+  background: #e8f5e8;
+  color: #388e3c;
   padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: bold;
 }
 
+/* Smoke Details Container */
+.smoke-details {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Report Smoke Button */
+.report-smoke-btn {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.report-smoke-btn:hover:not(:disabled) {
+  background: #c82333;
+  transform: translateY(-1px);
+}
+
+.report-smoke-btn:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* No Detections State */
 .no-detections {
-  text-align: center;
-  color: #999;
   padding: 40px 20px;
-  font-size: 14px;
+  text-align: center;
+  color: #6b7280;
+  background: #f9fafb;
+}
+
+.no-detections div:first-child {
+  font-size: 16px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 8px;
 }
 
 /* Detection Summary Grid */
@@ -4187,25 +4293,30 @@ chatgpt-sidebar {
 @media (max-width: 768px) {
   .detections-table-header,
   .detection-row {
-    grid-template-columns: 60px 60px 1fr 60px 80px;
-    font-size: 11px;
+    grid-template-columns: 100px 80px 120px 80px 140px;
+    padding: 10px 12px;
+    gap: 8px;
+    min-width: 520px;
   }
   
   .detection-col {
-    padding: 8px 4px;
+    font-size: 11px;
   }
   
-  .detection-summary-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
+  .detection-type-badge {
+    font-size: 9px;
+    padding: 1px 6px;
   }
   
-  .summary-card {
-    padding: 12px;
+  .smoke-details {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
   }
   
-  .summary-number {
-    font-size: 20px;
+  .report-smoke-btn {
+    font-size: 9px;
+    padding: 3px 6px;
   }
 }
 /* Image Gallery Button */
@@ -4214,45 +4325,4 @@ chatgpt-sidebar {
   justify-content: space-between;
   align-items: flex-start;
   width: 100%;
-}
-
-.image-gallery-button {
-  background: #3b82f6;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-
-.image-gallery-button:hover {
-  background: #2563eb;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-}
-
-.image-gallery-button:active {
-  transform: translateY(0);
-}
-
-/* Mobile responsive for image gallery button */
-@media (max-width: 768px) {
-  .section-title-row {
-    flex-direction: column;
-    gap: 12px;
-    align-items: stretch;
-  }
-  
-  .image-gallery-button {
-    align-self: flex-end;
-    font-size: 12px;
-    padding: 6px 12px;
-  }
 }
