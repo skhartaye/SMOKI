@@ -270,11 +270,44 @@ async def get_stream_status():
     
     # Include latest detection metadata if available
     if latest_metadata:
-        status_data["latest_detections"] = latest_metadata.get("detections", [])
-        status_data["detection_summary"] = latest_metadata.get("summary", {})
+        # Handle both old and new metadata formats
+        detections = latest_metadata.get("detections", [])
+        
+        # If no detections in new format, try to extract from old format
+        if not detections:
+            # Check if we have detection counts and create detection objects
+            smoke_count = latest_metadata.get('smoke_count', 0)
+            vehicle_count = latest_metadata.get('vehicle_count', 0) 
+            plate_count = latest_metadata.get('plate_count', 0)
+            
+            # Create mock detection objects based on counts for compatibility
+            detections = []
+            for i in range(smoke_count):
+                detections.append({"class": "smoke_black", "conf": 0.75})
+            for i in range(vehicle_count):
+                detections.append({"class": "passenger", "conf": 0.85})
+            for i in range(plate_count):
+                detections.append({"class": "license_plate", "conf": 0.90})
+        
+        status_data["latest_detections"] = detections
+        
+        # Handle summary data
+        summary = latest_metadata.get("summary", {})
+        if not summary and latest_metadata:
+            # Create summary from direct counts if new format not available
+            summary = {
+                "total_detections": latest_metadata.get('smoke_count', 0) + 
+                                  latest_metadata.get('vehicle_count', 0) + 
+                                  latest_metadata.get('plate_count', 0),
+                "smoke_detections": latest_metadata.get('smoke_count', 0),
+                "vehicle_detections": latest_metadata.get('vehicle_count', 0),
+                "plate_detections": latest_metadata.get('plate_count', 0)
+            }
+        
+        status_data["detection_summary"] = summary
         status_data["camera_info"] = {
             "camera_id": latest_metadata.get("camera_id"),
-            "location": latest_metadata.get("camera_location"),
+            "location": latest_metadata.get("location") or latest_metadata.get("camera_location"),
             "timestamp": latest_metadata.get("timestamp")
         }
     
