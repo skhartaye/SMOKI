@@ -4208,3 +4208,51 @@ chatgpt-sidebar {
     font-size: 20px;
   }
 }
+/* Image Gallery Button */
+.section-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.image-gallery-button {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.image-gallery-button:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.image-gallery-button:active {
+  transform: translateY(0);
+}
+
+/* Mobile responsive for image gallery button */
+@media (max-width: 768px) {
+  .section-title-row {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+  
+  .image-gallery-button {
+    align-self: flex-end;
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+}

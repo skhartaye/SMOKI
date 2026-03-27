@@ -15,6 +15,7 @@ import SensorDetailModal from './component/SensorDetailModal';
 import TriangleLoader from './component/TriangleLoader';
 import TutorialModal from './component/TutorialModal';
 import WebRTCViewer from './component/WebRTCViewer';
+import ImageGallery from './component/ImageGallery';
 import { useSensorStatus } from './context/SensorStatusContext';
 import { fetchWithFallback } from './utils/apiClient';
 
@@ -109,6 +110,7 @@ function Dashboard() {
   const [showSensorDetailModal, setShowSensorDetailModal] = useState(false);
   const [selectedSensorType, setSelectedSensorType] = useState(null);
   const [triggerTutorialOnLogin, setTriggerTutorialOnLogin] = useState(false);
+  const [showImageGallery, setShowImageGallery] = useState(false);
   
   const navigate = useNavigate();
   const { sensorConnected, lastSensorUpdate, updateLastSensorTime } = useSensorStatus();
@@ -1420,8 +1422,19 @@ function Dashboard() {
                   {/* All Detections Table */}
                   <div className="dashboard-section-compact">
                     <div className="section-header-compact">
-                      <h2>Live Detections</h2>
-                      <p className="section-subtitle">Real-time AI detection results with timestamps</p>
+                      <div className="section-title-row">
+                        <div>
+                          <h2>Live Detections</h2>
+                          <p className="section-subtitle">Real-time AI detection results with timestamps</p>
+                        </div>
+                        <button 
+                          className="image-gallery-button"
+                          onClick={() => setShowImageGallery(true)}
+                          title="View Image History"
+                        >
+                          📷 Images
+                        </button>
+                      </div>
                     </div>
                     <div className="detections-table-container">
                       <div className="detections-table-header">
@@ -3152,6 +3165,12 @@ function Dashboard() {
           <span>Info</span>
         </button>
       </nav>
+      
+      {/* Image Gallery Modal */}
+      <ImageGallery 
+        isOpen={showImageGallery}
+        onClose={() => setShowImageGallery(false)}
+      />
     </div>
   )
 }

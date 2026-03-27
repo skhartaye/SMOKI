@@ -1564,3 +1564,62 @@ def get_violation_events(limit=50):
         except Exception as e:
             print(f"Error getting violation events: {e}")
             return []
+
+def get_recent_images(limit=50, hours=24):
+    """Get recent images within specified hours"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT i.id, i.image_format, i.file_size, i.width, i.height, i.timestamp,
+                           i.vehicle_detection_id, i.violation_id,
+                           im.camera_id, im.camera_location
+                    FROM images i
+                    LEFT JOIN image_metadata im ON i.id = im.image_id
+                    WHERE i.timestamp >= NOW() - INTERVAL '%s hours'
+                    ORDER BY i.timestamp DESC
+                    LIMIT %s;
+                """, (hours, limit))
+                
+                columns = ['id', 'image_format', 'file_size', 'width', 'height', 'timestamp',
+                          'vehicle_detection_id', 'violation_id', 'camera_id', 'camera_location']
+                results = []
+                for row in cursor.fetchall():
+                    image_data = dict(zip(columns, row))
+                    # Convert timestamp to ISO format if it exists
+                    if image_data['timestamp']:
+                        image_data['timestamp'] = image_data['timestamp'].isoformat()
+                    results.append(image_data)
+                return results
+        except Exception as e:
+            print(f"Error fetching recent images: {e}")
+            return []
+
+def get_all_images_list(limit=100):
+    """Get list of all images (metadata only, no image data)"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT i.id, i.image_format, i.file_size, i.width, i.height, i.timestamp,
+                           i.vehicle_detection_id, i.violation_id,
+                           im.camera_id, im.camera_location
+                    FROM images i
+                    LEFT JOIN image_metadata im ON i.id = im.image_id
+                    ORDER BY i.timestamp DESC
+                    LIMIT %s;
+                """, (limit,))
+                
+                columns = ['id', 'image_format', 'file_size', 'width', 'height', 'timestamp',
+                          'vehicle_detection_id', 'violation_id', 'camera_id', 'camera_location']
+                results = []
+                for row in cursor.fetchall():
+                    image_data = dict(zip(columns, row))
+                    # Convert timestamp to ISO format if it exists
+                    if image_data['timestamp']:
+                        image_data['timestamp'] = image_data['timestamp'].isoformat()
+                    results.append(image_data)
+                return results
+        except Exception as e:
+            print(f"Error fetching images list: {e}")
+            return []

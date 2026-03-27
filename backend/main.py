@@ -654,3 +654,109 @@ def get_violation_events_api(limit: int = 50, current_user: User = Depends(get_c
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+# ============ IMAGE HISTORY API ENDPOINTS ============
+
+@app.get("/api/images/recent")
+def get_recent_images_api(limit: int = 50, hours: int = 24, current_user: User = Depends(get_current_user)):
+    """Get recent images within specified hours"""
+    try:
+        from postgre.database import get_recent_images
+        images = get_recent_images(limit=limit, hours=hours)
+        return {
+            "success": True,
+            "data": images,
+            "count": len(images)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/images/list")
+def get_all_images_list_api(limit: int = 100, current_user: User = Depends(get_current_user)):
+    """Get list of all images (metadata only)"""
+    try:
+        from postgre.database import get_all_images_list
+        images = get_all_images_list(limit=limit)
+        return {
+            "success": True,
+            "data": images,
+            "count": len(images)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/images/{image_id}")
+def get_image_by_id(image_id: int, current_user: User = Depends(get_current_user)):
+    """Get specific image by ID"""
+    try:
+        from postgre.database import get_image
+        image = get_image(image_id)
+        if not image:
+            raise HTTPException(status_code=404, detail="Image not found")
+        
+        # Return image data as base64 for JSON response
+        import base64
+        image_b64 = base64.b64encode(image['image_data']).decode('utf-8')
+        
+        return {
+            "success": True,
+            "data": {
+                "id": image['id'],
+                "image_data": image_b64,
+                "image_format": image['image_format'],
+                "file_size": image['file_size'],
+                "width": image['width'],
+                "height": image['height'],
+                "timestamp": image['timestamp'].isoformat() if image['timestamp'] else None
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/images/{image_id}/raw")
+def get_image_raw(image_id: int, current_user: User = Depends(get_current_user)):
+    """Get raw image data for direct display"""
+    try:
+        from postgre.database import get_image
+        from fastapi.responses import Response
+        
+        image = get_image(image_id)
+        if not image:
+            raise HTTPException(status_code=404, detail="Image not found")
+        
+        # Return raw image data with proper content type
+        media_type = f"image/{image['image_format']}"
+        return Response(content=image['image_data'], media_type=media_type)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/images/detection/{detection_id}")
+def get_images_by_detection_api(detection_id: int, current_user: User = Depends(get_current_user)):
+    """Get all images for a specific detection"""
+    try:
+        from postgre.database import get_images_by_detection
+        images = get_images_by_detection(detection_id)
+        return {
+            "success": True,
+            "data": images,
+            "count": len(images)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/images/violation/{violation_id}")
+def get_images_by_violation_api(violation_id: int, current_user: User = Depends(get_current_user)):
+    """Get all images for a specific violation"""
+    try:
+        from postgre.database import get_images_by_violation
+        images = get_images_by_violation(violation_id)
+        return {
+            "success": True,
+            "data": images,
+            "count": len(images)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
