@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Optional, List
 from datetime import datetime, timezone, timedelta
 import sys
 import psycopg
@@ -431,6 +432,225 @@ def get_recent_vehicle_detections(limit: int = 10, current_user: User = Depends(
             "success": True,
             "data": detections,
             "count": len(detections)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+# ============ NEW SCHEMA API ENDPOINTS ============
+
+class DetectionSnapshot(BaseModel):
+    timestamp: str
+    camera_id: str
+    location: Optional[str] = None
+    smoke_count: int = 0
+    vehicle_count: int = 0
+    plate_count: int = 0
+    face_count: int = 0
+    is_violation: bool = False
+    inference_ms: Optional[int] = None
+    upload_ms: Optional[int] = None
+    detections_json: Optional[dict] = None
+
+class SmokeEvent(BaseModel):
+    timestamp: str
+    camera_id: str
+    location: Optional[str] = None
+    smoke_type: Optional[str] = None
+    opacity_level: Optional[str] = None
+    opacity_score: Optional[float] = None
+    confidence: Optional[float] = None
+    bbox: Optional[dict] = None
+    bbox_area_px: Optional[int] = None
+    inference_ms: Optional[int] = None
+
+class PlateEvent(BaseModel):
+    timestamp: str
+    camera_id: str
+    location: Optional[str] = None
+    plate_text: Optional[str] = None
+    ocr_confidence: Optional[float] = None
+    bbox: Optional[dict] = None
+    inference_ms: Optional[int] = None
+
+class ViolationEvent(BaseModel):
+    timestamp: str
+    camera_id: str
+    location: Optional[str] = None
+    smoke_count: int = 0
+    vehicle_count: int = 0
+    plate_texts: Optional[List[str]] = None
+    opacity_levels: Optional[List[str]] = None
+    detections_json: Optional[dict] = None
+    inference_ms: Optional[int] = None
+
+@app.post("/api/detections/snapshot")
+def record_detection_snapshot(detection: DetectionSnapshot):
+    """Record detection snapshot (runs every 3 seconds)"""
+    try:
+        from postgre.database import insert_detection
+        detection_id = insert_detection(
+            timestamp=detection.timestamp,
+            camera_id=detection.camera_id,
+            location=detection.location,
+            smoke_count=detection.smoke_count,
+            vehicle_count=detection.vehicle_count,
+            plate_count=detection.plate_count,
+            face_count=detection.face_count,
+            is_violation=detection.is_violation,
+            inference_ms=detection.inference_ms,
+            upload_ms=detection.upload_ms,
+            detections_json=detection.detections_json
+        )
+        
+        if detection_id:
+            return {
+                "success": True,
+                "detection_id": detection_id,
+                "message": "Detection snapshot recorded successfully"
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to record detection snapshot")
+    except Exception as e:
+        print(f"Error recording detection snapshot: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/detections/smoke")
+def record_smoke_event(event: SmokeEvent):
+    """Record smoke detection event"""
+    try:
+        from postgre.database import insert_smoke_event
+        event_id = insert_smoke_event(
+            timestamp=event.timestamp,
+            camera_id=event.camera_id,
+            location=event.location,
+            smoke_type=event.smoke_type,
+            opacity_level=event.opacity_level,
+            opacity_score=event.opacity_score,
+            confidence=event.confidence,
+            bbox=event.bbox,
+            bbox_area_px=event.bbox_area_px,
+            inference_ms=event.inference_ms
+        )
+        
+        if event_id:
+            return {
+                "success": True,
+                "event_id": event_id,
+                "message": "Smoke event recorded successfully"
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to record smoke event")
+    except Exception as e:
+        print(f"Error recording smoke event: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/detections/plate")
+def record_plate_event(event: PlateEvent):
+    """Record license plate OCR event"""
+    try:
+        from postgre.database import insert_plate_event
+        event_id = insert_plate_event(
+            timestamp=event.timestamp,
+            camera_id=event.camera_id,
+            location=event.location,
+            plate_text=event.plate_text,
+            ocr_confidence=event.ocr_confidence,
+            bbox=event.bbox,
+            inference_ms=event.inference_ms
+        )
+        
+        if event_id:
+            return {
+                "success": True,
+                "event_id": event_id,
+                "message": "Plate event recorded successfully"
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to record plate event")
+    except Exception as e:
+        print(f"Error recording plate event: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/detections/violation")
+def record_violation_event(event: ViolationEvent):
+    """Record violation event (smoke + vehicle in same frame)"""
+    try:
+        from postgre.database import insert_violation_event
+        event_id = insert_violation_event(
+            timestamp=event.timestamp,
+            camera_id=event.camera_id,
+            location=event.location,
+            smoke_count=event.smoke_count,
+            vehicle_count=event.vehicle_count,
+            plate_texts=event.plate_texts,
+            opacity_levels=event.opacity_levels,
+            detections_json=event.detections_json,
+            inference_ms=event.inference_ms
+        )
+        
+        if event_id:
+            return {
+                "success": True,
+                "event_id": event_id,
+                "message": "Violation event recorded successfully"
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to record violation event")
+    except Exception as e:
+        print(f"Error recording violation event: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/detections/all")
+def get_all_detections(limit: int = 50, current_user: User = Depends(get_current_user)):
+    """Get all detection snapshots with timestamps"""
+    try:
+        from postgre.database import get_all_detections
+        detections = get_all_detections(limit=limit)
+        return {
+            "success": True,
+            "data": detections,
+            "count": len(detections)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/detections/smoke/events")
+def get_smoke_events_api(limit: int = 50, current_user: User = Depends(get_current_user)):
+    """Get smoke detection events"""
+    try:
+        from postgre.database import get_smoke_events
+        events = get_smoke_events(limit=limit)
+        return {
+            "success": True,
+            "data": events,
+            "count": len(events)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/detections/plate/events")
+def get_plate_events_api(limit: int = 50, current_user: User = Depends(get_current_user)):
+    """Get license plate OCR events"""
+    try:
+        from postgre.database import get_plate_events
+        events = get_plate_events(limit=limit)
+        return {
+            "success": True,
+            "data": events,
+            "count": len(events)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/detections/violations")
+def get_violation_events_api(limit: int = 50, current_user: User = Depends(get_current_user)):
+    """Get violation events (smoke + vehicle in same frame)"""
+    try:
+        from postgre.database import get_violation_events
+        events = get_violation_events(limit=limit)
+        return {
+            "success": True,
+            "data": events,
+            "count": len(events)
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

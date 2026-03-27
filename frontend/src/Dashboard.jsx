@@ -102,7 +102,7 @@ function Dashboard() {
     pm25: '',
     pm10: ''
   });
-  const [topViolators, setTopViolators] = useState([]);
+  const [allDetections, setAllDetections] = useState([]);
   const [vehicleRanking, setVehicleRanking] = useState([]);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState(null);
@@ -294,7 +294,7 @@ function Dashboard() {
     }
   }, [activePage]);
 
-  const fetchTopViolators = async () => {
+  const fetchAllDetections = async () => {
     try {
       const token = localStorage.getItem('token');
       const headers = {};
@@ -302,150 +302,196 @@ function Dashboard() {
         headers['Authorization'] = `Bearer ${token}`;
       }
       
-      // Try the violators endpoint first
+      // Try to fetch from new detections endpoint
       try {
-        const response = await fetchWithFallback('/api/vehicles/top-violators?limit=3', {
+        const response = await fetchWithFallback('/api/detections/all?limit=50', {
           headers
         });
         
         if (response.status === 200) {
           const result = await response.json();
           if (result.success && result.data && result.data.length > 0) {
-            setTopViolators(result.data);
+            // Transform new schema data to match frontend expectations
+            const transformedDetections = result.data.map((detection, index) => {
+              const timestamp = new Date(detection.timestamp);
+              
+              // Create detection records for each type found in the snapshot
+              const detectionRecords = [];
+              
+              // Add vehicle detections
+              if (detection.vehicle_count > 0) {
+                for (let i = 0; i < detection.vehicle_count; i++) {
+                  const plateNum = String(timestamp.getMinutes()).padStart(2, '0') + 
+                                 String(timestamp.getSeconds()).padStart(2, '0') + i;
+                  detectionRecords.push({
+                    id: `vehicle_${detection.id}_${i}`,
+                    timestamp: detection.timestamp,
+                    detection_type: 'Vehicle',
+                    class_name: 'vehicle',
+                    confidence: '85.0',
+                    license_plate: `VEH-${plateNum}`,
+                    smoke_level: 'None',
+                    location: detection.location || 'Main Camera',
+                    camera_id: detection.camera_id
+                  });
+                }
+              }
+              
+              // Add smoke detections
+              if (detection.smoke_count > 0) {
+                for (let i = 0; i < detection.smoke_count; i++) {
+                  detectionRecords.push({
+                    id: `smoke_${detection.id}_${i}`,
+                    timestamp: detection.timestamp,
+                    detection_type: 'Smoke',
+                    class_name: 'smoke',
+                    confidence: '75.0',
+                    license_plate: 'N/A',
+                    smoke_level: detection.is_violation ? 'High' : 'Medium',
+                    location: detection.location || 'Main Camera',
+                    camera_id: detection.camera_id
+                  });
+                }
+              }
+              
+              // Add plate detections
+              if (detection.plate_count > 0) {
+                for (let i = 0; i < detection.plate_count; i++) {
+                  detectionRecords.push({
+                    id: `plate_${detection.id}_${i}`,
+                    timestamp: detection.timestamp,
+                    detection_type: 'License Plate',
+                    class_name: 'license_plate',
+                    confidence: '90.0',
+                    license_plate: 'N/A',
+                    smoke_level: 'None',
+                    location: detection.location || 'Main Camera',
+                    camera_id: detection.camera_id
+                  });
+                }
+              }
+              
+              return detectionRecords;
+            }).flat();
+            
+            // Sort by timestamp (newest first)
+            transformedDetections.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            
+            console.log(`[DETECTIONS] Loaded ${transformedDetections.length} detection records from new schema`);
+            setAllDetections(transformedDetections);
             return;
           }
         }
       } catch (error) {
-        console.log('Violators endpoint not available, using live detection processing...');
+        console.log('New detections endpoint not available, trying legacy endpoints...');
       }
       
-      // Enhanced Fallback: Process live detection data for smoke violations
+      // Fallback to legacy vehicle detections endpoint
+      try {
+        const response = await fetchWithFallback('/api/vehicles/detections?limit=50', {
+          headers
+        });
+        
+        if (response.status === 200) {
+          const result = await response.json();
+          if (result.success && result.data && result.data.length > 0) {
+            setAllDetections(result.data);
+            return;
+          }
+        }
+      } catch (error) {
+        console.log('Legacy detections endpoint not available, using live detection processing...');
+      }
+      
+      // Enhanced Fallback: Process live detection data
       try {
         const streamResponse = await fetchWithFallback('/api/stream/status');
         if (streamResponse.status === 200) {
           const streamData = await streamResponse.json();
           
-          // Process detection metadata for smoke violations
+          // Process detection metadata
           if (streamData.latest_detections && streamData.latest_detections.length > 0) {
             const detections = streamData.latest_detections;
+            const timestamp = new Date();
             
-            // Advanced detection analysis
-            const vehicleDetections = detections.filter(d => 
-              ['passenger', 'puv', 'services', 'two_wheel'].includes(d.class_name)
-            );
-            const smokeDetections = detections.filter(d => 
-              d.class_name && (d.class_name.includes('smoke') || d.class_name.includes('fire'))
-            );
-            const plateDetections = detections.filter(d =>
-              d.class_name && d.class_name.includes('license')
-            );
-            
-            console.log(`[DETECTION] Processing: ${vehicleDetections.length} vehicles, ${smokeDetections.length} smoke, ${plateDetections.length} plates`);
-            
-            // Create violators if we have vehicles with smoke
-            if (vehicleDetections.length > 0 && smokeDetections.length > 0) {
-              const violators = [];
+            // Create detection records for each detected object
+            const detectionRecords = detections.map((detection, index) => {
+              let detectionType = 'Unknown';
+              let plateNumber = 'N/A';
+              let smokeLevel = 'None';
               
-              vehicleDetections.forEach((vehicle, index) => {
-                const timestamp = new Date();
+              // Handle both possible field names for class and confidence
+              let className = detection.class || detection.class_name || 'unknown';
+              let confidence = detection.conf || detection.confidence || 0;
+              
+              // Normalize confidence to 0-1 range if it's in 0-100 range
+              if (confidence > 1) {
+                confidence = confidence / 100;
+              }
+              
+              // Vehicle detection logic - exact class names from RPi
+              const vehicleClasses = ['passenger', 'puv', 'services', 'two_wheel'];
+              if (vehicleClasses.includes(className)) {
+                detectionType = 'Vehicle';
+                // Generate mock license plate
                 const plateNum = String(timestamp.getMinutes()).padStart(2, '0') + 
-                               String(timestamp.getSeconds()).padStart(2, '0');
-                
-                // Generate realistic license plates based on vehicle type
+                               String(timestamp.getSeconds()).padStart(2, '0') + index;
                 let platePrefix = 'VEH';
-                let vehicleType = vehicle.class_name;
-                
-                if (vehicle.class_name === 'passenger') {
-                  platePrefix = 'ABC';
-                  vehicleType = 'Passenger Car';
-                } else if (vehicle.class_name === 'puv') {
-                  platePrefix = 'PUV';
-                  vehicleType = 'Public Utility Vehicle';
-                } else if (vehicle.class_name === 'services') {
-                  platePrefix = 'SVC';
-                  vehicleType = 'Service Vehicle';
-                } else if (vehicle.class_name === 'two_wheel') {
-                  platePrefix = 'MC';
-                  vehicleType = 'Motorcycle';
-                }
-                
-                // Calculate violation severity based on confidence and smoke intensity
-                const vehicleConf = vehicle.confidence || 0;
-                const smokeConf = Math.max(...smokeDetections.map(s => s.confidence || 0));
-                const combinedConf = (vehicleConf + smokeConf) / 2;
-                
-                // Generate violation count based on detection confidence
-                const baseViolations = Math.floor(combinedConf * 15) + 1;
-                const smokeBonus = smokeDetections.length * 2; // More smoke = more violations
-                const totalViolations = baseViolations + smokeBonus;
-                
-                violators.push({
-                  id: `live_violator_${index}`,
-                  license_plate: `${platePrefix}-${plateNum}`,
-                  vehicle_type: vehicleType,
-                  violations: totalViolations,
-                  emission_level: smokeConf > 0.7 ? 'critical' : smokeConf > 0.5 ? 'high' : 'moderate',
-                  smoke_detected: true,
-                  last_detected: timestamp.toISOString(),
-                  confidence: combinedConf,
-                  detection_source: 'live_ai'
-                });
-              });
+                if (className === 'passenger') platePrefix = 'ABC';
+                else if (className === 'puv') platePrefix = 'PUV';
+                else if (className === 'services') platePrefix = 'SVC';
+                else if (className === 'two_wheel') platePrefix = 'MC';
+                plateNumber = `${platePrefix}-${plateNum}`;
+              } 
+              // Smoke detection logic - exact class names from RPi
+              else if (className === 'smoke_black' || className === 'smoke_white') {
+                detectionType = 'Smoke';
+                smokeLevel = confidence > 0.7 ? 'High' : confidence > 0.4 ? 'Medium' : 'Low';
+              } 
+              // License plate detection logic - exact class name from RPi
+              else if (className === 'license_plate') {
+                detectionType = 'License Plate';
+              }
+              // Face detection (if implemented)
+              else if (className.toLowerCase().includes('face') || className.toLowerCase().includes('person')) {
+                detectionType = 'Face';
+              }
+              // Default to capitalize the class name
+              else {
+                detectionType = className.charAt(0).toUpperCase() + className.slice(1).replace('_', ' ');
+              }
               
-              // Sort by violations (highest first)
-              violators.sort((a, b) => b.violations - a.violations);
-              
-              console.log(`[VIOLATORS] Generated ${violators.length} smoke violators from live detections`);
-              setTopViolators(violators.slice(0, 3)); // Top 3
-              return;
-            }
+              return {
+                id: `detection_${index}_${timestamp.getTime()}`,
+                timestamp: timestamp.toISOString(),
+                detection_type: detectionType,
+                class_name: className,
+                confidence: (confidence * 100).toFixed(1),
+                license_plate: plateNumber,
+                smoke_level: smokeLevel,
+                location: streamData.camera_info?.location || 'Main Camera',
+                camera_id: streamData.camera_info?.camera_id || 'rpi_camera_01'
+              };
+            });
             
-            // If vehicles but no smoke, show vehicles with lower violation counts
-            else if (vehicleDetections.length > 0) {
-              const vehicles = vehicleDetections.slice(0, 3).map((vehicle, index) => {
-                const timestamp = new Date();
-                const plateNum = String(timestamp.getMinutes()).padStart(2, '0') + 
-                               String(timestamp.getSeconds()).padStart(2, '0');
-                
-                let platePrefix = vehicle.class_name === 'passenger' ? 'ABC' :
-                                vehicle.class_name === 'puv' ? 'PUV' :
-                                vehicle.class_name === 'services' ? 'SVC' :
-                                vehicle.class_name === 'two_wheel' ? 'MC' : 'VEH';
-                
-                return {
-                  id: `live_vehicle_${index}`,
-                  license_plate: `${platePrefix}-${plateNum}`,
-                  vehicle_type: vehicle.class_name,
-                  violations: Math.floor(vehicle.confidence * 5), // Lower violations without smoke
-                  emission_level: 'normal',
-                  smoke_detected: false,
-                  last_detected: timestamp.toISOString(),
-                  detection_source: 'live_ai'
-                };
-              });
-              
-              console.log(`[VEHICLES] Generated ${vehicles.length} vehicles from live detections (no smoke)`);
-              setTopViolators(vehicles);
-              return;
-            }
-          }
-          
-          // Check camera info for status
-          if (streamData.camera_info) {
-            const camInfo = streamData.camera_info;
-            console.log(`[CAMERA] Active: ${camInfo.camera_id} at ${camInfo.location}`);
+            // Sort by timestamp (newest first)
+            detectionRecords.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            
+            console.log(`[DETECTIONS] Generated ${detectionRecords.length} detection records from live data`);
+            setAllDetections(detectionRecords);
+            return;
           }
         }
       } catch (error) {
         console.log('Stream processing failed:', error.message);
       }
       
-      // If no live data, clear violators
-      setTopViolators([]);
+      // If no live data, clear detections
+      setAllDetections([]);
       
     } catch (error) {
-      console.log('Violators fetch failed:', error.message);
-      setTopViolators([]);
+      console.log('Detections fetch failed:', error.message);
+      setAllDetections([]);
     }
   };
 
@@ -634,13 +680,13 @@ function Dashboard() {
     }
   };
 
-  // Fetch violators data when dashboard page is active
+  // Fetch detections data when dashboard page is active
   useEffect(() => {
     if (activePage === "dashboard") {
-      fetchTopViolators();
+      fetchAllDetections();
       fetchVehicleRanking();
       const interval = setInterval(() => {
-        fetchTopViolators();
+        fetchAllDetections();
         fetchVehicleRanking();
       }, 15000); // Update every 15 seconds
       return () => clearInterval(interval);
@@ -1400,36 +1446,56 @@ function Dashboard() {
                 </div>
                 
                 <div className="dashboard-violators-column">
-                  {/* Violators Ranking Section */}
+                  {/* All Detections Table */}
                   <div className="dashboard-section-compact">
                     <div className="section-header-compact">
-                      <h2>Violators Ranking</h2>
-                      <p className="section-subtitle">Vehicles by emission violations</p>
+                      <h2>Live Detections</h2>
+                      <p className="section-subtitle">Real-time AI detection results with timestamps</p>
                     </div>
-                    <div className="ranking-table-compact">
-                      <div className="ranking-header-compact">
-                        <div className="ranking-col-compact rank">Rank</div>
-                        <div className="ranking-col-compact name">Vehicle</div>
-                        <div className="ranking-col-compact violations">Violations</div>
-                        <div className="ranking-col-compact status">Status</div>
+                    <div className="detections-table-container">
+                      <div className="detections-table-header">
+                        <div className="detection-col timestamp">Time</div>
+                        <div className="detection-col type">Type</div>
+                        <div className="detection-col object">Object</div>
+                        <div className="detection-col confidence">Confidence</div>
+                        <div className="detection-col details">Details</div>
                       </div>
-                      <div className="ranking-rows-compact">
-                        {vehicleRanking.length > 0 ? (
-                          vehicleRanking.map((vehicle, index) => (
-                            <div key={vehicle.id} className="ranking-row-compact">
-                              <div className="ranking-col-compact rank">{index + 1}</div>
-                              <div className="ranking-col-compact name">{vehicle.license_plate}</div>
-                              <div className="ranking-col-compact violations">{vehicle.violations}</div>
-                              <div className="ranking-col-compact status">
-                                <span className={`badge-compact ${vehicle.violations > 15 ? 'critical' : vehicle.violations > 5 ? 'warning' : 'safe'}`}>
-                                  {vehicle.violations > 15 ? 'Critical' : vehicle.violations > 5 ? 'Warning' : 'Safe'}
+                      <div className="detections-table-body">
+                        {allDetections.length > 0 ? (
+                          allDetections.slice(0, 10).map((detection) => (
+                            <div key={detection.id} className="detection-row">
+                              <div className="detection-col timestamp">
+                                {new Date(detection.timestamp).toLocaleTimeString()}
+                              </div>
+                              <div className="detection-col type">
+                                <span className={`detection-type-badge ${detection.detection_type.toLowerCase().replace(' ', '-')}`}>
+                                  {detection.detection_type}
                                 </span>
+                              </div>
+                              <div className="detection-col object">
+                                {detection.class_name}
+                              </div>
+                              <div className="detection-col confidence">
+                                {detection.confidence}%
+                              </div>
+                              <div className="detection-col details">
+                                {detection.detection_type === 'Vehicle' && detection.license_plate !== 'N/A' && (
+                                  <span className="license-plate">{detection.license_plate}</span>
+                                )}
+                                {detection.detection_type === 'Smoke' && (
+                                  <span className={`smoke-level ${detection.smoke_level.toLowerCase()}`}>
+                                    {detection.smoke_level} Level
+                                  </span>
+                                )}
+                                {detection.detection_type === 'License Plate' && (
+                                  <span className="plate-detected">Plate Detected</span>
+                                )}
                               </div>
                             </div>
                           ))
                         ) : (
-                          <div style={{ textAlign: 'center', color: '#999', padding: '20px', fontSize: '14px' }}>
-                            <div>No vehicles detected yet</div>
+                          <div className="no-detections">
+                            <div>No detections yet</div>
                             <div style={{ fontSize: '12px', marginTop: '5px', opacity: 0.7 }}>
                               Waiting for AI detection data...
                             </div>
@@ -1439,47 +1505,37 @@ function Dashboard() {
                     </div>
                   </div>
 
-                  {/* Report Violator Section */}
+                  {/* Vehicle Summary Section */}
                   <div className="dashboard-section-compact">
                     <div className="section-header-compact">
-                      <h2>Report Violator</h2>
-                      <p className="section-subtitle">Vehicles with highest emissions</p>
+                      <h2>Detection Summary</h2>
+                      <p className="section-subtitle">Current session statistics</p>
                     </div>
-                    <div className="violators-list-compact">
-                      {topViolators.length > 0 ? (
-                        topViolators.map((violator, index) => (
-                          <div key={violator.id} className="violator-item-compact">
-                            <div className="violator-rank-compact">{index + 1}</div>
-                            <div className="violator-info-compact">
-                              <div className="violator-name-compact">{violator.license_plate}</div>
-                              <div className="violator-value-compact">
-                                {violator.emission_level ? `Emission: ${violator.emission_level}` : 'No data'}
-                              </div>
-                            </div>
-                            <div className={`violator-status-compact ${violator.violations > 15 ? 'danger' : violator.violations > 5 ? 'warning' : 'safe'}`}>
-                              {violator.violations > 15 ? 'Critical' : violator.violations > 5 ? 'Warning' : 'Safe'}
-                            </div>
-                            <button 
-                              className="report-btn-compact"
-                              onClick={() => {
-                                const subject = `Emission Violation Report - ${violator.license_plate}`;
-                                const body = `Vehicle License Plate: ${violator.license_plate}%0AEmission Level: ${violator.emission_level || 'No data'}%0AViolations: ${violator.violations}%0AStatus: ${violator.violations > 15 ? 'Critical' : violator.violations > 5 ? 'Warning' : 'Safe'}%0A%0AThis vehicle has been flagged for excessive emissions.`;
-                                window.location.href = `mailto:sample@example.com?subject=${subject}&body=${body}`;
-                              }}
-                              title="Report this violator via email"
-                            >
-                              📧 Report
-                            </button>
-                          </div>
-                        ))
-                      ) : (
-                        <div style={{ textAlign: 'center', color: '#999', padding: '20px', fontSize: '14px' }}>
-                          <div>No violations detected yet</div>
-                          <div style={{ fontSize: '12px', marginTop: '5px', opacity: 0.7 }}>
-                            System monitoring for smoke emissions...
-                          </div>
+                    <div className="detection-summary-grid">
+                      <div className="summary-card">
+                        <div className="summary-number">
+                          {allDetections.filter(d => d.detection_type === 'Vehicle').length}
                         </div>
-                      )}
+                        <div className="summary-label">Vehicles</div>
+                      </div>
+                      <div className="summary-card">
+                        <div className="summary-number">
+                          {allDetections.filter(d => d.detection_type === 'Smoke').length}
+                        </div>
+                        <div className="summary-label">Smoke Events</div>
+                      </div>
+                      <div className="summary-card">
+                        <div className="summary-number">
+                          {allDetections.filter(d => d.detection_type === 'License Plate').length}
+                        </div>
+                        <div className="summary-label">Plates Read</div>
+                      </div>
+                      <div className="summary-card">
+                        <div className="summary-number">
+                          {allDetections.length}
+                        </div>
+                        <div className="summary-label">Total Detections</div>
+                      </div>
                     </div>
                   </div>
                 </div>

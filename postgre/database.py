@@ -68,6 +68,76 @@ def create_tables():
                     ADD COLUMN IF NOT EXISTS pressure FLOAT;
                 """)
                 
+                # NEW SCHEMA: Create detections table (every snapshot - runs every 3 seconds always)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS detections (
+                        id BIGSERIAL PRIMARY KEY,
+                        timestamp TIMESTAMPTZ NOT NULL,
+                        camera_id TEXT NOT NULL,
+                        location TEXT,
+                        smoke_count INT DEFAULT 0,
+                        vehicle_count INT DEFAULT 0,
+                        plate_count INT DEFAULT 0,
+                        face_count INT DEFAULT 0,
+                        is_violation BOOLEAN DEFAULT FALSE,
+                        inference_ms INT,
+                        upload_ms INT,
+                        detections_json JSONB,
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
+                
+                # NEW SCHEMA: Create smoke_events table (one row per smoke detection)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS smoke_events (
+                        id BIGSERIAL PRIMARY KEY,
+                        timestamp TIMESTAMPTZ NOT NULL,
+                        camera_id TEXT NOT NULL,
+                        location TEXT,
+                        smoke_type TEXT,
+                        opacity_level TEXT,
+                        opacity_score FLOAT,
+                        confidence FLOAT,
+                        bbox JSONB,
+                        bbox_area_px INT,
+                        inference_ms INT,
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
+                
+                # NEW SCHEMA: Create plate_events table (one row per plate OCR result)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS plate_events (
+                        id BIGSERIAL PRIMARY KEY,
+                        timestamp TIMESTAMPTZ NOT NULL,
+                        camera_id TEXT NOT NULL,
+                        location TEXT,
+                        plate_text TEXT,
+                        ocr_confidence FLOAT,
+                        bbox JSONB,
+                        inference_ms INT,
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
+                
+                # NEW SCHEMA: Create violations table (one row per violation - smoke + vehicle in same frame)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS violations (
+                        id BIGSERIAL PRIMARY KEY,
+                        timestamp TIMESTAMPTZ NOT NULL,
+                        camera_id TEXT NOT NULL,
+                        location TEXT,
+                        smoke_count INT DEFAULT 0,
+                        vehicle_count INT DEFAULT 0,
+                        plate_texts TEXT[],
+                        opacity_levels TEXT[],
+                        detections_json JSONB,
+                        inference_ms INT,
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
+                
+                # Keep legacy tables for backward compatibility
                 # Create vehicles table for SMOKI (RPi camera detection)
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS vehicles (
@@ -95,21 +165,6 @@ def create_tables():
                         emission_level VARCHAR(20),
                         image_path VARCHAR(255),
                         metadata JSONB,
-                        created_at TIMESTAMPTZ DEFAULT NOW()
-                    );
-                """)
-                
-                # Create violations table
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS violations (
-                        id SERIAL PRIMARY KEY,
-                        vehicle_id INT REFERENCES vehicles(id) ON DELETE CASCADE,
-                        detection_id INT REFERENCES vehicle_detections(id) ON DELETE CASCADE,
-                        violation_type VARCHAR(50),
-                        severity VARCHAR(20),
-                        timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        description TEXT,
-                        resolved BOOLEAN DEFAULT FALSE,
                         created_at TIMESTAMPTZ DEFAULT NOW()
                     );
                 """)
@@ -180,6 +235,48 @@ def create_tables():
                     ON users(username);
                 """)
                 
+                # NEW SCHEMA INDEXES
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_detections_timestamp 
+                    ON detections(timestamp);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_detections_camera_id 
+                    ON detections(camera_id);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_smoke_events_timestamp 
+                    ON smoke_events(timestamp);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_smoke_events_camera_id 
+                    ON smoke_events(camera_id);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_plate_events_timestamp 
+                    ON plate_events(timestamp);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_plate_events_camera_id 
+                    ON plate_events(camera_id);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_violations_timestamp 
+                    ON violations(timestamp);
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_violations_camera_id 
+                    ON violations(camera_id);
+                """)
+                
+                # Legacy indexes
                 cursor.execute("""
                     CREATE INDEX IF NOT EXISTS idx_vehicles_license_plate 
                     ON vehicles(license_plate);
@@ -193,16 +290,6 @@ def create_tables():
                 cursor.execute("""
                     CREATE INDEX IF NOT EXISTS idx_vehicle_detections_vehicle_id 
                     ON vehicle_detections(vehicle_id);
-                """)
-                
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_violations_vehicle_id 
-                    ON violations(vehicle_id);
-                """)
-                
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_violations_timestamp 
-                    ON violations(timestamp);
                 """)
                 
                 cursor.execute("""
@@ -1217,4 +1304,263 @@ def get_recent_detection_summaries(limit=50):
                 return summaries
         except Exception as e:
             print(f"Error getting recent detection summaries: {e}")
+            return []
+
+# ============ NEW SCHEMA FUNCTIONS ============
+
+def insert_detection(timestamp, camera_id, location=None, smoke_count=0, vehicle_count=0, 
+                    plate_count=0, face_count=0, is_violation=False, inference_ms=None, 
+                    upload_ms=None, detections_json=None):
+    """Insert detection snapshot (runs every 3 seconds)"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO detections 
+                    (timestamp, camera_id, location, smoke_count, vehicle_count, plate_count, 
+                     face_count, is_violation, inference_ms, upload_ms, detections_json)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id;
+                """, (
+                    timestamp, camera_id, location, smoke_count, vehicle_count, plate_count,
+                    face_count, is_violation, inference_ms, upload_ms, 
+                    json.dumps(detections_json) if detections_json else None
+                ))
+                
+                result = cursor.fetchone()
+                conn.commit()
+                return result[0] if result else None
+        except Exception as e:
+            print(f"Error inserting detection: {e}")
+            conn.rollback()
+            return None
+
+
+def insert_smoke_event(timestamp, camera_id, location=None, smoke_type=None, 
+                      opacity_level=None, opacity_score=None, confidence=None, 
+                      bbox=None, bbox_area_px=None, inference_ms=None):
+    """Insert smoke detection event"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO smoke_events 
+                    (timestamp, camera_id, location, smoke_type, opacity_level, opacity_score, 
+                     confidence, bbox, bbox_area_px, inference_ms)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id;
+                """, (
+                    timestamp, camera_id, location, smoke_type, opacity_level, opacity_score,
+                    confidence, json.dumps(bbox) if bbox else None, bbox_area_px, inference_ms
+                ))
+                
+                result = cursor.fetchone()
+                conn.commit()
+                return result[0] if result else None
+        except Exception as e:
+            print(f"Error inserting smoke event: {e}")
+            conn.rollback()
+            return None
+
+
+def insert_plate_event(timestamp, camera_id, location=None, plate_text=None, 
+                      ocr_confidence=None, bbox=None, inference_ms=None):
+    """Insert license plate OCR event"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO plate_events 
+                    (timestamp, camera_id, location, plate_text, ocr_confidence, bbox, inference_ms)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id;
+                """, (
+                    timestamp, camera_id, location, plate_text, ocr_confidence,
+                    json.dumps(bbox) if bbox else None, inference_ms
+                ))
+                
+                result = cursor.fetchone()
+                conn.commit()
+                return result[0] if result else None
+        except Exception as e:
+            print(f"Error inserting plate event: {e}")
+            conn.rollback()
+            return None
+
+
+def insert_violation_event(timestamp, camera_id, location=None, smoke_count=0, 
+                          vehicle_count=0, plate_texts=None, opacity_levels=None, 
+                          detections_json=None, inference_ms=None):
+    """Insert violation event (smoke + vehicle in same frame)"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO violations 
+                    (timestamp, camera_id, location, smoke_count, vehicle_count, 
+                     plate_texts, opacity_levels, detections_json, inference_ms)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id;
+                """, (
+                    timestamp, camera_id, location, smoke_count, vehicle_count,
+                    plate_texts, opacity_levels, 
+                    json.dumps(detections_json) if detections_json else None, inference_ms
+                ))
+                
+                result = cursor.fetchone()
+                conn.commit()
+                return result[0] if result else None
+        except Exception as e:
+            print(f"Error inserting violation event: {e}")
+            conn.rollback()
+            return None
+
+
+def get_all_detections(limit=50):
+    """Get all detection snapshots with timestamps"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, timestamp, camera_id, location, smoke_count, vehicle_count, 
+                           plate_count, face_count, is_violation, inference_ms, upload_ms, 
+                           detections_json
+                    FROM detections
+                    ORDER BY timestamp DESC
+                    LIMIT %s;
+                """, (limit,))
+                
+                rows = cursor.fetchall()
+                detections = []
+                
+                for row in rows:
+                    detections_json = json.loads(row[11]) if row[11] else {}
+                    detections.append({
+                        "id": row[0],
+                        "timestamp": row[1].isoformat() if row[1] else None,
+                        "camera_id": row[2],
+                        "location": row[3],
+                        "smoke_count": row[4],
+                        "vehicle_count": row[5],
+                        "plate_count": row[6],
+                        "face_count": row[7],
+                        "is_violation": row[8],
+                        "inference_ms": row[9],
+                        "upload_ms": row[10],
+                        "detections_json": detections_json
+                    })
+                
+                return detections
+        except Exception as e:
+            print(f"Error getting all detections: {e}")
+            return []
+
+
+def get_smoke_events(limit=50):
+    """Get smoke detection events"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, timestamp, camera_id, location, smoke_type, opacity_level, 
+                           opacity_score, confidence, bbox, bbox_area_px, inference_ms
+                    FROM smoke_events
+                    ORDER BY timestamp DESC
+                    LIMIT %s;
+                """, (limit,))
+                
+                rows = cursor.fetchall()
+                events = []
+                
+                for row in rows:
+                    bbox = json.loads(row[8]) if row[8] else {}
+                    events.append({
+                        "id": row[0],
+                        "timestamp": row[1].isoformat() if row[1] else None,
+                        "camera_id": row[2],
+                        "location": row[3],
+                        "smoke_type": row[4],
+                        "opacity_level": row[5],
+                        "opacity_score": row[6],
+                        "confidence": row[7],
+                        "bbox": bbox,
+                        "bbox_area_px": row[9],
+                        "inference_ms": row[10]
+                    })
+                
+                return events
+        except Exception as e:
+            print(f"Error getting smoke events: {e}")
+            return []
+
+
+def get_plate_events(limit=50):
+    """Get license plate OCR events"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, timestamp, camera_id, location, plate_text, ocr_confidence, 
+                           bbox, inference_ms
+                    FROM plate_events
+                    ORDER BY timestamp DESC
+                    LIMIT %s;
+                """, (limit,))
+                
+                rows = cursor.fetchall()
+                events = []
+                
+                for row in rows:
+                    bbox = json.loads(row[6]) if row[6] else {}
+                    events.append({
+                        "id": row[0],
+                        "timestamp": row[1].isoformat() if row[1] else None,
+                        "camera_id": row[2],
+                        "location": row[3],
+                        "plate_text": row[4],
+                        "ocr_confidence": row[5],
+                        "bbox": bbox,
+                        "inference_ms": row[7]
+                    })
+                
+                return events
+        except Exception as e:
+            print(f"Error getting plate events: {e}")
+            return []
+
+
+def get_violation_events(limit=50):
+    """Get violation events (smoke + vehicle in same frame)"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, timestamp, camera_id, location, smoke_count, vehicle_count, 
+                           plate_texts, opacity_levels, detections_json, inference_ms
+                    FROM violations
+                    ORDER BY timestamp DESC
+                    LIMIT %s;
+                """, (limit,))
+                
+                rows = cursor.fetchall()
+                events = []
+                
+                for row in rows:
+                    detections_json = json.loads(row[8]) if row[8] else {}
+                    events.append({
+                        "id": row[0],
+                        "timestamp": row[1].isoformat() if row[1] else None,
+                        "camera_id": row[2],
+                        "location": row[3],
+                        "smoke_count": row[4],
+                        "vehicle_count": row[5],
+                        "plate_texts": row[6],
+                        "opacity_levels": row[7],
+                        "detections_json": detections_json,
+                        "inference_ms": row[9]
+                    })
+                
+                return events
+        except Exception as e:
+            print(f"Error getting violation events: {e}")
             return []
