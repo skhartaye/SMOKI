@@ -444,15 +444,24 @@ def send_snapshot(frame_bgr, timestamp, all_dets, smoke_dets,
     is_violation = len(smoke_dets) > 0 and len(vehicle_dets) > 0
     _, jpg = cv2.imencode('.jpg', frame_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
 
+    # Send frame with properly formatted metadata for stream status
     _post(f"{BACKEND_URL}/api/stream/frame",
           files={"frame": ("frame.jpg", jpg.tobytes(), "image/jpeg")},
           data={"metadata": json.dumps({
-              "camera_id": CAMERA_ID, "location": CAMERA_LOCATION,
-              "timestamp": timestamp, "is_violation": is_violation,
-              "smoke_count": len(smoke_dets), "vehicle_count": len(vehicle_dets),
-              "plate_count": len(plate_results),
+              "camera_id": CAMERA_ID, 
+              "camera_location": CAMERA_LOCATION,
+              "timestamp": timestamp, 
+              "is_violation": is_violation,
+              "detections": all_dets,  # Include actual detection objects
+              "summary": {
+                  "total_detections": len(all_dets),
+                  "smoke_detections": len(smoke_dets),
+                  "vehicle_detections": len(vehicle_dets),
+                  "plate_detections": len(plate_results)
+              }
           })})
 
+    # Send detection snapshot to database
     _post(f"{BACKEND_URL}/api/detections/snapshot", json={
         "timestamp": timestamp, "camera_id": CAMERA_ID, "location": CAMERA_LOCATION,
         "smoke_count": len(smoke_dets), "vehicle_count": len(vehicle_dets),
