@@ -166,6 +166,7 @@ def init_db():
         return
     try:
         with conn.cursor() as cur:
+            # Create tables first
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS detections (
                     id              BIGSERIAL PRIMARY KEY,
@@ -223,17 +224,29 @@ def init_db():
                     inference_ms  INT,
                     created_at    TIMESTAMPTZ DEFAULT NOW()
                 );
-
-                CREATE INDEX IF NOT EXISTS idx_detections_ts      ON detections(timestamp DESC);
-                CREATE INDEX IF NOT EXISTS idx_smoke_events_ts    ON smoke_events(timestamp DESC);
-                CREATE INDEX IF NOT EXISTS idx_plate_events_ts    ON plate_events(timestamp DESC);
-                CREATE INDEX IF NOT EXISTS idx_violations_ts      ON violations(timestamp DESC);
-                CREATE INDEX IF NOT EXISTS idx_detections_cam     ON detections(camera_id);
-                CREATE INDEX IF NOT EXISTS idx_violations_cam     ON violations(camera_id);
             """)
+            
+            # Create indexes with individual error handling
+            indexes = [
+                ("idx_detections_ts", "detections(timestamp DESC)"),
+                ("idx_smoke_events_ts", "smoke_events(timestamp DESC)"),
+                ("idx_plate_events_ts", "plate_events(timestamp DESC)"),
+                ("idx_violations_ts", "violations(timestamp DESC)"),
+                ("idx_detections_cam", "detections(camera_id)"),
+                ("idx_violations_cam", "violations(camera_id)")
+            ]
+            
+            for idx_name, idx_def in indexes:
+                try:
+                    cur.execute(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {idx_def};")
+                except Exception as idx_error:
+                    print(f"[PG] Index {idx_name} creation failed (non-fatal): {idx_error}")
+                    # Continue with other indexes
+            
         print("[PG] Schema ready ✓")
     except Exception as e:
         print(f"[PG] Schema init error: {e}")
+        # Don't raise - allow script to continue without local database
 
 
 def pg_insert_detection(timestamp, smoke_count, vehicle_count, plate_count,
