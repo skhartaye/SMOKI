@@ -5,7 +5,7 @@ from urllib.parse import urljoin
 import time
 
 # Configuration
-STREAM_IP = "192.168.1.35"
+STREAM_IP = "192.168.100.199"
 STREAM_PORT = 8000
 STREAM_URL = f"http://{STREAM_IP}:{STREAM_PORT}/stream.m3u8"
 

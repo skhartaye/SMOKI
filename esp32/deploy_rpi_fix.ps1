@@ -2,7 +2,7 @@
 # Usage: .\deploy_rpi_fix.ps1 [rpi_ip]
 
 param(
-    [string]$RpiIP = "192.168.1.35"  # Default IP, can be overridden
+    [string]$RpiIP = "192.168.100.199"  # Default IP, can be overridden
 )
 
 $RpiUser = "sevi"

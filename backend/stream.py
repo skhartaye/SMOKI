@@ -377,7 +377,14 @@ import requests
 @router.get("/hls-proxy")
 def hls_proxy():
     """Proxy HLS stream from RPi over HTTPS"""
-    rpi_ip = os.getenv('RPI_IP', '192.168.1.35')
+    # Check if running on Render (cloud) - can't access local RPi
+    if os.getenv('RENDER'):
+        raise HTTPException(
+            status_code=503, 
+            detail="HLS proxy not available in cloud deployment - RPi not accessible"
+        )
+    
+    rpi_ip = os.getenv('RPI_IP', '192.168.100.199')
     hls_url = f"http://{rpi_ip}:8000/stream.m3u8"
     
     try:

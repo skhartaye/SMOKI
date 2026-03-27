@@ -3,7 +3,7 @@
 # Deploy updated rpi_simple_detect.py to RPi and restart
 # Usage: ./deploy_rpi_fix.sh [rpi_ip]
 
-RPI_IP=${1:-"192.168.1.35"}  # Default IP, can be overridden
+RPI_IP=${1:-"192.168.100.199"}  # Default IP, can be overridden
 RPI_USER="sevi"
 RPI_PATH="/home/sevi/smoki_project/src/model-skhart-ready"
 LOCAL_FILE="esp32/rpi_simple_detect.py"

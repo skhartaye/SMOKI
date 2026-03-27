@@ -346,11 +346,9 @@ function Dashboard() {
         headers['Authorization'] = `Bearer ${token}`;
       }
       
-      // Try to fetch from new detections endpoint
+      // Try to fetch from new detections endpoint (public)
       try {
-        const response = await fetchWithFallback('/api/detections/all?limit=50', {
-          headers
-        });
+        const response = await fetchWithFallback('/api/vehicles/detections/recent?limit=50');
         
         if (response.status === 200) {
           const result = await response.json();
@@ -430,11 +428,9 @@ function Dashboard() {
         console.log('New detections endpoint not available, trying legacy endpoints...');
       }
       
-      // Fallback to legacy vehicle detections endpoint
+      // Fallback to legacy vehicle detections endpoint (public)
       try {
-        const response = await fetchWithFallback('/api/vehicles/detections?limit=50', {
-          headers
-        });
+        const response = await fetchWithFallback('/api/vehicles/violations/recent?limit=50');
         
         if (response.status === 200) {
           const result = await response.json();
@@ -613,11 +609,9 @@ function Dashboard() {
         headers['Authorization'] = `Bearer ${token}`;
       }
       
-      // Try the ranking endpoint first
+      // Try the ranking endpoint first (public)
       try {
-        const response = await fetchWithFallback('/api/vehicles/ranking', {
-          headers
-        });
+        const response = await fetchWithFallback('/api/vehicles/ranking');
         
         if (response.status === 200) {
           const result = await response.json();
