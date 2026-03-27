@@ -453,7 +453,9 @@ function Dashboard() {
         if (streamResponse.status === 200) {
           const streamData = await streamResponse.json();
           
-          console.log('[DEBUG] Stream data structure:', streamData);
+          console.log('[DEBUG] Full stream response:', JSON.stringify(streamData, null, 2));
+          console.log('[DEBUG] latest_detections field:', streamData.latest_detections);
+          console.log('[DEBUG] detection_summary field:', streamData.detection_summary);
           
           // Process detection metadata
           if (streamData.latest_detections && Array.isArray(streamData.latest_detections) && streamData.latest_detections.length > 0) {
@@ -477,34 +479,48 @@ function Dashboard() {
               try {
                 console.log(`[DEBUG] Processing detection ${index}:`, detection);
                 
-                let detectionType = 'Unknown';
-                let plateNumber = 'N/A';
-                let smokeLevel = 'None';
-                
                 // Handle the exact field names from RPi: 'class' and 'conf'
                 let className = detection.class || detection.class_name || '';
                 let confidence = detection.conf || detection.confidence || 0;
                 
-                // Skip if no valid class name
-                if (!className || className === 'unknown' || className === '') {
+                // Strict validation - only allow known valid class names
+                const validClasses = [
+                  'passenger', 'puv', 'services', 'two_wheel',  // vehicles
+                  'smoke_black', 'smoke_white',                 // smoke
+                  'license_plate'                               // plates
+                ];
+                
+                // Skip if no valid class name or not in our valid list
+                if (!className || 
+                    className === 'unknown' || 
+                    className === '' || 
+                    typeof className !== 'string' ||
+                    !validClasses.includes(className.toLowerCase())) {
+                  console.log(`[DEBUG] Skipping invalid detection - className: "${className}"`);
                   return null;
                 }
                 
+                let detectionType = 'Unknown';
+                let plateNumber = 'N/A';
+                let smokeLevel = 'None';
+                
                 console.log(`[DEBUG] Extracted - className: "${className}", confidence: ${confidence}`);
                 
-                // Ensure className is a string
-                if (typeof className !== 'string') {
-                  className = String(className);
-                }
-                
-                // Ensure confidence is a number
-                if (typeof confidence !== 'number' || isNaN(confidence)) {
-                  confidence = 0;
+                // Ensure confidence is a number and above minimum threshold
+                if (typeof confidence !== 'number' || isNaN(confidence) || confidence <= 0) {
+                  console.log(`[DEBUG] Skipping detection with invalid confidence: ${confidence}`);
+                  return null;
                 }
                 
                 // Normalize confidence to 0-1 range if it's in 0-100 range
                 if (confidence > 1) {
                   confidence = confidence / 100;
+                }
+                
+                // Skip detections with very low confidence (less than 10%)
+                if (confidence < 0.1) {
+                  console.log(`[DEBUG] Skipping low confidence detection: ${confidence}`);
+                  return null;
                 }
                 
                 console.log(`[DEBUG] After processing - className: "${className}", confidence: ${confidence}`);
@@ -535,13 +551,10 @@ function Dashboard() {
                 else if (className === 'license_plate') {
                   detectionType = 'License Plate';
                 }
-                // Face detection (if implemented)
-                else if (className.toLowerCase().includes('face') || className.toLowerCase().includes('person')) {
-                  detectionType = 'Face';
-                }
-                // Default to capitalize the class name
+                // If we reach here with a valid class name, something is wrong - skip it
                 else {
-                  detectionType = className.charAt(0).toUpperCase() + className.slice(1).replace('_', ' ');
+                  console.log(`[DEBUG] Unhandled valid class name: "${className}" - skipping`);
+                  return null;
                 }
                 
                 console.log(`[DEBUG] Final classification - detectionType: "${detectionType}"`);
@@ -697,75 +710,16 @@ function Dashboard() {
                 });
               });
               
-              // Add some historical mock vehicles for better ranking display
-              const mockHistoricalVehicles = [
-                {
-                  id: 'historical_1',
-                  license_plate: 'OLD-001',
-                  vehicle_type: 'Passenger Car',
-                  violations: 12,
-                  status: 'warning',
-                  last_detected: new Date(Date.now() - 300000).toISOString(), // 5 minutes ago
-                  smoke_detected: true,
-                  detection_source: 'historical'
-                },
-                {
-                  id: 'historical_2', 
-                  license_plate: 'PUV-999',
-                  vehicle_type: 'Public Utility Vehicle',
-                  violations: 18,
-                  status: 'critical',
-                  last_detected: new Date(Date.now() - 600000).toISOString(), // 10 minutes ago
-                  smoke_detected: true,
-                  detection_source: 'historical'
-                }
-              ];
-              
-              // Combine live and historical data
-              const allVehicles = [...ranking, ...mockHistoricalVehicles];
-              
-              // Sort by violations (highest first)
-              allVehicles.sort((a, b) => b.violations - a.violations);
-              
-              console.log(`[RANKING] Generated ranking with ${allVehicles.length} vehicles (${ranking.length} live, ${mockHistoricalVehicles.length} historical)`);
-              setVehicleRanking(allVehicles);
+              // Only use live detection data - no mock data
+              console.log(`[RANKING] Generated ranking with ${ranking.length} live vehicles`);
+              setVehicleRanking(ranking);
               return;
             }
           }
           
-          // If no current detections, show historical mock data
-          const historicalRanking = [
-            {
-              id: 'hist_1',
-              license_plate: 'PUV-888',
-              vehicle_type: 'Public Utility Vehicle', 
-              violations: 15,
-              status: 'critical',
-              last_detected: new Date(Date.now() - 900000).toISOString(),
-              detection_source: 'historical'
-            },
-            {
-              id: 'hist_2',
-              license_plate: 'ABC-777',
-              vehicle_type: 'Passenger Car',
-              violations: 9,
-              status: 'warning', 
-              last_detected: new Date(Date.now() - 1200000).toISOString(),
-              detection_source: 'historical'
-            },
-            {
-              id: 'hist_3',
-              license_plate: 'SVC-666',
-              vehicle_type: 'Service Vehicle',
-              violations: 4,
-              status: 'caution',
-              last_detected: new Date(Date.now() - 1800000).toISOString(),
-              detection_source: 'historical'
-            }
-          ];
-          
-          console.log(`[RANKING] Using historical data: ${historicalRanking.length} vehicles`);
-          setVehicleRanking(historicalRanking);
+          // If no current detections, show empty ranking
+          console.log(`[RANKING] No live detections available - showing empty ranking`);
+          setVehicleRanking([]);
         }
       } catch (error) {
         console.log('Stream ranking processing failed:', error.message);
