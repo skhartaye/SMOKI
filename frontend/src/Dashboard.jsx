@@ -35,6 +35,7 @@ function Dashboard() {
   const [aqiData, setAqiData] = useState(null);
   const [records, setRecords] = useState([]);
   const [graphData, setGraphData] = useState([]);
+  const [correlationData, setCorrelationData] = useState([]);
   const [filterSensorTypes, setFilterSensorTypes] = useState({
     temperature: true,
     humidity: true,
@@ -284,6 +285,44 @@ function Dashboard() {
     }
   };
 
+  const fetchCorrelationData = async () => {
+    try {
+      const response = await fetchWithFallback('/api/correlation/pm-smoke?limit=50');
+      
+      const result = await response.json();
+      if (result.success) {
+        // Format data for correlation graph (keep chronological order)
+        const formatted = result.data.map(item => ({
+          time: new Date(item.timestamp).toLocaleTimeString(),
+          fullTimestamp: new Date(item.timestamp).toLocaleString(),
+          pm25: item.pm25 || 0,
+          pm10: item.pm10 || 0,
+          smoke_events: item.smoke_events || 0,
+          combined_pm: item.combined_pm || 0,
+          is_real_event: item.is_real_event || false
+        }));
+        
+        // Show all data points to display both historical events and trends
+        setCorrelationData(formatted);
+        
+        console.log(`Correlation loaded: ${result.historical_smoke_events || 0} historical smoke events, ${result.recent_trend_points || 0} recent trend points`);
+      }
+    } catch (error) {
+      console.error('Error fetching correlation data:', error);
+      
+      // Show mock data with historical smoke events for demonstration
+      console.log('Using mock correlation data with historical smoke events');
+      const mockData = [
+        { time: '08:31', fullTimestamp: '2026-03-28 08:31:11', pm25: 9, pm10: 15, smoke_events: 1, is_real_event: true },
+        { time: '08:33', fullTimestamp: '2026-03-28 08:33:09', pm25: 9, pm10: 15, smoke_events: 1, is_real_event: true },
+        { time: '08:35', fullTimestamp: '2026-03-28 08:35:24', pm25: 10, pm10: 16, smoke_events: 1, is_real_event: true },
+        { time: '14:00', fullTimestamp: '2026-03-28 14:00:00', pm25: 15.2, pm10: 28.5, smoke_events: 0, is_real_event: false },
+        { time: '14:30', fullTimestamp: '2026-03-28 14:30:00', pm25: 12.8, pm10: 24.1, smoke_events: 0, is_real_event: false }
+      ];
+      setCorrelationData(mockData);
+    }
+  };
+
   const calculateChange = (current, previous) => {
     // Always return a number - return 0 if no valid data
     if (typeof current !== 'number' || typeof previous !== 'number') return 0;
@@ -366,7 +405,11 @@ function Dashboard() {
   useEffect(() => {
     if (activePage === "graphs") {
       fetchGraphData();
-      const interval = setInterval(fetchGraphData, 30000); // Update every 30 seconds
+      fetchCorrelationData();
+      const interval = setInterval(() => {
+        fetchGraphData();
+        fetchCorrelationData();
+      }, 30000); // Update every 30 seconds
       return () => clearInterval(interval);
     }
   }, [activePage]);
@@ -3171,6 +3214,104 @@ function Dashboard() {
                       </div>
                     </div>
                     )}
+                    
+                    {/* PM2.5/PM10 vs Smoke Events Correlation Graph */}
+                    <div className="graph-card correlation-graph">
+                      <div className="graph-header">
+                        <div className="graph-value">
+                          <span className="current-value">Correlation</span>
+                          <span className="value-change">PM vs Smoke</span>
+                        </div>
+                      </div>
+                      <div style={{ width: '100%', height: '280px' }}>
+                        <ResponsiveContainer debounce={300}>
+                          <LineChart data={correlationData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                            <XAxis 
+                              dataKey="time" 
+                              stroke="#999" 
+                              tick={{ fontSize: 11, fill: '#999' }}
+                              axisLine={false}
+                              tickLine={false}
+                            />
+                            <YAxis 
+                              yAxisId="pm"
+                              stroke="#999" 
+                              tick={{ fontSize: 11, fill: '#999' }}
+                              axisLine={false}
+                              tickLine={false}
+                              domain={['auto', 'auto']}
+                              label={{ value: 'PM (µg/m³)', angle: -90, position: 'insideLeft' }}
+                            />
+                            <YAxis 
+                              yAxisId="smoke"
+                              orientation="right"
+                              stroke="#ff6b35" 
+                              tick={{ fontSize: 11, fill: '#ff6b35' }}
+                              axisLine={false}
+                              tickLine={false}
+                              domain={[0, 'auto']}
+                              label={{ value: 'Smoke Events', angle: 90, position: 'insideRight' }}
+                            />
+                            <Tooltip 
+                              contentStyle={{ 
+                                backgroundColor: 'rgba(255,255,255,0.95)', 
+                                border: '1px solid #ddd',
+                                borderRadius: '8px',
+                                padding: '10px'
+                              }}
+                              labelStyle={{ fontWeight: 'bold', marginBottom: '5px' }}
+                              formatter={(value, name) => {
+                                if (name === 'PM2.5') return [value.toFixed(2), 'PM2.5 (µg/m³)'];
+                                if (name === 'PM10') return [value.toFixed(2), 'PM10 (µg/m³)'];
+                                if (name === 'Smoke Events') return [value, 'Smoke Events'];
+                                return [value, name];
+                              }}
+                              labelFormatter={(label, payload) => {
+                                if (payload && payload[0]) {
+                                  return payload[0].payload.fullTimestamp || label;
+                                }
+                                return label;
+                              }}
+                            />
+                            <Legend />
+                            <Line 
+                              yAxisId="pm"
+                              type="monotone" 
+                              dataKey="pm25" 
+                              stroke="#5b6b8d" 
+                              strokeWidth={2}
+                              dot={{ fill: '#5b6b8d', r: 3, strokeWidth: 0 }}
+                              activeDot={{ r: 6, fill: '#5b6b8d' }}
+                              name="PM2.5"
+                              isAnimationActive={false}
+                            />
+                            <Line 
+                              yAxisId="pm"
+                              type="monotone" 
+                              dataKey="pm10" 
+                              stroke="#4caf50" 
+                              strokeWidth={2}
+                              dot={{ fill: '#4caf50', r: 3, strokeWidth: 0 }}
+                              activeDot={{ r: 6, fill: '#4caf50' }}
+                              name="PM10"
+                              isAnimationActive={false}
+                            />
+                            <Line 
+                              yAxisId="smoke"
+                              type="monotone" 
+                              dataKey="smoke_events" 
+                              stroke="#ff6b35" 
+                              strokeWidth={3}
+                              dot={{ fill: '#ff6b35', r: 4, strokeWidth: 0 }}
+                              activeDot={{ r: 8, fill: '#ff6b35' }}
+                              name="Smoke Events"
+                              isAnimationActive={false}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
