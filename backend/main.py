@@ -656,6 +656,39 @@ def get_violation_events_api(limit: int = 50, current_user: User = Depends(get_c
         raise HTTPException(status_code=500, detail=str(e))
 # ============ IMAGE HISTORY API ENDPOINTS ============
 
+@app.get("/api/images/test")
+def test_images_endpoint():
+    """Test endpoint to verify images API is working"""
+    return {
+        "success": True,
+        "message": "Images API is working",
+        "endpoints": [
+            "/api/images/recent",
+            "/api/images/list", 
+            "/api/images/{id}",
+            "/api/images/{id}/raw"
+        ]
+    }
+
+@app.get("/api/images/recent/public")
+def get_recent_images_public(limit: int = 50, hours: int = 24):
+    """Get recent images without authentication (for testing)"""
+    try:
+        from postgre.database import get_recent_images
+        images = get_recent_images(limit=limit, hours=hours)
+        return {
+            "success": True,
+            "data": images,
+            "count": len(images),
+            "message": "This is a public test endpoint. Use /api/images/recent with authentication for production."
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Error accessing database. Check if tables exist."
+        }
+
 @app.get("/api/images/recent")
 def get_recent_images_api(limit: int = 50, hours: int = 24, current_user: User = Depends(get_current_user)):
     """Get recent images within specified hours"""
