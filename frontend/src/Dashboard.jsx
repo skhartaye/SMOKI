@@ -1539,7 +1539,7 @@ function Dashboard() {
                       <div className="section-title-row">
                         <div>
                           <h2>Live Detections</h2>
-                          <p className="section-subtitle">Real-time AI detection results with timestamps</p>
+                          <p className="section-subtitle">Real-time AI detection results</p>
                         </div>
                       </div>
                     </div>
