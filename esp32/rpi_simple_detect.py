@@ -5,11 +5,10 @@ rpi_snap.py  —  Smoki Project  |  Snapshot detection every N seconds
 Every INTERVAL seconds:
   1. Capture one frame from picam2
   2. Run smoke / license-plate / vehicle Hailo models
-  3. Run YOLOv8 face detection → blur faces on frame
-  4. Crop plate regions → EasyOCR
-  5. Draw bounding boxes on annotated frame
-  6. POST annotated JPEG + all metadata to backend
-  7. Sleep until next interval
+  3. Crop plate regions → EasyOCR
+  4. Draw bounding boxes on annotated frame
+  5. POST annotated JPEG + all metadata to backend
+  6. Sleep until next interval
 
 No FFmpeg, no HLS, no queues, no threads.
 Simple, stable, easy to debug.
@@ -56,15 +55,12 @@ DB_USER     = os.getenv('DB_USER',     'smoki_db_user')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'HwlPtCgq1vW9KI45aHRuD1sbNwA03kFT')
 DB_PORT     = int(os.getenv('DB_PORT', '5432'))
 
-FACE_CONF    = 0.4
-PLATE_CONF   = 0.3
 SMOKE_CONF   = 0.53
 VEHICLE_CONF = 0.3
+PLATE_CONF   = 0.3
 
 SMOKE_CLASSES   = {'smoke_black', 'smoke_white'}
 VEHICLE_CLASSES = {'passenger', 'puv', 'services', 'two_wheel'}
-
-FACE_MODEL_PT = "/home/sevi/smoki_project/src/model_despro1/face_detection_blur.pt"
 
 ALL_MODELS = [
     {
@@ -176,7 +172,6 @@ def init_db():
                     smoke_count     INT  DEFAULT 0,
                     vehicle_count   INT  DEFAULT 0,
                     plate_count     INT  DEFAULT 0,
-                    face_count      INT  DEFAULT 0,
                     is_violation    BOOLEAN DEFAULT FALSE,
                     inference_ms    INT,
                     upload_ms       INT,
@@ -250,7 +245,7 @@ def init_db():
 
 
 def pg_insert_detection(timestamp, smoke_count, vehicle_count, plate_count,
-                         face_count, is_violation, inference_ms, upload_ms,
+                         is_violation, inference_ms, upload_ms,
                          all_dets):
     conn = _get_pg()
     if conn is None:
@@ -260,12 +255,12 @@ def pg_insert_detection(timestamp, smoke_count, vehicle_count, plate_count,
             cur.execute("""
                 INSERT INTO detections
                     (timestamp, camera_id, location, smoke_count, vehicle_count,
-                     plate_count, face_count, is_violation, inference_ms,
+                     plate_count, is_violation, inference_ms,
                      upload_ms, detections_json)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """, (timestamp, CAMERA_ID, CAMERA_LOCATION,
                   smoke_count, vehicle_count, plate_count,
-                  face_count, is_violation, inference_ms, upload_ms,
+                  is_violation, inference_ms, upload_ms,
                   json.dumps(all_dets)))
     except Exception as e:
         print(f"[PG] detections insert error: {e}")
@@ -551,7 +546,7 @@ def read_plate(reader, crop_bgr):
 
 # ─── BACKEND SENDERS ──────────────────────────────────────────────────────────
 def send_snapshot(frame_bgr, timestamp, all_dets, smoke_dets,
-                  vehicle_dets, plate_results, face_count, inf_ms):
+                  vehicle_dets, plate_results, inf_ms):
     _, jpg = cv2.imencode('.jpg', frame_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
 
     is_violation = len(smoke_dets) > 0 and len(vehicle_dets) > 0
@@ -575,7 +570,6 @@ def send_snapshot(frame_bgr, timestamp, all_dets, smoke_dets,
             "vehicle_detections": len(vehicle_dets),
             "plate_detections":  len(plate_results),
             "plates_with_text":  sum(1 for p in plate_results if p.get("text")),
-            "face_count":        face_count,
             "inference_time_ms": inf_ms,
             "frame_size_bytes":  len(jpg),
             "violation_detected": is_violation,
@@ -587,7 +581,7 @@ def send_snapshot(frame_bgr, timestamp, all_dets, smoke_dets,
 
     flag = " 🚨 VIOLATION" if is_violation else ""
     print(f"[Sent] smoke={len(smoke_dets)} veh={len(vehicle_dets)} "
-          f"plates={len(plate_results)} faces={face_count} "
+          f"plates={len(plate_results)} "
           f"inf={inf_ms}ms{flag}")
 
 
@@ -656,16 +650,6 @@ def main():
     picam2.start()
     time.sleep(1)   # warm up
     print("[OK] Camera ready")
-
-    # ── Face model ────────────────────────────────────────────────────────────
-    face_model = None
-    try:
-        from ultralytics import YOLO
-        face_model = YOLO(FACE_MODEL_PT)
-        face_model.to('cpu')
-        print("[OK] Face model loaded")
-    except Exception as e:
-        print(f"[WARNING] Face model: {e}")
 
     # ── OCR ───────────────────────────────────────────────────────────────────
     ocr = load_ocr()
@@ -764,25 +748,7 @@ def main():
 
             inf_ms = int((time.time() - t_inf) * 1000)
 
-            # ── 3. Face detection + blur ──────────────────────────────────────
-            face_count = 0
-            if face_model is not None:
-                try:
-                    for result in face_model(frame_bgr, conf=FACE_CONF, verbose=False):
-                        for box in result.boxes:
-                            fx1, fy1, fx2, fy2 = map(int, box.xyxy[0])
-                            fx1 = max(0, fx1); fy1 = max(0, fy1)
-                            fx2 = min(orig_w-1, fx2); fy2 = min(orig_h-1, fy2)
-                            if fx2 > fx1 and fy2 > fy1:
-                                roi   = vis_frame[fy1:fy2, fx1:fx2]
-                                ksize = max(15, ((fx2-fx1)//5) | 1)
-                                vis_frame[fy1:fy2, fx1:fx2] = cv2.GaussianBlur(
-                                    roi, (ksize, ksize), 0)
-                                face_count += 1
-                except Exception as e:
-                    print(f"[Face] Error: {e}")
-
-            # ── 4. Plate OCR ──────────────────────────────────────────────────
+            # ── 3. Plate OCR ──────────────────────────────────────────────────
             plate_results = []
             for det in plate_dets:
                 x1, y1, x2, y2 = det["bbox"]
@@ -813,7 +779,7 @@ def main():
             # ── 6. Send full snapshot (timed) ────────────────────────────────
             t_upload = time.time()
             send_snapshot(vis_frame.copy(), ts, all_dets,
-                          smoke_dets, vehicle_dets, plate_results, face_count, inf_ms)
+                          smoke_dets, vehicle_dets, plate_results, inf_ms)
             upload_ms = int((time.time() - t_upload) * 1000)
 
             # ── 7. Save to PostgreSQL ─────────────────────────────────────────
@@ -822,7 +788,7 @@ def main():
 
             submit(pg_insert_detection, ts_dt,
                    len(smoke_dets), len(vehicle_dets), len(plate_results),
-                   face_count, is_violation, inf_ms, upload_ms, all_dets)
+                   is_violation, inf_ms, upload_ms, all_dets)
 
             for det in smoke_dets:
                 submit(pg_insert_smoke, ts_dt, det, inf_ms)
@@ -844,7 +810,7 @@ def main():
             sleep_for = max(0.0, INTERVAL - elapsed)
             print(f"[Snap #{snap_count}] {ts[:19]}Z | "
                   f"Smoke:{len(smoke_dets)} Veh:{len(vehicle_dets)} "
-                  f"Plates:{len(plate_results)} Faces:{face_count} | "
+                  f"Plates:{len(plate_results)} | "
                   f"inf={inf_ms}ms upload={upload_ms}ms total={elapsed*1000:.0f}ms "
                   f"next_in={sleep_for:.1f}s")
 
@@ -879,15 +845,6 @@ if __name__ == '__main__':
         picam2.start()
         time.sleep(1)
         print("[OK] Camera ready")
-
-        face_model = None
-        try:
-            from ultralytics import YOLO
-            face_model = YOLO(FACE_MODEL_PT)
-            face_model.to('cpu')
-            print("[OK] Face model loaded")
-        except Exception as e:
-            print(f"[WARNING] Face model: {e}")
 
         ocr = load_ocr()
 
@@ -971,29 +928,10 @@ if __name__ == '__main__':
 
             inf_ms = int((time.time() - t_inf) * 1000)
 
-            # Face blur
-            face_count = 0
-            if face_model is not None:
-                try:
-                    for result in face_model(frame_bgr, conf=FACE_CONF, verbose=False):
-                        for box in result.boxes:
-                            fx1,fy1,fx2,fy2 = map(int, box.xyxy[0])
-                            fx1=max(0,fx1); fy1=max(0,fy1)
-                            fx2=min(orig_w-1,fx2); fy2=min(orig_h-1,fy2)
-                            if fx2>fx1 and fy2>fy1:
-                                roi = vis_frame[fy1:fy2, fx1:fx2]
-                                ksize = max(15, ((fx2-fx1)//5)|1)
-                                vis_frame[fy1:fy2,fx1:fx2] = cv2.GaussianBlur(roi,(ksize,ksize),0)
-                                face_count += 1
-                    if face_count:
-                        print(f"\n  [FACE] {face_count} face(s) blurred")
-                except Exception as e:
-                    print(f"[Face] {e}")
-
             cv2.imwrite(args.output, vis_frame)
             print(f"\n[TEST] Done — inf={inf_ms}ms")
             print(f"[TEST] Saved annotated image → {args.output}")
-            print(f"[TEST] Copy to view: scp sevi@<pi-ip>:{args.output} .")
+            print(f"[TEST] Copy to view: scp sevi@192.168.100.199:{args.output} .")
             sys.exit(0)
 
     # ── Normal loop mode ──────────────────────────────────────────────────────
