@@ -1505,23 +1505,23 @@ function Dashboard() {
                                 {new Date(detection.timestamp).toLocaleTimeString()}
                               </div>
                               <div className="detection-col type">
-                                <span className={`detection-type-badge ${detection.detection_type.toLowerCase().replace(' ', '-')}`}>
-                                  {detection.detection_type}
+                                <span className={`detection-type-badge ${(detection.detection_type || 'unknown').toLowerCase().replace(' ', '-')}`}>
+                                  {detection.detection_type || 'Unknown'}
                                 </span>
                               </div>
                               <div className="detection-col object">
-                                {detection.class_name}
+                                {detection.class_name || 'Unknown'}
                               </div>
                               <div className="detection-col confidence">
-                                {detection.confidence}%
+                                {detection.confidence || '0.0'}%
                               </div>
                               <div className="detection-col details">
-                                {detection.detection_type === 'Vehicle' && detection.license_plate !== 'N/A' && (
+                                {detection.detection_type === 'Vehicle' && detection.license_plate && detection.license_plate !== 'N/A' && (
                                   <span className="license-plate">{detection.license_plate}</span>
                                 )}
                                 {detection.detection_type === 'Smoke' && (
-                                  <span className={`smoke-level ${detection.smoke_level.toLowerCase()}`}>
-                                    {detection.smoke_level} Level
+                                  <span className={`smoke-level ${(detection.smoke_level || 'none').toLowerCase()}`}>
+                                    {detection.smoke_level || 'None'} Level
                                   </span>
                                 )}
                                 {detection.detection_type === 'License Plate' && (
