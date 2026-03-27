@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Frame Endpoint</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        img { max-width: 800px; border: 2px solid #ccc; margin: 10px 0; }
+        button { padding: 10px 20px; margin: 5px; font-size: 16px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>RPi Camera Frame Test</h1>
+    
+    <div>
+        <button onclick="loadFrame()">Load Latest Frame</button>
+        <button onclick="testAPI()">Test API Status</button>
+        <button onclick="autoRefresh()">Auto Refresh (5s)</button>
+        <button onclick="stopRefresh()">Stop Auto Refresh</button>
+    </div>
+    
+    <div id="status"></div>
+    <div id="timestamp"></div>
+    
+    <img id="cameraFrame" alt="Camera frame will appear here" style="display: none;">
+    
+    <div id="apiResponse"></div>
+
+    <script>
+        let refreshInterval = null;
+        
+        function showStatus(message, isError = false) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + (isError ? 'error' : 'success');
+        }
+        
+        function updateTimestamp() {
+            document.getElementById('timestamp').textContent = 'Last updated: ' + new Date().toLocaleString();
+        }
+        
+        async function loadFrame() {
+            try {
+                showStatus('Loading frame...');
+                const frameUrl = 'https://smoki-backend-rpi.onrender.com/api/stream/latest.jpg?t=' + Date.now();
+                
+                const img = document.getElementById('cameraFrame');
+                img.onload = () => {
+                    showStatus('Frame loaded successfully!');
+                    updateTimestamp();
+                    img.style.display = 'block';
+                };
+                img.onerror = () => {
+                    showStatus('Failed to load frame', true);
+                };
+                
+                img.src = frameUrl;
+            } catch (error) {
+                showStatus('Error: ' + error.message, true);
+            }
+        }
+        
+        async function testAPI() {
+            try {
+                showStatus('Testing API...');
+                const response = await fetch('https://smoki-backend-rpi.onrender.com/api/stream/status');
+                const data = await response.json();
+                
+                document.getElementById('apiResponse').innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                showStatus('API test successful - Status: ' + data.status);
+            } catch (error) {
+                showStatus('API test failed: ' + error.message, true);
+            }
+        }
+        
+        function autoRefresh() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+            
+            loadFrame(); // Load immediately
+            refreshInterval = setInterval(loadFrame, 5000); // Then every 5 seconds
+            showStatus('Auto refresh started (every 5 seconds)');
+        }
+        
+        function stopRefresh() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+                showStatus('Auto refresh stopped');
+            }
+        }
+        
+        // Load initial frame
+        window.onload = () => {
+            testAPI();
+            loadFrame();
+        };
+    </script>
+</body>
+</html>

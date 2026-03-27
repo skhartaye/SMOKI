@@ -3,6 +3,7 @@ import { AlertCircle, Wifi, WifiOff, Play, Pause } from 'lucide-react';
 import '../styles/CameraViewer.css';
 import { fetchWithFallback } from '../utils/apiClient';
 
+// Updated: 2026-03-27 - Fixed frame display for production deployment
 function WebRTCViewer() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [isHealthy, setIsHealthy] = useState(false);
