@@ -1315,6 +1315,25 @@ def insert_detection(timestamp, camera_id, location=None, smoke_count=0, vehicle
     with psycopg.connect(get_connection_string()) as conn:
         try:
             with conn.cursor() as cursor:
+                # Ensure the detections table exists
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS detections (
+                        id BIGSERIAL PRIMARY KEY,
+                        timestamp TIMESTAMPTZ NOT NULL,
+                        camera_id TEXT NOT NULL,
+                        location TEXT,
+                        smoke_count INT DEFAULT 0,
+                        vehicle_count INT DEFAULT 0,
+                        plate_count INT DEFAULT 0,
+                        face_count INT DEFAULT 0,
+                        is_violation BOOLEAN DEFAULT FALSE,
+                        inference_ms INT,
+                        upload_ms INT,
+                        detections_json JSONB,
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
+                
                 cursor.execute("""
                     INSERT INTO detections 
                     (timestamp, camera_id, location, smoke_count, vehicle_count, plate_count, 
@@ -1332,6 +1351,8 @@ def insert_detection(timestamp, camera_id, location=None, smoke_count=0, vehicle
                 return result[0] if result else None
         except Exception as e:
             print(f"Error inserting detection: {e}")
+            import traceback
+            traceback.print_exc()
             conn.rollback()
             return None
 

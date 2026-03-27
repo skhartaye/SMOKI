@@ -816,9 +816,9 @@ if __name__ == '__main__':
             print(f"[TEST] scp sevi@<pi-ip>:{args.output} .")
             sys.exit(0)
 
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\n[INFO] Stopped.")
-    finally:
-        _executor.shutdown(wait=False)
+try:
+    main()
+except KeyboardInterrupt:
+    print("\n[INFO] Stopped.")
+finally:
+    _executor.shutdown(wait=False)
