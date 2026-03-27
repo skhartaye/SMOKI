@@ -435,7 +435,7 @@ function Dashboard() {
                   detectionRecords.push({
                     id: `plate_${detection.id}_${i}`,
                     timestamp: detection.timestamp,
-                    detection_type: 'License Plate',
+                    detection_type: 'License',
                     class_name: 'license_plate',
                     confidence: '90.0',
                     license_plate: 'N/A',
@@ -578,7 +578,7 @@ function Dashboard() {
                 } 
                 // License plate detection logic - exact class name from RPi
                 else if (className === 'license_plate') {
-                  detectionType = 'License Plate';
+                  detectionType = 'License';
                 }
                 // If we reach here with a valid class name, something is wrong - skip it
                 else {
@@ -1447,147 +1447,101 @@ function Dashboard() {
                         <div className="detection-col report">Report</div>
                       </div>
                       <div className="detections-table-body">
-                        {allDetections.length > 0 ? (
-                          <>
-                            {allDetections.slice(0, 10).map((detection) => (
-                              <div key={detection.id} className="detection-row">
-                                <div className="detection-col timestamp">
-                                  {new Date(detection.timestamp).toLocaleTimeString()}
-                                </div>
-                                <div className="detection-col type">
-                                  <span className={`detection-type-badge ${(detection.detection_type || 'unknown').toLowerCase().replace(' ', '-')}`}>
-                                    {detection.detection_type || 'Unknown'}
-                                  </span>
-                                </div>
-                                <div className="detection-col object">
-                                  {detection.class_name || 'Unknown'}
-                                </div>
-                                <div className="detection-col confidence">
-                                  {detection.confidence || '0.0'}%
-                                </div>
-                                <div className="detection-col details">
-                                  {detection.detection_type === 'Vehicle' && detection.license_plate && detection.license_plate !== 'N/A' && (
-                                    <span className="license-plate">{detection.license_plate}</span>
-                                  )}
-                                  {detection.detection_type === 'Smoke' && (
-                                    <div className="smoke-details">
-                                      <span className={`smoke-level ${(detection.smoke_level || 'none').toLowerCase()}`}>
-                                        {detection.smoke_level || 'None'} Level
-                                      </span>
-                                    </div>
-                                  )}
-                                  {detection.detection_type === 'License Plate' && (
-                                    <span className="plate-detected">Plate Detected</span>
-                                  )}
-                                </div>
-                                <div className="detection-col report">
-                                  {detection.detection_type === 'Smoke' ? (
-                                    <button 
-                                      className="report-smoke-btn"
-                                      onClick={() => {
-                                        const subject = `Smoke Detection Report - ${new Date(detection.timestamp).toLocaleString()}`;
-                                        const body = `Smoke Detection Alert%0A%0ATimestamp: ${new Date(detection.timestamp).toLocaleString()}%0ALocation: ${detection.location || 'Main Camera'}%0ASmoke Level: ${detection.smoke_level || 'Unknown'}%0AConfidence: ${detection.confidence}%25%0AObject Type: ${detection.class_name}%0A%0AThis is an automated smoke detection report from the SMOKi monitoring system.`;
-                                        const mailtoLink = `mailto:enforcement@smoki.gov?subject=${subject}&body=${body}`;
-                                        
-                                        try {
-                                          window.open(mailtoLink, '_blank');
-                                          showToast('Email client opened for smoke report', 'success');
-                                        } catch (error) {
-                                          // Fallback: try to use window.location
-                                          window.location.href = mailtoLink;
-                                        }
-                                      }}
-                                      disabled={reportingSmoke === detection.id}
-                                      title="Report this smoke event"
-                                    >
-                                      {reportingSmoke === detection.id ? 'Reporting...' : 'Report'}
-                                    </button>
-                                  ) : (
-                                    <span className="no-report">—</span>
-                                  )}
-                                </div>
+                        {(() => {
+                          // Always show dummy data as base
+                          const dummyDetections = [
+                            { id: 'dummy-1', time: '14:32:15', type: 'Vehicle', object: 'passenger', confidence: '92.3', plate: 'ABC-1234' },
+                            { id: 'dummy-2', time: '14:31:58', type: 'Smoke', object: 'smoke_black', confidence: '87.6', level: 'High' },
+                            { id: 'dummy-3', time: '14:31:42', type: 'Vehicle', object: 'puv', confidence: '89.1', plate: 'PUV-5678' },
+                            { id: 'dummy-4', time: '14:31:28', type: 'License', object: 'license_plate', confidence: '94.7', plate: 'DEF-9012' },
+                            { id: 'dummy-5', time: '14:31:15', type: 'Vehicle', object: 'two_wheel', confidence: '85.4', plate: 'MC-3456' },
+                            { id: 'dummy-6', time: '14:30:59', type: 'Smoke', object: 'smoke_white', confidence: '76.2', level: 'Medium' },
+                            { id: 'dummy-7', time: '14:30:44', type: 'Vehicle', object: 'services', confidence: '91.8', plate: 'SVC-7890' },
+                            { id: 'dummy-8', time: '14:30:31', type: 'Vehicle', object: 'passenger', confidence: '88.9', plate: 'XYZ-2468' },
+                            { id: 'dummy-9', time: '14:30:18', type: 'Smoke', object: 'smoke_black', confidence: '91.2', level: 'High' },
+                            { id: 'dummy-10', time: '14:30:05', type: 'Vehicle', object: 'puv', confidence: '86.7', plate: 'PUV-9999' },
+                            { id: 'dummy-11', time: '14:29:52', type: 'License', object: 'license_plate', confidence: '93.1', plate: 'GHI-5555' },
+                            { id: 'dummy-12', time: '14:29:39', type: 'Vehicle', object: 'services', confidence: '88.4', plate: 'SVC-1111' }
+                          ];
+                          
+                          // Convert real detections to dummy format and prepend them
+                          const realDetectionsFormatted = allDetections.length > 0 ? allDetections.slice(0, 5).map((detection) => ({
+                            id: detection.id,
+                            time: new Date(detection.timestamp).toLocaleTimeString(),
+                            type: detection.detection_type || 'Unknown',
+                            object: detection.class_name || 'Unknown',
+                            confidence: detection.confidence || '0.0',
+                            plate: detection.license_plate || 'N/A',
+                            level: detection.smoke_level || 'None',
+                            isReal: true // Mark as real data
+                          })) : [];
+                          
+                          // Combine real data (first) with dummy data, limit to 10 total
+                          const combinedDetections = [...realDetectionsFormatted, ...dummyDetections].slice(0, 10);
+                          
+                          return combinedDetections.map((detection) => (
+                            <div key={detection.id} className={`detection-row ${detection.isReal ? 'real-detection' : 'dummy-detection'}`}>
+                              <div className="detection-col timestamp">
+                                {detection.time}
                               </div>
-                            ))}
-                          </>
-                        ) : (
-                          <>
-                            {/* Dummy data when no real detections */}
-                            {(() => {
-                              const dummyDetections = [
-                                { id: 'dummy-1', time: '14:32:15', type: 'Vehicle', object: 'passenger', confidence: '92.3', plate: 'ABC-1234' },
-                                { id: 'dummy-2', time: '14:31:58', type: 'Smoke', object: 'smoke_black', confidence: '87.6', level: 'High' },
-                                { id: 'dummy-3', time: '14:31:42', type: 'Vehicle', object: 'puv', confidence: '89.1', plate: 'PUV-5678' },
-                                { id: 'dummy-4', time: '14:31:28', type: 'License Plate', object: 'license_plate', confidence: '94.7', plate: 'DEF-9012' },
-                                { id: 'dummy-5', time: '14:31:15', type: 'Vehicle', object: 'two_wheel', confidence: '85.4', plate: 'MC-3456' },
-                                { id: 'dummy-6', time: '14:30:59', type: 'Smoke', object: 'smoke_white', confidence: '76.2', level: 'Medium' },
-                                { id: 'dummy-7', time: '14:30:44', type: 'Vehicle', object: 'services', confidence: '91.8', plate: 'SVC-7890' },
-                                { id: 'dummy-8', time: '14:30:31', type: 'Vehicle', object: 'passenger', confidence: '88.9', plate: 'XYZ-2468' },
-                                { id: 'dummy-9', time: '14:30:18', type: 'Smoke', object: 'smoke_black', confidence: '91.2', level: 'High' },
-                                { id: 'dummy-10', time: '14:30:05', type: 'Vehicle', object: 'puv', confidence: '86.7', plate: 'PUV-9999' },
-                                { id: 'dummy-11', time: '14:29:52', type: 'License Plate', object: 'license_plate', confidence: '93.1', plate: 'GHI-5555' },
-                                { id: 'dummy-12', time: '14:29:39', type: 'Vehicle', object: 'services', confidence: '88.4', plate: 'SVC-1111' }
-                              ];
-                              
-                              return dummyDetections.map((detection) => (
-                                <div key={detection.id} className="detection-row">
-                                  <div className="detection-col timestamp">
-                                    {detection.time}
-                                  </div>
-                                  <div className="detection-col type">
-                                    <span className={`detection-type-badge ${detection.type.toLowerCase().replace(' ', '-')}`}>
-                                      {detection.type}
+                              <div className="detection-col type">
+                                <span className={`detection-type-badge ${detection.type.toLowerCase().replace(' ', '-')}`}>
+                                  {detection.type}
+                                </span>
+                              </div>
+                              <div className="detection-col object">
+                                {detection.object}
+                              </div>
+                              <div className="detection-col confidence">
+                                {detection.confidence}%
+                              </div>
+                              <div className="detection-col details">
+                                {detection.type === 'Vehicle' && detection.plate && detection.plate !== 'N/A' && (
+                                  <span className="license-plate">{detection.plate}</span>
+                                )}
+                                {detection.type === 'Smoke' && (
+                                  <div className="smoke-details">
+                                    <span className={`smoke-level ${detection.level.toLowerCase()}`}>
+                                      {detection.level} Level
                                     </span>
                                   </div>
-                                  <div className="detection-col object">
-                                    {detection.object}
-                                  </div>
-                                  <div className="detection-col confidence">
-                                    {detection.confidence}%
-                                  </div>
-                                  <div className="detection-col details">
-                                    {detection.type === 'Vehicle' && detection.plate && (
-                                      <span className="license-plate">{detection.plate}</span>
-                                    )}
-                                    {detection.type === 'Smoke' && (
-                                      <div className="smoke-details">
-                                        <span className={`smoke-level ${detection.level.toLowerCase()}`}>
-                                          {detection.level} Level
-                                        </span>
-                                      </div>
-                                    )}
-                                    {detection.type === 'License Plate' && (
-                                      <span className="plate-detected">Plate Detected</span>
-                                    )}
-                                  </div>
-                                  <div className="detection-col report">
-                                    {detection.type === 'Smoke' ? (
-                                      <button 
-                                        className="report-smoke-btn"
-                                        onClick={() => {
-                                          const subject = `Smoke Detection Report - ${detection.time}`;
-                                          const body = `Smoke Detection Alert%0A%0ATimestamp: ${detection.time}%0ASmoke Level: ${detection.level}%0AConfidence: ${detection.confidence}%25%0AObject Type: ${detection.object}%0A%0AThis is a demo smoke detection report from the SMOKi monitoring system.`;
-                                          const mailtoLink = `mailto:enforcement@smoki.gov?subject=${subject}&body=${body}`;
-                                          
-                                          try {
-                                            window.open(mailtoLink, '_blank');
-                                            showToast('Email client opened for smoke report (Demo)', 'success');
-                                          } catch (error) {
-                                            window.location.href = mailtoLink;
-                                          }
-                                        }}
-                                        title="Report this smoke event"
-                                      >
-                                        Report
-                                      </button>
-                                    ) : (
-                                      <span className="no-report">—</span>
-                                    )}
-                                  </div>
-                                </div>
-                              ));
-                            })()}
-                          </>
-                        )}
+                                )}
+                                {detection.type === 'License' && (
+                                  <span className="plate-detected">Plate Detected</span>
+                                )}
+                              </div>
+                              <div className="detection-col report">
+                                {detection.type === 'Smoke' ? (
+                                  <button 
+                                    className="report-smoke-btn"
+                                    onClick={() => {
+                                      const subject = detection.isReal ? 
+                                        `Smoke Detection Report - ${detection.time}` :
+                                        `Smoke Detection Report - ${detection.time}`;
+                                      const body = detection.isReal ?
+                                        `Smoke Detection Alert%0A%0ATimestamp: ${detection.time}%0ASmoke Level: ${detection.level}%0AConfidence: ${detection.confidence}%25%0AObject Type: ${detection.object}%0A%0AThis is an automated smoke detection report from the SMOKi monitoring system.` :
+                                        `Smoke Detection Alert%0A%0ATimestamp: ${detection.time}%0ASmoke Level: ${detection.level}%0AConfidence: ${detection.confidence}%25%0AObject Type: ${detection.object}%0A%0AThis is a demo smoke detection report from the SMOKi monitoring system.`;
+                                      const mailtoLink = `mailto:enforcement@smoki.gov?subject=${subject}&body=${body}`;
+                                      
+                                      try {
+                                        window.open(mailtoLink, '_blank');
+                                        showToast(`Email client opened for smoke report ${detection.isReal ? '' : '(Demo)'}`, 'success');
+                                      } catch (error) {
+                                        window.location.href = mailtoLink;
+                                      }
+                                    }}
+                                    disabled={reportingSmoke === detection.id}
+                                    title="Report this smoke event"
+                                  >
+                                    {reportingSmoke === detection.id ? 'Reporting...' : 'Report'}
+                                  </button>
+                                ) : (
+                                  <span className="no-report">—</span>
+                                )}
+                              </div>
+                            </div>
+                          ));
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -1601,25 +1555,41 @@ function Dashboard() {
                     <div className="detection-summary-grid">
                       <div className="summary-card">
                         <div className="summary-number">
-                          {allDetections.length > 0 ? allDetections.filter(d => d.detection_type === 'Vehicle').length : 24}
+                          {(() => {
+                            const realVehicles = allDetections.length > 0 ? allDetections.filter(d => d.detection_type === 'Vehicle').length : 0;
+                            const dummyVehicles = 24; // Base dummy count
+                            return realVehicles + dummyVehicles;
+                          })()}
                         </div>
                         <div className="summary-label">Vehicles</div>
                       </div>
                       <div className="summary-card">
                         <div className="summary-number">
-                          {allDetections.length > 0 ? allDetections.filter(d => d.detection_type === 'Smoke').length : 8}
+                          {(() => {
+                            const realSmoke = allDetections.length > 0 ? allDetections.filter(d => d.detection_type === 'Smoke').length : 0;
+                            const dummySmoke = 8; // Base dummy count
+                            return realSmoke + dummySmoke;
+                          })()}
                         </div>
                         <div className="summary-label">Smoke Events</div>
                       </div>
                       <div className="summary-card">
                         <div className="summary-number">
-                          {allDetections.length > 0 ? allDetections.filter(d => d.detection_type === 'License Plate').length : 18}
+                          {(() => {
+                            const realPlates = allDetections.length > 0 ? allDetections.filter(d => d.detection_type === 'License').length : 0;
+                            const dummyPlates = 18; // Base dummy count
+                            return realPlates + dummyPlates;
+                          })()}
                         </div>
                         <div className="summary-label">Plates Read</div>
                       </div>
                       <div className="summary-card">
                         <div className="summary-number">
-                          {allDetections.length > 0 ? allDetections.length : 50}
+                          {(() => {
+                            const realTotal = allDetections.length > 0 ? allDetections.length : 0;
+                            const dummyTotal = 50; // Base dummy count
+                            return realTotal + dummyTotal;
+                          })()}
                         </div>
                         <div className="summary-label">Total Detections</div>
                       </div>
@@ -1634,51 +1604,7 @@ function Dashboard() {
                     </div>
                     <div className="ranking-list">
                       {(() => {
-                        // Use real data if available, otherwise show enhanced dummy data
-                        const hasRealData = vehicleRanking && vehicleRanking.length > 0;
-                        
-                        if (hasRealData) {
-                          return vehicleRanking.slice(0, 5).map((vehicle, index) => (
-                            <div key={vehicle.id} className="ranking-item">
-                              <div className="ranking-position">#{index + 1}</div>
-                              <div className="ranking-details">
-                                <div className="ranking-plate">{vehicle.license_plate}</div>
-                                <div className="ranking-info">
-                                  <span className="violations-count">{vehicle.violations} violations</span>
-                                  <span className="last-seen">{new Date(vehicle.last_detected).toLocaleTimeString()}</span>
-                                </div>
-                              </div>
-                              <div className="ranking-status">
-                                <div className={`status-indicator ${vehicle.status}`}></div>
-                                <span className={`status-text ${vehicle.status}`}>
-                                  {vehicle.status === 'critical' ? 'Critical' : 
-                                   vehicle.status === 'warning' ? 'Warning' : 
-                                   vehicle.status === 'caution' ? 'Caution' : 'Safe'}
-                                </span>
-                              </div>
-                              <div className="ranking-actions">
-                                <button 
-                                  className="report-btn"
-                                  onClick={() => {
-                                    const subject = `Emission Violation Report - ${vehicle.license_plate}`;
-                                    const body = `Vehicle License Plate: ${vehicle.license_plate}%0AViolations: ${vehicle.violations}%0AStatus: ${vehicle.status}%0ALast Seen: ${new Date(vehicle.last_detected).toLocaleString()}%0A%0AThis vehicle has been flagged for excessive emissions.`;
-                                    try {
-                                      window.open(`mailto:enforcement@smoki.gov?subject=${subject}&body=${body}`, '_blank');
-                                      showToast('Email client opened for violation report', 'success');
-                                    } catch (error) {
-                                      showToast('Unable to open email client. Please contact enforcement@smoki.gov manually.', 'error');
-                                    }
-                                  }}
-                                  title="Report to authorities"
-                                >
-                                  Report
-                                </button>
-                              </div>
-                            </div>
-                          ));
-                        }
-                        
-                        // Enhanced dummy ranking data
+                        // Always show dummy data as base
                         const dummyRanking = [
                           { 
                             id: 1, 
@@ -1727,8 +1653,24 @@ function Dashboard() {
                           }
                         ];
                         
-                        return dummyRanking.map((vehicle, index) => (
-                          <div key={vehicle.id} className="ranking-item">
+                        // Convert real vehicle ranking data and prepend it
+                        const hasRealData = vehicleRanking && vehicleRanking.length > 0;
+                        const realRankingFormatted = hasRealData ? vehicleRanking.slice(0, 2).map((vehicle, index) => ({
+                          id: `real_${vehicle.id}`,
+                          plate: vehicle.license_plate,
+                          violations: vehicle.violations + 20, // Add to base violations to show as higher priority
+                          status: 'critical', // Real data gets critical status
+                          lastSeen: new Date(vehicle.last_detected).toLocaleTimeString(),
+                          vehicleType: vehicle.vehicle_type || 'Vehicle',
+                          smokeLevel: vehicle.smoke_detected ? 'High' : 'Low',
+                          isReal: true
+                        })) : [];
+                        
+                        // Combine real data (first) with dummy data, limit to 5 total
+                        const combinedRanking = [...realRankingFormatted, ...dummyRanking].slice(0, 5);
+                        
+                        return combinedRanking.map((vehicle, index) => (
+                          <div key={vehicle.id} className={`ranking-item ${vehicle.isReal ? 'real-ranking' : 'dummy-ranking'}`}>
                             <div className="ranking-position">#{index + 1}</div>
                             <div className="ranking-details">
                               <div className="ranking-plate">{vehicle.plate}</div>
@@ -1754,12 +1696,14 @@ function Dashboard() {
                                 className="report-btn"
                                 onClick={() => {
                                   const subject = `Vehicle Emission Violation Report - ${vehicle.plate}`;
-                                  const body = `Vehicle Emission Violation Report%0A%0ALicense Plate: ${vehicle.plate}%0AVehicle Type: ${vehicle.vehicleType}%0ATotal Violations: ${vehicle.violations}%0AStatus: ${vehicle.status}%0ASmoke Level: ${vehicle.smokeLevel}%0ALast Detected: ${vehicle.lastSeen}%0A%0AThis vehicle has been flagged for excessive emissions and requires immediate attention.%0A%0APlease take appropriate enforcement action.`;
+                                  const body = vehicle.isReal ?
+                                    `Vehicle Emission Violation Report%0A%0ALicense Plate: ${vehicle.plate}%0AVehicle Type: ${vehicle.vehicleType}%0ATotal Violations: ${vehicle.violations}%0AStatus: ${vehicle.status}%0ASmoke Level: ${vehicle.smokeLevel}%0ALast Detected: ${vehicle.lastSeen}%0A%0AThis vehicle has been flagged for excessive emissions and requires immediate attention.%0A%0APlease take appropriate enforcement action.` :
+                                    `Vehicle Emission Violation Report%0A%0ALicense Plate: ${vehicle.plate}%0AVehicle Type: ${vehicle.vehicleType}%0ATotal Violations: ${vehicle.violations}%0AStatus: ${vehicle.status}%0ASmoke Level: ${vehicle.smokeLevel}%0ALast Detected: ${vehicle.lastSeen}%0A%0AThis is a demo vehicle emission report from the SMOKi monitoring system.`;
                                   const mailtoLink = `mailto:enforcement@smoki.gov?subject=${subject}&body=${body}`;
                                   
                                   try {
                                     window.open(mailtoLink, '_blank');
-                                    showToast('Email client opened for violation report', 'success');
+                                    showToast(`Email client opened for violation report ${vehicle.isReal ? '' : '(Demo)'}`, 'success');
                                   } catch (error) {
                                     window.location.href = mailtoLink;
                                   }
