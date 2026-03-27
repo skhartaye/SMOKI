@@ -100,6 +100,42 @@ chatgpt-sidebar {
   color: #a0a0a0;
 }
 
+/* Dark mode for summary cards */
+.dashboard.dark-mode .summary-card {
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+}
+
+.dashboard.dark-mode .summary-card:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+}
+
+.dashboard.dark-mode .summary-number {
+  color: #f1f5f9;
+}
+
+.dashboard.dark-mode .summary-label {
+  color: #94a3b8;
+}
+
+/* Dark mode card type colors */
+.dashboard.dark-mode .summary-card:nth-child(1) .summary-number {
+  color: #34d399;
+}
+
+.dashboard.dark-mode .summary-card:nth-child(2) .summary-number {
+  color: #f87171;
+}
+
+.dashboard.dark-mode .summary-card:nth-child(3) .summary-number {
+  color: #60a5fa;
+}
+
+.dashboard.dark-mode .summary-card:nth-child(4) .summary-number {
+  color: #a78bfa;
+}
+
 .dashboard.dark-mode .violator-item {
   background: linear-gradient(135deg, #242424 0%, #2a2a2a 100%);
 }
@@ -1210,9 +1246,40 @@ chatgpt-sidebar {
   border-radius: 12px;
   font-size: 12px;
   font-weight: 600;
-  text-transform: lowercase;
+  text-transform: none;
 }
 
+.status-good {
+  background: #4CAF50;
+  color: white;
+}
+
+.status-moderate {
+  background: #FFC107;
+  color: black;
+}
+
+.status-unhealthy-sensitive {
+  background: #FF9800;
+  color: white;
+}
+
+.status-unhealthy {
+  background: #F44336;
+  color: white;
+}
+
+.status-very-unhealthy {
+  background: #9C27B0;
+  color: white;
+}
+
+.status-hazardous {
+  background: #673AB7;
+  color: white;
+}
+
+/* Legacy status classes */
 .status-safe {
   background: #4caf50;
   color: white;
@@ -1234,7 +1301,7 @@ chatgpt-sidebar {
   border-radius: 12px;
   font-size: 12px;
   font-weight: 700;
-  color: white;
+  /* Color is set dynamically via JavaScript */
 }
 
 .no-records {
@@ -3485,6 +3552,9 @@ chatgpt-sidebar {
   overflow-y: auto;
   min-height: 0;
   flex: 0 1 auto;
+  width: 100%;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .dashboard-violators-column::-webkit-scrollbar {
@@ -3509,6 +3579,9 @@ chatgpt-sidebar {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .section-header-compact {
@@ -4033,13 +4106,14 @@ chatgpt-sidebar {
   background: white;
   border: 1px solid #ddd;
   border-radius: 4px;
-  overflow-x: auto;
+  overflow: auto;
   width: 100%;
+  max-height: 300px;
 }
 
 .detections-table-header {
   display: grid;
-  grid-template-columns: 120px 100px 140px 100px 160px;
+  grid-template-columns: 85px 85px 105px 85px 115px 100px;
   background: #f5f5f5;
   border-bottom: 1px solid #ddd;
   padding: 12px 16px;
@@ -4047,13 +4121,42 @@ chatgpt-sidebar {
   font-size: 12px;
   color: #666;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   min-width: 620px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 /* Custom scrollbar for detections table */
 .detections-table-container::-webkit-scrollbar {
-  height: 8px;
+  width: 6px;
+  height: 6px;
+}
+
+.detections-table-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.detections-table-container::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.detections-table-container::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+.detections-table-container::-webkit-scrollbar-corner {
+  background: #f1f1f1;
+}
+
+.detections-table-body {
+  max-height: 200px;
+  overflow-y: auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .detections-table-container::-webkit-scrollbar-track {
@@ -4071,18 +4174,18 @@ chatgpt-sidebar {
 }
 
 .detections-table-body {
-  max-height: 400px;
-  overflow-y: auto;
+  max-height: none;
+  overflow: visible;
   min-width: 620px;
 }
 
 .detection-row {
   display: grid;
-  grid-template-columns: 120px 100px 140px 100px 160px;
+  grid-template-columns: 85px 85px 105px 85px 115px 100px;
   padding: 12px 16px;
   border-bottom: 1px solid #eee;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   min-width: 620px;
 }
 
@@ -4124,8 +4227,49 @@ chatgpt-sidebar {
   text-align: center;
 }
 
-.detection-col.details {
-  justify-content: flex-start;
+.detection-col.report {
+  justify-content: center;
+  text-align: center;
+}
+
+/* No Report Indicator */
+.no-report {
+  color: #ccc;
+  font-size: 14px;
+  font-weight: 300;
+  user-select: none;
+}
+
+/* Report Smoke Button in Table */
+.detection-col .report-smoke-btn {
+  background: linear-gradient(135deg, #dc3545, #c82333);
+  color: white;
+  border: none;
+  padding: 5px 16px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(220, 53, 69, 0.3);
+  width: 70px;
+  text-align: center;
+  display: block;
+}
+
+.detection-col .report-smoke-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #c82333, #bd2130);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(220, 53, 69, 0.4);
+}
+
+.detection-col .report-smoke-btn:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+  opacity: 0.7;
+  transform: none;
+  box-shadow: none;
 }
 
 /* Detection Type Badges */
@@ -4259,34 +4403,92 @@ chatgpt-sidebar {
 .detection-summary-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  gap: 8px;
+  margin-top: 8px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .summary-card {
   background: white;
-  padding: 16px;
+  padding: 12px 8px;
   border-radius: 8px;
   text-align: center;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  transition: transform 0.2s;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  transition: all 0.2s ease;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  position: relative;
+  min-height: 65px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .summary-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .summary-number {
-  font-size: 24px;
+  font-size: 1.8em;
   font-weight: 700;
-  color: #2c3e50;
+  color: #1e293b;
   margin-bottom: 4px;
+  line-height: 1;
+  letter-spacing: -0.01em;
 }
 
 .summary-label {
-  font-size: 12px;
-  color: #6c757d;
+  font-size: 0.6em;
+  color: #475569;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
+  font-weight: 600;
+  line-height: 1.1;
+  word-break: break-word;
+  text-align: center;
+}
+
+/* Add some visual distinction to each card type */
+.summary-card:nth-child(1) .summary-number {
+  color: #059669;
+}
+
+.summary-card:nth-child(2) .summary-number {
+  color: #dc2626;
+}
+
+.summary-card:nth-child(3) .summary-number {
+  color: #2563eb;
+}
+
+.summary-card:nth-child(4) .summary-number {
+  color: #7c3aed;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .detection-summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  
+  .summary-card {
+    padding: 16px 12px;
+    min-height: 80px;
+  }
+  
+  .summary-number {
+    font-size: 2em;
+  }
+  
+  .summary-label {
+    font-size: 0.65em;
+  }
 }
 
 /* Mobile Responsive */
@@ -4325,4 +4527,345 @@ chatgpt-sidebar {
   justify-content: space-between;
   align-items: flex-start;
   width: 100%;
+}
+/* Vehicle Ranking Styles */
+.ranking-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* Custom scrollbar for ranking list */
+.ranking-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.ranking-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ranking-list::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.ranking-list::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+.ranking-item {
+  display: grid;
+  grid-template-columns: 50px 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 16px;
+  background: white;
+  border-radius: 10px;
+  border: 1px solid #e0e0e0;
+  transition: all 0.2s ease;
+  margin-bottom: 8px;
+}
+
+.ranking-item:hover {
+  background: #f8f9fa;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.ranking-position {
+  font-size: 20px;
+  font-weight: 800;
+  color: white;
+  text-align: center;
+  border-radius: 50%;
+  width: 35px;
+  height: 35px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Position-based colors */
+.ranking-item:nth-child(1) .ranking-position {
+  background: linear-gradient(135deg, #f44336, #d32f2f);
+  box-shadow: 0 2px 6px rgba(244, 67, 54, 0.3);
+}
+
+.ranking-item:nth-child(2) .ranking-position {
+  background: linear-gradient(135deg, #ff5722, #e64a19);
+  box-shadow: 0 2px 6px rgba(255, 87, 34, 0.3);
+}
+
+.ranking-item:nth-child(3) .ranking-position {
+  background: linear-gradient(135deg, #ff9800, #f57c00);
+  box-shadow: 0 2px 6px rgba(255, 152, 0, 0.3);
+}
+
+.ranking-item:nth-child(4) .ranking-position {
+  background: linear-gradient(135deg, #ffc107, #ff8f00);
+  box-shadow: 0 2px 6px rgba(255, 193, 7, 0.3);
+}
+
+.ranking-item:nth-child(5) .ranking-position {
+  background: linear-gradient(135deg, #4caf50, #388e3c);
+  box-shadow: 0 2px 6px rgba(76, 175, 80, 0.3);
+}
+
+.ranking-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ranking-plate {
+  font-size: 16px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 2px;
+}
+
+.ranking-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.violations-count {
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+}
+
+.vehicle-type {
+  font-size: 11px;
+  color: #888;
+}
+
+.last-seen {
+  font-size: 11px;
+  color: #999;
+}
+
+.ranking-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.status-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-bottom: 4px;
+}
+
+.status-indicator.critical {
+  background: #f44336;
+}
+
+.status-indicator.warning {
+  background: #ff9800;
+}
+
+.status-indicator.caution {
+  background: #ffc107;
+}
+
+.status-indicator.safe {
+  background: #4caf50;
+}
+
+.status-text {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-text.critical {
+  color: #f44336;
+}
+
+.status-text.warning {
+  color: #ff9800;
+}
+
+.status-text.caution {
+  color: #ffc107;
+}
+
+.status-text.safe {
+  color: #4caf50;
+}
+
+.smoke-indicator {
+  font-size: 9px;
+  color: #666;
+  margin-top: 2px;
+}
+
+.ranking-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ranking-details {
+  flex: 1;
+  margin-left: 12px;
+}
+
+.ranking-plate {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 2px;
+}
+
+.ranking-info {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: #666;
+}
+
+.violations-count {
+  font-weight: 500;
+}
+
+.last-seen {
+  opacity: 0.8;
+}
+
+.ranking-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 12px;
+}
+
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.status-indicator.critical {
+  background: #f44336;
+}
+
+.status-indicator.warning {
+  background: #ff9800;
+}
+
+.status-indicator.caution {
+  background: #ffc107;
+}
+
+.status-indicator.safe {
+  background: #4caf50;
+}
+
+.status-text {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-text.critical {
+  color: #f44336;
+}
+
+.status-text.warning {
+  color: #ff9800;
+}
+
+.status-text.caution {
+  color: #ffc107;
+}
+
+.status-text.safe {
+  color: #4caf50;
+}
+
+.ranking-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 80px;
+}
+
+.report-btn {
+  background: linear-gradient(135deg, #2196f3, #1976d2);
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(33, 150, 243, 0.3);
+  min-width: 65px;
+  text-align: center;
+}
+
+.report-btn:hover {
+  background: linear-gradient(135deg, #1976d2, #1565c0);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(33, 150, 243, 0.4);
+}
+
+/* Dark mode for ranking */
+.dashboard.dark-mode .ranking-item {
+  background: #2a2a2a;
+  border-left-color: #444;
+}
+
+.dashboard.dark-mode .ranking-item:hover {
+  background: #333;
+}
+
+.dashboard.dark-mode .ranking-plate {
+  color: #fff;
+}
+
+.dashboard.dark-mode .ranking-info {
+  color: #ccc;
+}
+
+.dashboard.dark-mode .ranking-position {
+  color: #aaa;
+}
+
+/* Mobile responsive for ranking */
+@media (max-width: 768px) {
+  .ranking-item {
+    padding: 10px;
+  }
+  
+  .ranking-position {
+    font-size: 16px;
+    min-width: 30px;
+  }
+  
+  .ranking-plate {
+    font-size: 13px;
+  }
+  
+  .ranking-info {
+    flex-direction: column;
+    gap: 2px;
+  }
+  
+  .report-btn {
+    padding: 4px 8px;
+    font-size: 10px;
+  }
 }

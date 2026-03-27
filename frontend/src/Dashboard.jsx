@@ -1,4 +1,5 @@
 import './styles/Dashboard.css';
+import './styles/AQI.css';
 import './styles/ActionButtons.css';
 import './styles/InfoPage.css';
 import { useNavigate } from 'react-router-dom';
@@ -17,6 +18,7 @@ import TutorialModal from './component/TutorialModal';
 import WebRTCViewer from './component/WebRTCViewer';
 import { useSensorStatus } from './context/SensorStatusContext';
 import { fetchWithFallback } from './utils/apiClient';
+import { calculateOverallAQI, getAQICategory, getPollutantDisplayName, getPollutantUnit } from './utils/aqiCalculator';
 
 const InfoIcon = () => (
   <svg height="16" strokeLinejoin="round" viewBox="0 0 16 16" width="16" style={{color: 'currentcolor'}}><path d="M14 8C14 11.3137 11.3137 14 8 14C4.68629 14 2 11.3137 2 8C2 4.68629 4.68629 2 8 2C11.3137 2 14 4.68629 14 8Z" fill="currentColor" fillOpacity="0.08"></path><path fillRule="evenodd" clipRule="evenodd" d="M8 6C8.55228 6 9 5.55228 9 5C9 4.44772 8.55228 4 8 4C7.44771 4 7 4.44772 7 5C7 5.55228 7.44771 6 8 6ZM7 7H6.25V8.5H7H7.24999V10.5V11.25H8.74999V10.5V8C8.74999 7.44772 8.30227 7 7.74999 7H7Z" fill="currentColor"></path></svg>
@@ -30,6 +32,7 @@ function Dashboard() {
   const [activePage, setActivePage] = useState("dashboard");
   const [sensorData, setSensorData] = useState(null);
   const [previousSensorData, setPreviousSensorData] = useState(null);
+  const [aqiData, setAqiData] = useState(null);
   const [records, setRecords] = useState([]);
   const [graphData, setGraphData] = useState([]);
   const [filterSensorTypes, setFilterSensorTypes] = useState({
@@ -66,7 +69,8 @@ function Dashboard() {
     co: true,
     pm25: true,
     pm10: true,
-    pressure: true
+    pressure: true,
+    aqi: true
   });
   const [appliedGraphSensorTypes, setAppliedGraphSensorTypes] = useState({
     temperature: true,
@@ -76,7 +80,8 @@ function Dashboard() {
     co: true,
     pm25: true,
     pm10: true,
-    pressure: true
+    pressure: true,
+    aqi: true
   });
   const [graphFilterDate, setGraphFilterDate] = useState("all");
   const [appliedGraphDate, setAppliedGraphDate] = useState("all");
@@ -181,6 +186,22 @@ function Dashboard() {
           setPreviousSensorData(prevData);
           return result.data;
         });
+        
+        // Calculate AQI if we have the required pollutants
+        if (result.data.nitrogen_dioxide !== null || result.data.carbon_monoxide !== null || 
+            result.data.pm25 !== null || result.data.pm10 !== null) {
+          const pollutants = {
+            no2: result.data.nitrogen_dioxide,
+            co: result.data.carbon_monoxide,
+            pm25: result.data.pm25,
+            pm10: result.data.pm10
+          };
+          const aqiResult = calculateOverallAQI(pollutants);
+          setAqiData(aqiResult);
+        } else {
+          setAqiData(null);
+        }
+        
         updateLastSensorTime(); // Update the last sensor update time
       }
     } catch (error) {
@@ -231,18 +252,30 @@ function Dashboard() {
       const result = await response.json();
       if (result.success) {
         // Format data for graphs (reverse to show oldest first)
-        const formatted = result.data.reverse().map(item => ({
-          time: new Date(item.timestamp).toLocaleTimeString(),
-          fullTimestamp: new Date(item.timestamp).toLocaleString(),
-          temperature: item.temperature || 0,
-          humidity: item.humidity || 0,
-          pressure: item.pressure || 0,
-          vocs: item.vocs || 0,
-          no2: item.nitrogen_dioxide || 0,
-          co: item.carbon_monoxide || 0,
-          pm25: item.pm25 || 0,
-          pm10: item.pm10 || 0
-        }));
+        const formatted = result.data.reverse().map(item => {
+          // Calculate AQI for each data point
+          const pollutants = {
+            no2: item.nitrogen_dioxide,
+            co: item.carbon_monoxide,
+            pm25: item.pm25,
+            pm10: item.pm10
+          };
+          const aqiResult = calculateOverallAQI(pollutants);
+          
+          return {
+            time: new Date(item.timestamp).toLocaleTimeString(),
+            fullTimestamp: new Date(item.timestamp).toLocaleString(),
+            temperature: item.temperature || 0,
+            humidity: item.humidity || 0,
+            pressure: item.pressure || 0,
+            vocs: item.vocs || 0,
+            no2: item.nitrogen_dioxide || 0,
+            co: item.carbon_monoxide || 0,
+            pm25: item.pm25 || 0,
+            pm10: item.pm10 || 0,
+            aqi: aqiResult.overallAQI || 0
+          };
+        });
         setGraphData(formatted);
         updateLastSensorTime(); // Update the last sensor update time
       }
@@ -904,124 +937,28 @@ function Dashboard() {
   };
 
   const calculateAQI = (record) => {
-    // AQI calculation based on US EPA standard
-    // Using the formula: Ip = [(IHI - ILO) / (BPHI - BPLO)] * (Cp - BPLO) + ILO
-    // Only uses: NO₂, CO, PM2.5, PM10
+    // AQI calculation based on Philippine DENR standards
+    // Using NO₂ (PPM), CO (PPM), PM2.5 (µg/m³), PM10 (µg/m³)
     
-    const pollutants = [];
-    
-    // PM2.5 breakpoints (µg/m³)
-    const pm25Breakpoints = [
-      { cLow: 0, cHigh: 12.0, iLow: 0, iHigh: 50 },
-      { cLow: 12.1, cHigh: 35.4, iLow: 51, iHigh: 100 },
-      { cLow: 35.5, cHigh: 55.4, iLow: 101, iHigh: 150 },
-      { cLow: 55.5, cHigh: 150.4, iLow: 151, iHigh: 200 },
-      { cLow: 150.5, cHigh: 250.4, iLow: 201, iHigh: 300 },
-      { cLow: 250.5, cHigh: 500.4, iLow: 301, iHigh: 500 }
-    ];
-    
-    // PM10 breakpoints (µg/m³)
-    const pm10Breakpoints = [
-      { cLow: 0, cHigh: 54, iLow: 0, iHigh: 50 },
-      { cLow: 55, cHigh: 154, iLow: 51, iHigh: 100 },
-      { cLow: 155, cHigh: 254, iLow: 101, iHigh: 150 },
-      { cLow: 255, cHigh: 354, iLow: 151, iHigh: 200 },
-      { cLow: 355, cHigh: 424, iLow: 201, iHigh: 300 },
-      { cLow: 425, cHigh: 604, iLow: 301, iHigh: 500 }
-    ];
-    
-    // CO breakpoints (ppm)
-    const coBreakpoints = [
-      { cLow: 0, cHigh: 4.4, iLow: 0, iHigh: 50 },
-      { cLow: 4.5, cHigh: 9.4, iLow: 51, iHigh: 100 },
-      { cLow: 9.5, cHigh: 12.4, iLow: 101, iHigh: 150 },
-      { cLow: 12.5, cHigh: 15.4, iLow: 151, iHigh: 200 },
-      { cLow: 15.5, cHigh: 30.4, iLow: 201, iHigh: 300 },
-      { cLow: 30.5, cHigh: 50.4, iLow: 301, iHigh: 500 }
-    ];
-    
-    // NO2 breakpoints (ppb, convert from ppm)
-    const no2Breakpoints = [
-      { cLow: 0, cHigh: 53, iLow: 0, iHigh: 50 },
-      { cLow: 54, cHigh: 100, iLow: 51, iHigh: 100 },
-      { cLow: 101, cHigh: 360, iLow: 101, iHigh: 150 },
-      { cLow: 361, cHigh: 649, iLow: 151, iHigh: 200 },
-      { cLow: 650, cHigh: 1249, iLow: 201, iHigh: 300 },
-      { cLow: 1250, cHigh: 2049, iLow: 301, iHigh: 500 }
-    ];
-    
-    const calculatePollutantAQI = (concentration, breakpoints) => {
-      if (!concentration || concentration < 0) return null;
-      
-      for (let bp of breakpoints) {
-        if (concentration >= bp.cLow && concentration <= bp.cHigh) {
-          const aqi = ((bp.iHigh - bp.iLow) / (bp.cHigh - bp.cLow)) * (concentration - bp.cLow) + bp.iLow;
-          return Math.round(aqi);
-        }
-      }
-      
-      // If concentration exceeds all breakpoints, return hazardous
-      return 500;
+    const pollutants = {
+      no2: record.nitrogen_dioxide,
+      co: record.carbon_monoxide,
+      pm25: record.pm25,
+      pm10: record.pm10
     };
     
-    // Calculate AQI for each pollutant (only NO₂, CO, PM2.5, PM10)
-    if (record.pm25) {
-      const aqi = calculatePollutantAQI(record.pm25, pm25Breakpoints);
-      if (aqi !== null) pollutants.push({ name: 'PM2.5', aqi });
-    }
+    // Use our Philippine AQI calculator
+    const aqiResult = calculateOverallAQI(pollutants);
     
-    if (record.pm10) {
-      const aqi = calculatePollutantAQI(record.pm10, pm10Breakpoints);
-      if (aqi !== null) pollutants.push({ name: 'PM10', aqi });
-    }
-    
-    if (record.carbon_monoxide) {
-      const aqi = calculatePollutantAQI(record.carbon_monoxide, coBreakpoints);
-      if (aqi !== null) pollutants.push({ name: 'CO', aqi });
-    }
-    
-    if (record.nitrogen_dioxide) {
-      // Convert ppm to ppb (multiply by 1000)
-      const no2Ppb = record.nitrogen_dioxide * 1000;
-      const aqi = calculatePollutantAQI(no2Ppb, no2Breakpoints);
-      if (aqi !== null) pollutants.push({ name: 'NO2', aqi });
-    }
-    
-    // Return the highest AQI (worst pollutant)
-    if (pollutants.length === 0) {
-      return { value: 0, category: 'Good', color: '#4caf50', pollutant: 'N/A' };
-    }
-    
-    const maxPollutant = pollutants.reduce((max, p) => p.aqi > max.aqi ? p : max);
-    const aqiValue = maxPollutant.aqi;
-    
-    // Determine category and color based on AQI value
-    let category, color;
-    if (aqiValue <= 50) {
-      category = 'Good';
-      color = '#4caf50'; // Green
-    } else if (aqiValue <= 100) {
-      category = 'Moderate';
-      color = '#ffc107'; // Yellow
-    } else if (aqiValue <= 150) {
-      category = 'Unhealthy for Sensitive';
-      color = '#ff9800'; // Orange
-    } else if (aqiValue <= 200) {
-      category = 'Unhealthy';
-      color = '#f44336'; // Red
-    } else if (aqiValue <= 300) {
-      category = 'Very Unhealthy';
-      color = '#9c27b0'; // Purple
-    } else {
-      category = 'Hazardous';
-      color = '#7b1fa2'; // Maroon
+    if (aqiResult.overallAQI === 0) {
+      return { value: 0, category: 'No Data', color: '#9e9e9e', pollutant: 'N/A' };
     }
     
     return { 
-      value: aqiValue, 
-      category, 
-      color,
-      pollutant: maxPollutant.name
+      value: aqiResult.overallAQI, 
+      category: aqiResult.category.level,
+      color: aqiResult.category.color,
+      pollutant: aqiResult.dominantPollutant ? getPollutantDisplayName(aqiResult.dominantPollutant) : 'N/A'
     };
   };
 
@@ -1163,17 +1100,16 @@ function Dashboard() {
         // Build CSV rows
         const rows = allRecords.map(record => {
           const aqi = calculateAQI(record);
-          const isDanger = 
-            (record.temperature > 35) || 
-            (record.carbon_monoxide > 9) || 
-            (record.pm25 > 35) || 
-            (record.pm10 > 50);
-          const isWarning = 
-            (record.temperature > 30 && record.temperature <= 35) || 
-            (record.carbon_monoxide > 5 && record.carbon_monoxide <= 9) || 
-            (record.pm25 > 25 && record.pm25 <= 35) || 
-            (record.pm10 > 35 && record.pm10 <= 50);
-          const status = isDanger ? 'danger' : isWarning ? 'warning' : 'safe';
+          
+          // Determine status based on AQI category, not individual thresholds
+          let status = 'safe';
+          if (aqi.category === 'Emergency' || aqi.category === 'Acutely Unhealthy') {
+            status = 'danger';
+          } else if (aqi.category === 'Very Unhealthy' || aqi.category === 'Unhealthy for Sensitive') {
+            status = 'warning';
+          } else {
+            status = 'safe'; // Good or Fair
+          }
 
           return [
             formatTimestamp(record.timestamp),
@@ -1508,6 +1444,7 @@ function Dashboard() {
                         <div className="detection-col object">Object</div>
                         <div className="detection-col confidence">Confidence</div>
                         <div className="detection-col details">Details</div>
+                        <div className="detection-col report">Report</div>
                       </div>
                       <div className="detections-table-body">
                         {allDetections.length > 0 ? (
@@ -1537,36 +1474,125 @@ function Dashboard() {
                                       <span className={`smoke-level ${(detection.smoke_level || 'none').toLowerCase()}`}>
                                         {detection.smoke_level || 'None'} Level
                                       </span>
-                                      <button 
-                                        className="report-smoke-btn"
-                                        onClick={() => reportSmokeEvent(detection)}
-                                        disabled={reportingSmoke === detection.id}
-                                        title="Report this smoke event"
-                                      >
-                                        {reportingSmoke === detection.id ? '⏳' : '📧'} Report
-                                      </button>
                                     </div>
                                   )}
                                   {detection.detection_type === 'License Plate' && (
                                     <span className="plate-detected">Plate Detected</span>
                                   )}
                                 </div>
+                                <div className="detection-col report">
+                                  {detection.detection_type === 'Smoke' ? (
+                                    <button 
+                                      className="report-smoke-btn"
+                                      onClick={() => {
+                                        const subject = `Smoke Detection Report - ${new Date(detection.timestamp).toLocaleString()}`;
+                                        const body = `Smoke Detection Alert%0A%0ATimestamp: ${new Date(detection.timestamp).toLocaleString()}%0ALocation: ${detection.location || 'Main Camera'}%0ASmoke Level: ${detection.smoke_level || 'Unknown'}%0AConfidence: ${detection.confidence}%25%0AObject Type: ${detection.class_name}%0A%0AThis is an automated smoke detection report from the SMOKi monitoring system.`;
+                                        const mailtoLink = `mailto:enforcement@smoki.gov?subject=${subject}&body=${body}`;
+                                        
+                                        try {
+                                          window.open(mailtoLink, '_blank');
+                                          showToast('Email client opened for smoke report', 'success');
+                                        } catch (error) {
+                                          // Fallback: try to use window.location
+                                          window.location.href = mailtoLink;
+                                        }
+                                      }}
+                                      disabled={reportingSmoke === detection.id}
+                                      title="Report this smoke event"
+                                    >
+                                      {reportingSmoke === detection.id ? 'Reporting...' : 'Report'}
+                                    </button>
+                                  ) : (
+                                    <span className="no-report">—</span>
+                                  )}
+                                </div>
                               </div>
                             ))}
                           </>
                         ) : (
-                          <div className="no-detections">
-                            <div>No detections available</div>
-                            <div style={{ fontSize: '12px', marginTop: '5px', opacity: 0.7 }}>
-                              Detections will appear here when the RPi camera system is active and detecting objects
-                            </div>
-                          </div>
+                          <>
+                            {/* Dummy data when no real detections */}
+                            {(() => {
+                              const dummyDetections = [
+                                { id: 'dummy-1', time: '14:32:15', type: 'Vehicle', object: 'passenger', confidence: '92.3', plate: 'ABC-1234' },
+                                { id: 'dummy-2', time: '14:31:58', type: 'Smoke', object: 'smoke_black', confidence: '87.6', level: 'High' },
+                                { id: 'dummy-3', time: '14:31:42', type: 'Vehicle', object: 'puv', confidence: '89.1', plate: 'PUV-5678' },
+                                { id: 'dummy-4', time: '14:31:28', type: 'License Plate', object: 'license_plate', confidence: '94.7', plate: 'DEF-9012' },
+                                { id: 'dummy-5', time: '14:31:15', type: 'Vehicle', object: 'two_wheel', confidence: '85.4', plate: 'MC-3456' },
+                                { id: 'dummy-6', time: '14:30:59', type: 'Smoke', object: 'smoke_white', confidence: '76.2', level: 'Medium' },
+                                { id: 'dummy-7', time: '14:30:44', type: 'Vehicle', object: 'services', confidence: '91.8', plate: 'SVC-7890' },
+                                { id: 'dummy-8', time: '14:30:31', type: 'Vehicle', object: 'passenger', confidence: '88.9', plate: 'XYZ-2468' },
+                                { id: 'dummy-9', time: '14:30:18', type: 'Smoke', object: 'smoke_black', confidence: '91.2', level: 'High' },
+                                { id: 'dummy-10', time: '14:30:05', type: 'Vehicle', object: 'puv', confidence: '86.7', plate: 'PUV-9999' },
+                                { id: 'dummy-11', time: '14:29:52', type: 'License Plate', object: 'license_plate', confidence: '93.1', plate: 'GHI-5555' },
+                                { id: 'dummy-12', time: '14:29:39', type: 'Vehicle', object: 'services', confidence: '88.4', plate: 'SVC-1111' }
+                              ];
+                              
+                              return dummyDetections.map((detection) => (
+                                <div key={detection.id} className="detection-row">
+                                  <div className="detection-col timestamp">
+                                    {detection.time}
+                                  </div>
+                                  <div className="detection-col type">
+                                    <span className={`detection-type-badge ${detection.type.toLowerCase().replace(' ', '-')}`}>
+                                      {detection.type}
+                                    </span>
+                                  </div>
+                                  <div className="detection-col object">
+                                    {detection.object}
+                                  </div>
+                                  <div className="detection-col confidence">
+                                    {detection.confidence}%
+                                  </div>
+                                  <div className="detection-col details">
+                                    {detection.type === 'Vehicle' && detection.plate && (
+                                      <span className="license-plate">{detection.plate}</span>
+                                    )}
+                                    {detection.type === 'Smoke' && (
+                                      <div className="smoke-details">
+                                        <span className={`smoke-level ${detection.level.toLowerCase()}`}>
+                                          {detection.level} Level
+                                        </span>
+                                      </div>
+                                    )}
+                                    {detection.type === 'License Plate' && (
+                                      <span className="plate-detected">Plate Detected</span>
+                                    )}
+                                  </div>
+                                  <div className="detection-col report">
+                                    {detection.type === 'Smoke' ? (
+                                      <button 
+                                        className="report-smoke-btn"
+                                        onClick={() => {
+                                          const subject = `Smoke Detection Report - ${detection.time}`;
+                                          const body = `Smoke Detection Alert%0A%0ATimestamp: ${detection.time}%0ASmoke Level: ${detection.level}%0AConfidence: ${detection.confidence}%25%0AObject Type: ${detection.object}%0A%0AThis is a demo smoke detection report from the SMOKi monitoring system.`;
+                                          const mailtoLink = `mailto:enforcement@smoki.gov?subject=${subject}&body=${body}`;
+                                          
+                                          try {
+                                            window.open(mailtoLink, '_blank');
+                                            showToast('Email client opened for smoke report (Demo)', 'success');
+                                          } catch (error) {
+                                            window.location.href = mailtoLink;
+                                          }
+                                        }}
+                                        title="Report this smoke event"
+                                      >
+                                        Report
+                                      </button>
+                                    ) : (
+                                      <span className="no-report">—</span>
+                                    )}
+                                  </div>
+                                </div>
+                              ));
+                            })()}
+                          </>
                         )}
                       </div>
                     </div>
                   </div>
 
-                  {/* Vehicle Summary Section */}
+                  {/* Detection Summary Section */}
                   <div className="dashboard-section-compact">
                     <div className="section-header-compact">
                       <h2>Detection Summary</h2>
@@ -1575,28 +1601,177 @@ function Dashboard() {
                     <div className="detection-summary-grid">
                       <div className="summary-card">
                         <div className="summary-number">
-                          {allDetections.filter(d => d.detection_type === 'Vehicle').length}
+                          {allDetections.length > 0 ? allDetections.filter(d => d.detection_type === 'Vehicle').length : 24}
                         </div>
                         <div className="summary-label">Vehicles</div>
                       </div>
                       <div className="summary-card">
                         <div className="summary-number">
-                          {allDetections.filter(d => d.detection_type === 'Smoke').length}
+                          {allDetections.length > 0 ? allDetections.filter(d => d.detection_type === 'Smoke').length : 8}
                         </div>
                         <div className="summary-label">Smoke Events</div>
                       </div>
                       <div className="summary-card">
                         <div className="summary-number">
-                          {allDetections.filter(d => d.detection_type === 'License Plate').length}
+                          {allDetections.length > 0 ? allDetections.filter(d => d.detection_type === 'License Plate').length : 18}
                         </div>
                         <div className="summary-label">Plates Read</div>
                       </div>
                       <div className="summary-card">
                         <div className="summary-number">
-                          {allDetections.length}
+                          {allDetections.length > 0 ? allDetections.length : 50}
                         </div>
                         <div className="summary-label">Total Detections</div>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Vehicle Ranking Section */}
+                  <div className="dashboard-section-compact">
+                    <div className="section-header-compact">
+                      <h2>Vehicle Ranking</h2>
+                      <p className="section-subtitle">Top violators by emissions</p>
+                    </div>
+                    <div className="ranking-list">
+                      {(() => {
+                        // Use real data if available, otherwise show enhanced dummy data
+                        const hasRealData = vehicleRanking && vehicleRanking.length > 0;
+                        
+                        if (hasRealData) {
+                          return vehicleRanking.slice(0, 5).map((vehicle, index) => (
+                            <div key={vehicle.id} className="ranking-item">
+                              <div className="ranking-position">#{index + 1}</div>
+                              <div className="ranking-details">
+                                <div className="ranking-plate">{vehicle.license_plate}</div>
+                                <div className="ranking-info">
+                                  <span className="violations-count">{vehicle.violations} violations</span>
+                                  <span className="last-seen">{new Date(vehicle.last_detected).toLocaleTimeString()}</span>
+                                </div>
+                              </div>
+                              <div className="ranking-status">
+                                <div className={`status-indicator ${vehicle.status}`}></div>
+                                <span className={`status-text ${vehicle.status}`}>
+                                  {vehicle.status === 'critical' ? 'Critical' : 
+                                   vehicle.status === 'warning' ? 'Warning' : 
+                                   vehicle.status === 'caution' ? 'Caution' : 'Safe'}
+                                </span>
+                              </div>
+                              <div className="ranking-actions">
+                                <button 
+                                  className="report-btn"
+                                  onClick={() => {
+                                    const subject = `Emission Violation Report - ${vehicle.license_plate}`;
+                                    const body = `Vehicle License Plate: ${vehicle.license_plate}%0AViolations: ${vehicle.violations}%0AStatus: ${vehicle.status}%0ALast Seen: ${new Date(vehicle.last_detected).toLocaleString()}%0A%0AThis vehicle has been flagged for excessive emissions.`;
+                                    try {
+                                      window.open(`mailto:enforcement@smoki.gov?subject=${subject}&body=${body}`, '_blank');
+                                      showToast('Email client opened for violation report', 'success');
+                                    } catch (error) {
+                                      showToast('Unable to open email client. Please contact enforcement@smoki.gov manually.', 'error');
+                                    }
+                                  }}
+                                  title="Report to authorities"
+                                >
+                                  Report
+                                </button>
+                              </div>
+                            </div>
+                          ));
+                        }
+                        
+                        // Enhanced dummy ranking data
+                        const dummyRanking = [
+                          { 
+                            id: 1, 
+                            plate: 'ABC-1234', 
+                            violations: 18, 
+                            status: 'critical', 
+                            lastSeen: '2 min ago', 
+                            vehicleType: 'Passenger Car',
+                            smokeLevel: 'High'
+                          },
+                          { 
+                            id: 2, 
+                            plate: 'PUV-5678', 
+                            violations: 14, 
+                            status: 'critical', 
+                            lastSeen: '5 min ago', 
+                            vehicleType: 'Public Utility Vehicle',
+                            smokeLevel: 'High'
+                          },
+                          { 
+                            id: 3, 
+                            plate: 'XYZ-9012', 
+                            violations: 11, 
+                            status: 'warning', 
+                            lastSeen: '8 min ago', 
+                            vehicleType: 'Passenger Car',
+                            smokeLevel: 'Medium'
+                          },
+                          { 
+                            id: 4, 
+                            plate: 'SVC-3456', 
+                            violations: 7, 
+                            status: 'warning', 
+                            lastSeen: '12 min ago', 
+                            vehicleType: 'Service Vehicle',
+                            smokeLevel: 'Medium'
+                          },
+                          { 
+                            id: 5, 
+                            plate: 'MC-7890', 
+                            violations: 4, 
+                            status: 'caution', 
+                            lastSeen: '15 min ago', 
+                            vehicleType: 'Motorcycle',
+                            smokeLevel: 'Low'
+                          }
+                        ];
+                        
+                        return dummyRanking.map((vehicle, index) => (
+                          <div key={vehicle.id} className="ranking-item">
+                            <div className="ranking-position">#{index + 1}</div>
+                            <div className="ranking-details">
+                              <div className="ranking-plate">{vehicle.plate}</div>
+                              <div className="ranking-info">
+                                <span className="violations-count">{vehicle.violations} violations</span>
+                                <span className="vehicle-type">{vehicle.vehicleType}</span>
+                                <span className="last-seen">{vehicle.lastSeen}</span>
+                              </div>
+                            </div>
+                            <div className="ranking-status">
+                              <div className={`status-indicator ${vehicle.status}`}></div>
+                              <span className={`status-text ${vehicle.status}`}>
+                                {vehicle.status === 'critical' ? 'Critical' : 
+                                 vehicle.status === 'warning' ? 'Warning' : 
+                                 vehicle.status === 'caution' ? 'Caution' : 'Safe'}
+                              </span>
+                              <div className={`smoke-indicator ${vehicle.smokeLevel.toLowerCase()}`}>
+                                Smoke: {vehicle.smokeLevel}
+                              </div>
+                            </div>
+                            <div className="ranking-actions">
+                              <button 
+                                className="report-btn"
+                                onClick={() => {
+                                  const subject = `Vehicle Emission Violation Report - ${vehicle.plate}`;
+                                  const body = `Vehicle Emission Violation Report%0A%0ALicense Plate: ${vehicle.plate}%0AVehicle Type: ${vehicle.vehicleType}%0ATotal Violations: ${vehicle.violations}%0AStatus: ${vehicle.status}%0ASmoke Level: ${vehicle.smokeLevel}%0ALast Detected: ${vehicle.lastSeen}%0A%0AThis vehicle has been flagged for excessive emissions and requires immediate attention.%0A%0APlease take appropriate enforcement action.`;
+                                  const mailtoLink = `mailto:enforcement@smoki.gov?subject=${subject}&body=${body}`;
+                                  
+                                  try {
+                                    window.open(mailtoLink, '_blank');
+                                    showToast('Email client opened for violation report', 'success');
+                                  } catch (error) {
+                                    window.location.href = mailtoLink;
+                                  }
+                                }}
+                                title="Report to authorities"
+                              >
+                                Report
+                              </button>
+                            </div>
+                          </div>
+                        ));
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -1616,6 +1791,43 @@ function Dashboard() {
                   </div>
                   
                   <div className="sensors-cards-column">
+                    {/* AQI Card */}
+                    {aqiData && (
+                      <div className="aqi-card-compact">
+                        <div className="aqi-card-header">
+                          <div className="aqi-icon-small">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                              <polyline points="14,2 14,8 20,8"/>
+                              <line x1="16" y1="13" x2="8" y2="13"/>
+                              <line x1="16" y1="17" x2="8" y2="17"/>
+                              <polyline points="10,9 9,9 8,9"/>
+                            </svg>
+                          </div>
+                          <h3>Air Quality Index</h3>
+                        </div>
+                        <div className="aqi-value-compact" style={{
+                          backgroundColor: aqiData.category.color,
+                          color: aqiData.category.textColor
+                        }}>
+                          {aqiData.overallAQI}
+                        </div>
+                        <div className="aqi-category-compact" style={{
+                          color: aqiData.category.color
+                        }}>
+                          {aqiData.category.level}
+                        </div>
+                        <div className="aqi-description-compact">
+                          {aqiData.category.description}
+                        </div>
+                        {aqiData.dominantPollutant && (
+                          <div className="aqi-dominant-compact">
+                            Primary: {getPollutantDisplayName(aqiData.dominantPollutant)}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
                     <div className="sensor-card-compact" onClick={() => setSelectedSensor(true)}>
                       <div className="sensor-card-compact-header">
                         <div className="sensor-icon-small"><Thermometer size={24} /></div>
@@ -2145,21 +2357,24 @@ function Dashboard() {
                         </thead>
                         <tbody>
                           {filteredRecords.map((record, index) => {
-                          // Determine status based on sensor values
-                          const isDanger = 
-                            (record.temperature > 35) || 
-                            (record.carbon_monoxide > 9) || 
-                            (record.pm25 > 35) || 
-                            (record.pm10 > 50);
-                          
-                          const isWarning = 
-                            (record.temperature > 30 && record.temperature <= 35) || 
-                            (record.carbon_monoxide > 5 && record.carbon_monoxide <= 9) || 
-                            (record.pm25 > 25 && record.pm25 <= 35) || 
-                            (record.pm10 > 35 && record.pm10 <= 50);
-                          
-                          const status = isDanger ? 'danger' : isWarning ? 'warning' : 'safe';
+                          // Calculate AQI first
                           const aqi = calculateAQI(record);
+                          
+                          // Determine status based on standard EPA AQI ranges
+                          let status = 'good';
+                          if (aqi.value >= 301) {
+                            status = 'hazardous';  // Hazardous
+                          } else if (aqi.value >= 201) {
+                            status = 'very-unhealthy';  // Very Unhealthy
+                          } else if (aqi.value >= 151) {
+                            status = 'unhealthy'; // Unhealthy
+                          } else if (aqi.value >= 101) {
+                            status = 'unhealthy-sensitive'; // Unhealthy for Sensitive Groups
+                          } else if (aqi.value >= 51) {
+                            status = 'moderate'; // Moderate
+                          } else {
+                            status = 'good';    // Good (0-50)
+                          }
                           
                           return (
                             <tr key={record.id}>
@@ -2173,12 +2388,19 @@ function Dashboard() {
                               {appliedSensorTypes.pm25 && <td>{record.pm25?.toFixed(1) || 'N/A'}</td>}
                               {appliedSensorTypes.pm10 && <td>{record.pm10?.toFixed(1) || 'N/A'}</td>}
                               <td>
-                                <span className="aqi-badge" style={{backgroundColor: aqi.color}}>
+                                <span className="aqi-badge" style={{backgroundColor: aqi.color, color: aqi.textColor}}>
                                   {aqi.value}
                                 </span>
                               </td>
                               <td>
-                                <span className={`status-badge status-${status}`}>{status}</span>
+                                <span className={`status-badge status-${status}`}>
+                                  {status === 'good' ? 'Good' : 
+                                   status === 'moderate' ? 'Moderate' :
+                                   status === 'unhealthy-sensitive' ? 'Unhealthy for Sensitive' :
+                                   status === 'unhealthy' ? 'Unhealthy' :
+                                   status === 'very-unhealthy' ? 'Very Unhealthy' :
+                                   status === 'hazardous' ? 'Hazardous' : status}
+                                </span>
                               </td>
                               {userRole === 'superadmin' && (
                                 <td>

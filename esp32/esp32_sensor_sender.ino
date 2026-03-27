@@ -21,7 +21,7 @@
 // ============ CONFIGURATION ============
 const char* ssid = "SMOKi";
 const char* password = "smoki1234";
-const char* api_url = "https://smoki-backend.onrender.com/api/sensors/data";
+const char* api_url = "https://smoki-backend-rpi.onrender.com/api/sensors/data";
 const char* device_id = "esp32_living_room";
 
 // BME680 SPI

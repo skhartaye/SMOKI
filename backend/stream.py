@@ -1,5 +1,5 @@
 """
-Camera streaming module - serves HLS stream
+Camera streaming module - serves frame-based stream
 """
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
@@ -370,46 +370,7 @@ async def receive_plate_crop(plate_crop: UploadFile = File(...), metadata: str =
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ============ HLS PROXY ENDPOINTS ============
-
-import requests
-
-@router.get("/hls-proxy")
-def hls_proxy():
-    """Proxy HLS stream from RPi over HTTPS"""
-    # Check if running on Render (cloud) - can't access local RPi
-    if os.getenv('RENDER'):
-        raise HTTPException(
-            status_code=503, 
-            detail="HLS proxy not available in cloud deployment - RPi not accessible"
-        )
-    
-    rpi_ip = os.getenv('RPI_IP', '192.168.100.199')
-    hls_url = f"http://{rpi_ip}:8000/stream.m3u8"
-    
-    try:
-        print(f"[HLS PROXY] Fetching from {hls_url}")
-        response = requests.get(hls_url, timeout=5)
-        response.raise_for_status()
-        print(f"[HLS PROXY] Success: {len(response.content)} bytes")
-        
-        return StreamingResponse(
-            iter([response.content]),
-            media_type="application/vnd.apple.mpegurl",
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Cache-Control": "no-cache, no-store, must-revalidate"
-            }
-        )
-    except requests.exceptions.Timeout:
-        print(f"[HLS PROXY] Timeout connecting to {hls_url}")
-        raise HTTPException(status_code=504, detail="RPi stream timeout")
-    except requests.exceptions.ConnectionError as e:
-        print(f"[HLS PROXY] Connection error: {e}")
-        raise HTTPException(status_code=503, detail="Cannot reach RPi stream")
-    except Exception as e:
-        print(f"[HLS PROXY] Error: {e}")
-        raise HTTPException(status_code=503, detail=f"Failed to fetch HLS stream: {str(e)}")
+# ============ DEBUG ENDPOINTS ============
 
 @router.get("/debug")
 async def debug_stream():

@@ -157,7 +157,7 @@ CREATE INDEX IF NOT EXISTS idx_image_metadata_camera_id ON image_metadata(camera
 ### 4.1 Get Backend URL
 
 From Render dashboard, copy your backend service URL:
-- Format: `https://smoki-backend.onrender.com`
+- Format: `https://smoki-backend-rpi.onrender.com`
 
 ### 4.2 Update RPi .env File
 

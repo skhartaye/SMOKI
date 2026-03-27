@@ -1,0 +1,102 @@
+/* AQI Card Styles */
+.aqi-card-compact {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.aqi-card-compact:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
+.aqi-card-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.aqi-icon-small {
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12px;
+}
+
+.aqi-card-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.aqi-value-compact {
+  font-size: 32px;
+  font-weight: 700;
+  text-align: center;
+  padding: 8px 16px;
+  border-radius: 8px;
+  margin: 8px 0;
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.aqi-category-compact {
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.aqi-description-compact {
+  font-size: 12px;
+  text-align: center;
+  opacity: 0.9;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.aqi-dominant-compact {
+  font-size: 11px;
+  text-align: center;
+  opacity: 0.8;
+  font-style: italic;
+}
+
+/* AQI Badge in Records Table */
+.aqi-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 12px;
+  min-width: 40px;
+  text-align: center;
+  /* Color is set dynamically via JavaScript */
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .aqi-card-compact {
+    padding: 12px;
+  }
+  
+  .aqi-value-compact {
+    font-size: 28px;
+    min-height: 45px;
+  }
+  
+  .aqi-card-header h3 {
+    font-size: 14px;
+  }
+}
