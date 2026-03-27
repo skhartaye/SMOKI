@@ -195,16 +195,37 @@ async def receive_frame(frame: UploadFile = File(...), metadata: str = Form(None
         if metadata:
             try:
                 meta_data = json.loads(metadata)
-                detections_count = meta_data.get('summary', {}).get('total_detections', 0)
-                smoke_count = meta_data.get('summary', {}).get('smoke_detections', 0)
-                vehicle_count = meta_data.get('summary', {}).get('vehicle_detections', 0)
+                
+                # Handle both old and new metadata formats
+                # New format: nested under 'summary'
+                summary = meta_data.get('summary', {})
+                detections_count = summary.get('total_detections', 0)
+                smoke_count = summary.get('smoke_detections', 0)
+                vehicle_count = summary.get('vehicle_detections', 0)
+                
+                # Old format: direct keys (current RPi format)
+                if detections_count == 0:
+                    smoke_count = meta_data.get('smoke_count', 0)
+                    vehicle_count = meta_data.get('vehicle_count', 0)
+                    plate_count = meta_data.get('plate_count', 0)
+                    detections_count = smoke_count + vehicle_count + plate_count
+                
                 print(f"[FRAME] Metadata: {meta_data.get('camera_id', 'unknown')} - {detections_count} total, {smoke_count} smoke, {vehicle_count} vehicles")
+                
+                # Log the actual detections array if present
+                detections = meta_data.get('detections', [])
+                if detections:
+                    print(f"[FRAME] Detections array: {len(detections)} objects")
+                    for i, det in enumerate(detections[:3]):  # Log first 3
+                        print(f"  {i+1}. {det.get('class', 'unknown')} conf={det.get('conf', 0):.2f}")
                 
                 # Process detections and save to database
                 await process_detections(frame_data, meta_data)
                 
             except Exception as e:
                 print(f"[FRAME] Metadata parse error: {e}")
+                import traceback
+                traceback.print_exc()
         else:
             print(f"[FRAME] No metadata provided")
         
