@@ -1,10 +1,10 @@
 /**
  * API client with fallback support
- * Tries primary API URL first, then falls back to alternative URL
+ * Tries primary API URL first, then falls back to alternative URL (dev only)
  */
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://smoki-backend-rpi.onrender.com';
-const API_URL_FALLBACK = import.meta.env.VITE_API_URL_FALLBACK || 'http://192.168.1.35:8000';
+const API_URL_FALLBACK = import.meta.env.VITE_API_URL_FALLBACK || '';
 
 let currentApiUrl = API_URL;
 
@@ -33,8 +33,8 @@ export const fetchWithFallback = async (endpoint, options = {}) => {
       return response;
     }
     
-    // If not ok and we haven't tried fallback yet, try it
-    if (currentApiUrl !== API_URL_FALLBACK) {
+    // If not ok and we have a fallback URL and we haven't tried it yet, try it
+    if (API_URL_FALLBACK && currentApiUrl !== API_URL_FALLBACK) {
       try {
         const fallbackResponse = await fetch(`${API_URL_FALLBACK}${endpoint}`, options);
         if (fallbackResponse.ok) {
@@ -51,8 +51,8 @@ export const fetchWithFallback = async (endpoint, options = {}) => {
     
     return response;
   } catch (err) {
-    // If primary fails, try fallback
-    if (currentApiUrl !== API_URL_FALLBACK) {
+    // If primary fails, try fallback (only if we have one)
+    if (API_URL_FALLBACK && currentApiUrl !== API_URL_FALLBACK) {
       try {
         const fallbackResponse = await fetch(`${API_URL_FALLBACK}${endpoint}`, options);
         if (fallbackResponse.ok) {

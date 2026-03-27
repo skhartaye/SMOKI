@@ -14,7 +14,6 @@ function CameraViewer() {
 
   const detectionIntervalRef = useRef(null);
   const API_URL = import.meta.env.VITE_API_URL || 'https://smoki-backend-rpi.onrender.com';
-  const RPI_IP = import.meta.env.VITE_RPI_IP || '192.168.1.35';
   const token = localStorage.getItem('token');
 
   // Check camera health on mount
