@@ -3,7 +3,7 @@
  * Tries primary API URL first, then falls back to alternative URL
  */
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://smoki-backend.onrender.com';
+const API_URL = import.meta.env.VITE_API_URL || 'https://smoki-backend-rpi.onrender.com';
 const API_URL_FALLBACK = import.meta.env.VITE_API_URL_FALLBACK || 'http://192.168.1.35:8000';
 
 let currentApiUrl = API_URL;

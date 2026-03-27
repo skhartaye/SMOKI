@@ -1,5 +1,14 @@
 # RPi Detection Fix Deployment Guide
 
+## Overview
+
+This deployment removes **face detection** from the RPi script and fixes database schema issues. The updated script focuses only on:
+- **Smoke detection** (smoke_black, smoke_white)
+- **Vehicle detection** (passenger, puv, services, two_wheel)  
+- **License plate detection** and OCR
+
+Face detection has been completely removed as it's not needed for the SMOKI project.
+
 ## Quick Deployment (Automated)
 
 ### Option 1: PowerShell Script (Windows)
@@ -63,7 +72,6 @@ python rpi_simple_detect.py --interval 3
 [START] rpi_snap.py
 [INFO] Starting camera...
 [OK] Camera ready
-[OK] Face model loaded
 [OK] EasyOCR ready
 [PG] Schema ready ✓                    # ← This should now show ✓ instead of error
 [INFO] Loading Hailo models...
@@ -74,9 +82,14 @@ python rpi_simple_detect.py --interval 3
 [OK] Configured: license-plate-opt-hailo8l.hef
 [OK] Configured: vehicle-class-hailo8l.hef
 [INFO] Running snapshot loop every 3.0s — Ctrl+C to stop
-[Sent] smoke=0 veh=0 plates=0 faces=1 inf=68ms
-[Snap #1] 2026-03-27T05:51:33Z | Smoke:0 Veh:0 Plates:0 Faces:1 | inf=68ms upload=1126ms total=1827ms next_in=1.2s
+[Sent] smoke=0 veh=0 plates=0 inf=68ms
+[Snap #1] 2026-03-27T05:51:33Z | Smoke:0 Veh:0 Plates:0 | inf=68ms upload=1126ms total=1827ms next_in=1.2s
 ```
+
+**Note:** Face detection has been completely removed. You should no longer see:
+- `[OK] Face model loaded`
+- `faces=X` in the output
+- Any face-related processing
 
 ### ❌ Previous Error (Fixed)
 ```
@@ -149,9 +162,10 @@ sudo -u postgres psql -c "\l"  # List databases
 
 ## What This Fix Does
 
-1. **Fixes Local Database Schema** - Handles `camera_id` column creation gracefully
-2. **Improves Error Handling** - Non-fatal index creation errors
-3. **Maintains Functionality** - Script continues even if local DB has issues
-4. **Preserves Cloud Integration** - Detection data still flows to backend
+1. **Removes Face Detection** - Completely eliminates face detection code and models
+2. **Fixes Local Database Schema** - Handles `camera_id` column creation gracefully
+3. **Improves Error Handling** - Non-fatal index creation errors
+4. **Maintains Core Functionality** - Focuses on smoke, vehicle, and license plate detection
+5. **Preserves Cloud Integration** - Detection data still flows to backend
 
-The RPi script will now start successfully and send detection data to the cloud backend, which will then be displayed on the frontend dashboard.
+The RPi script will now start successfully without face detection and send only relevant detection data (smoke, vehicles, license plates) to the cloud backend.

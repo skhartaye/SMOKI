@@ -9,8 +9,8 @@ $RpiUser = "sevi"
 $RpiPath = "/home/sevi/smoki_project/src/model-skhart-ready"
 $LocalFile = "esp32/rpi_simple_detect.py"
 
-Write-Host "🚀 Deploying RPi Detection Fix" -ForegroundColor Green
-Write-Host "================================"
+Write-Host "🚀 Deploying RPi Detection Fix (Face Detection Removed)" -ForegroundColor Green
+Write-Host "======================================================="
 Write-Host "RPi IP: $RpiIP"
 Write-Host "Local file: $LocalFile"
 Write-Host "Remote path: $RpiPath"
@@ -34,7 +34,7 @@ if ($LASTEXITCODE -eq 0) {
 
 Write-Host ""
 Write-Host "📋 Step 2: Testing script syntax on RPi..." -ForegroundColor Yellow
-& ssh "${RpiUser}@${RpiIP}" "cd $RpiPath && python3 -m py_compile rpi_simple_detect.py"
+& ssh "${RpiUser}@${RpiIP}" "cd $RpiPath; python3 -m py_compile rpi_simple_detect.py"
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "✅ Script syntax is valid" -ForegroundColor Green
@@ -58,11 +58,12 @@ if ($RunningPid) {
 
 Write-Host ""
 Write-Host "📋 Step 4: Starting updated script..." -ForegroundColor Yellow
-Write-Host "Command: cd $RpiPath && source /home/sevi/smoki_project/skhart_fucksyou/bin/activate && python rpi_simple_detect.py --interval 3"
+Write-Host "Command: cd $RpiPath; source venv; python rpi_simple_detect.py --interval 3"
 Write-Host ""
 
-# Start the script in the background
-& ssh "${RpiUser}@${RpiIP}" "cd $RpiPath && source /home/sevi/smoki_project/skhart_fucksyou/bin/activate && nohup python rpi_simple_detect.py --interval 3 > rpi_detect.log 2>&1 &"
+# Start the script in the background (escape the & properly)
+$Command = "cd $RpiPath; source /home/sevi/smoki_project/skhart_fucksyou/bin/activate; nohup python rpi_simple_detect.py --interval 3 > rpi_detect.log 2>&1 '&'"
+& ssh "${RpiUser}@${RpiIP}" $Command
 
 Start-Sleep -Seconds 3
 
@@ -73,19 +74,20 @@ if ($NewPid) {
     Write-Host "✅ Script started successfully (PID: $NewPid)" -ForegroundColor Green
     Write-Host ""
     Write-Host "📋 Step 6: Showing initial log output..." -ForegroundColor Yellow
-    & ssh "${RpiUser}@${RpiIP}" "cd $RpiPath && tail -20 rpi_detect.log"
+    & ssh "${RpiUser}@${RpiIP}" "cd $RpiPath; tail -20 rpi_detect.log"
     Write-Host ""
     Write-Host "🎯 Deployment Complete!" -ForegroundColor Green
-    Write-Host "================================"
+    Write-Host "======================================================="
     Write-Host "✅ Updated script deployed and running" -ForegroundColor Green
+    Write-Host "✅ Face detection completely removed" -ForegroundColor Green
     Write-Host "✅ Database initialization should now work" -ForegroundColor Green
     Write-Host "✅ Detection data will flow to backend" -ForegroundColor Green
     Write-Host ""
-    Write-Host "📊 Monitor logs: ssh ${RpiUser}@${RpiIP} 'cd $RpiPath && tail -f rpi_detect.log'" -ForegroundColor Cyan
+    Write-Host "📊 Monitor logs: ssh ${RpiUser}@${RpiIP} 'cd $RpiPath; tail -f rpi_detect.log'" -ForegroundColor Cyan
     Write-Host "🔍 Check backend: curl https://smoki-backend-rpi.onrender.com/api/stream/status" -ForegroundColor Cyan
 } else {
     Write-Host "❌ Failed to start script" -ForegroundColor Red
     Write-Host "📋 Checking error logs..." -ForegroundColor Yellow
-    & ssh "${RpiUser}@${RpiIP}" "cd $RpiPath && tail -10 rpi_detect.log"
+    & ssh "${RpiUser}@${RpiIP}" "cd $RpiPath; tail -10 rpi_detect.log"
     exit 1
 }

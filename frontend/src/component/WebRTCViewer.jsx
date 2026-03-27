@@ -19,7 +19,7 @@ function WebRTCViewer() {
   const countdownIntervalRef = useRef(null);
   const isStreamingRef = useRef(false);
 
-  const API_URL = import.meta.env.VITE_API_URL || 'https://smoki-backend.onrender.com';
+  const API_URL = import.meta.env.VITE_API_URL || 'https://smoki-backend-rpi.onrender.com';
   const token = localStorage.getItem('token');
 
   useEffect(() => {
