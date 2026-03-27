@@ -457,10 +457,14 @@ function Dashboard() {
           
           // Process detection metadata
           if (streamData.latest_detections && Array.isArray(streamData.latest_detections) && streamData.latest_detections.length > 0) {
-            const detections = streamData.latest_detections.filter(det => det && typeof det === 'object');
+            const detections = streamData.latest_detections.filter(det => 
+              det && 
+              typeof det === 'object' && 
+              (det.class || det.class_name) && 
+              (det.conf !== undefined || det.confidence !== undefined)
+            );
             
-            console.log('[DEBUG] Filtered detections:', detections);
-            console.log('[DEBUG] First detection sample:', detections[0]);
+            console.log('[DEBUG] Filtered valid detections:', detections);
             
             if (detections.length === 0) {
               console.log('No valid detections found in stream data');
@@ -468,9 +472,7 @@ function Dashboard() {
               return;
             }
             
-            const timestamp = new Date();
-            
-            // Create detection records for each detected object
+            // Only process if we have real detection data with valid classes
             const detectionRecords = detections.map((detection, index) => {
               try {
                 console.log(`[DEBUG] Processing detection ${index}:`, detection);
@@ -480,14 +482,19 @@ function Dashboard() {
                 let smokeLevel = 'None';
                 
                 // Handle the exact field names from RPi: 'class' and 'conf'
-                let className = detection.class || detection.class_name || 'unknown';
+                let className = detection.class || detection.class_name || '';
                 let confidence = detection.conf || detection.confidence || 0;
+                
+                // Skip if no valid class name
+                if (!className || className === 'unknown' || className === '') {
+                  return null;
+                }
                 
                 console.log(`[DEBUG] Extracted - className: "${className}", confidence: ${confidence}`);
                 
                 // Ensure className is a string
                 if (typeof className !== 'string') {
-                  className = String(className || 'unknown');
+                  className = String(className);
                 }
                 
                 // Ensure confidence is a number
@@ -502,13 +509,16 @@ function Dashboard() {
                 
                 console.log(`[DEBUG] After processing - className: "${className}", confidence: ${confidence}`);
                 
+                // Use actual detection timestamp or current time
+                const detectionTime = detection.timestamp ? new Date(detection.timestamp) : new Date();
+                
                 // Vehicle detection logic - exact class names from RPi
                 const vehicleClasses = ['passenger', 'puv', 'services', 'two_wheel'];
                 if (vehicleClasses.includes(className)) {
                   detectionType = 'Vehicle';
                   // Generate mock license plate
-                  const plateNum = String(timestamp.getMinutes()).padStart(2, '0') + 
-                                 String(timestamp.getSeconds()).padStart(2, '0') + index;
+                  const plateNum = String(detectionTime.getMinutes()).padStart(2, '0') + 
+                                 String(detectionTime.getSeconds()).padStart(2, '0') + index;
                   let platePrefix = 'VEH';
                   if (className === 'passenger') platePrefix = 'ABC';
                   else if (className === 'puv') platePrefix = 'PUV';
@@ -537,8 +547,8 @@ function Dashboard() {
                 console.log(`[DEBUG] Final classification - detectionType: "${detectionType}"`);
                 
                 const result = {
-                  id: `detection_${index}_${timestamp.getTime()}`,
-                  timestamp: timestamp.toISOString(),
+                  id: `detection_${index}_${detectionTime.getTime()}`,
+                  timestamp: detectionTime.toISOString(),
                   detection_type: detectionType,
                   class_name: className,
                   confidence: (confidence * 100).toFixed(1),
