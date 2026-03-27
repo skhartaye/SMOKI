@@ -32,6 +32,7 @@ def create_tables():
     with psycopg.connect(get_connection_string()) as conn:
         try:
             with conn.cursor() as cursor:
+                print("[DB] Creating users table...")
                 # Create users table
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS users (
@@ -45,6 +46,7 @@ def create_tables():
                     );
                 """)
                 
+                print("[DB] Creating sensor_data table...")
                 # Create sensor_data table
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS sensor_data (
@@ -68,6 +70,7 @@ def create_tables():
                     ADD COLUMN IF NOT EXISTS pressure FLOAT;
                 """)
                 
+                print("[DB] Creating detections table...")
                 # NEW SCHEMA: Create detections table (every snapshot - runs every 3 seconds always)
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS detections (
@@ -87,6 +90,7 @@ def create_tables():
                     );
                 """)
                 
+                print("[DB] Creating smoke_events table...")
                 # NEW SCHEMA: Create smoke_events table (one row per smoke detection)
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS smoke_events (
@@ -105,6 +109,7 @@ def create_tables():
                     );
                 """)
                 
+                print("[DB] Creating plate_events table...")
                 # NEW SCHEMA: Create plate_events table (one row per plate OCR result)
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS plate_events (
@@ -120,6 +125,7 @@ def create_tables():
                     );
                 """)
                 
+                print("[DB] Creating violations table...")
                 # NEW SCHEMA: Create violations table (one row per violation - smoke + vehicle in same frame)
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS violations (
@@ -137,6 +143,7 @@ def create_tables():
                     );
                 """)
                 
+                print("[DB] Creating legacy tables...")
                 # Keep legacy tables for backward compatibility
                 # Create vehicles table for SMOKI (RPi camera detection)
                 cursor.execute("""
@@ -224,109 +231,118 @@ def create_tables():
                     );
                 """)
                 
+                print("[DB] Creating indexes...")
                 # Create indexes for faster queries
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_sensor_timestamp 
-                    ON sensor_data(timestamp);
-                """)
-                
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_users_username 
-                    ON users(username);
-                """)
-                
-                # NEW SCHEMA INDEXES
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_detections_timestamp 
-                    ON detections(timestamp);
-                """)
-                
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_detections_camera_id 
-                    ON detections(camera_id);
-                """)
-                
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_smoke_events_timestamp 
-                    ON smoke_events(timestamp);
-                """)
-                
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_smoke_events_camera_id 
-                    ON smoke_events(camera_id);
-                """)
-                
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_plate_events_timestamp 
-                    ON plate_events(timestamp);
-                """)
-                
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_plate_events_camera_id 
-                    ON plate_events(camera_id);
-                """)
-                
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_violations_timestamp 
-                    ON violations(timestamp);
-                """)
-                
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_violations_camera_id 
-                    ON violations(camera_id);
-                """)
-                
-                # Legacy indexes
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_vehicles_license_plate 
-                    ON vehicles(license_plate);
-                """)
-                
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_vehicle_detections_timestamp 
-                    ON vehicle_detections(timestamp);
-                """)
-                
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_vehicle_detections_vehicle_id 
-                    ON vehicle_detections(vehicle_id);
-                """)
-                
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_notifications_timestamp 
-                    ON notifications(timestamp);
-                """)
-                
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_images_vehicle_detection_id 
-                    ON images(vehicle_detection_id);
-                """)
-                
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_images_violation_id 
-                    ON images(violation_id);
-                """)
-                
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_images_timestamp 
-                    ON images(timestamp);
-                """)
-                
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_image_metadata_image_id 
-                    ON image_metadata(image_id);
-                """)
-                
-                cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_image_metadata_camera_id 
-                    ON image_metadata(camera_id);
-                """)
+                try:
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_sensor_timestamp 
+                        ON sensor_data(timestamp);
+                    """)
+                    
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_users_username 
+                        ON users(username);
+                    """)
+                    
+                    # NEW SCHEMA INDEXES - with error handling
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_detections_timestamp 
+                        ON detections(timestamp);
+                    """)
+                    
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_detections_camera_id 
+                        ON detections(camera_id);
+                    """)
+                    
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_smoke_events_timestamp 
+                        ON smoke_events(timestamp);
+                    """)
+                    
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_smoke_events_camera_id 
+                        ON smoke_events(camera_id);
+                    """)
+                    
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_plate_events_timestamp 
+                        ON plate_events(timestamp);
+                    """)
+                    
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_plate_events_camera_id 
+                        ON plate_events(camera_id);
+                    """)
+                    
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_violations_timestamp 
+                        ON violations(timestamp);
+                    """)
+                    
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_violations_camera_id 
+                        ON violations(camera_id);
+                    """)
+                    
+                    # Legacy indexes
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_vehicles_license_plate 
+                        ON vehicles(license_plate);
+                    """)
+                    
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_vehicle_detections_timestamp 
+                        ON vehicle_detections(timestamp);
+                    """)
+                    
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_vehicle_detections_vehicle_id 
+                        ON vehicle_detections(vehicle_id);
+                    """)
+                    
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_notifications_timestamp 
+                        ON notifications(timestamp);
+                    """)
+                    
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_images_vehicle_detection_id 
+                        ON images(vehicle_detection_id);
+                    """)
+                    
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_images_violation_id 
+                        ON images(violation_id);
+                    """)
+                    
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_images_timestamp 
+                        ON images(timestamp);
+                    """)
+                    
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_image_metadata_image_id 
+                        ON image_metadata(image_id);
+                    """)
+                    
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_image_metadata_camera_id 
+                        ON image_metadata(camera_id);
+                    """)
+                    
+                except Exception as idx_error:
+                    print(f"[DB] Index creation error (non-fatal): {idx_error}")
+                    # Continue anyway - indexes are not critical for basic functionality
                 
                 conn.commit()
-                print("Tables created successfully")
+                print("[DB] Tables created successfully")
         except Exception as e:
             print(f"Error creating tables: {e}")
+            import traceback
+            traceback.print_exc()
             conn.rollback()
+            raise  # Re-raise to see the full error
 
 # ============ SENSOR DATA FUNCTIONS ============
 
