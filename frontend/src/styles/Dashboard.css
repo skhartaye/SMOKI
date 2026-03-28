@@ -82,6 +82,10 @@ chatgpt-sidebar {
   color: #888;
 }
 
+.dashboard.dark-mode .average-value {
+  color: #aaa;
+}
+
 .dashboard.dark-mode .camera-placeholder {
   background: linear-gradient(135deg, #1e1e1e 0%, #252525 100%);
   color: #666;
@@ -1686,6 +1690,14 @@ chatgpt-sidebar {
   color: #999;
   font-weight: 500;
   white-space: nowrap;
+}
+
+.average-value {
+  font-size: 0.9em;
+  color: #666;
+  font-weight: 400;
+  white-space: nowrap;
+  margin-top: 2px;
 }
 
 .graph-card h3 {

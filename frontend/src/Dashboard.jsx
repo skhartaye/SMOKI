@@ -1335,6 +1335,18 @@ function Dashboard() {
     return Math.max(...values);
   };
 
+  // Helper function to get average value for a sensor type
+  const getAverageValue = (sensorType) => {
+    const filtered = getFilteredGraphData();
+    if (filtered.length === 0) return null;
+    
+    const values = filtered.map(item => item[sensorType]).filter(val => val !== null && val !== undefined);
+    if (values.length === 0) return null;
+    
+    const sum = values.reduce((acc, val) => acc + val, 0);
+    return sum / values.length;
+  };
+
   const getFilteredRecords = () => {
     let filtered = [...records];
 
@@ -2762,10 +2774,12 @@ function Dashboard() {
                           <div className="graph-value">
                             {(() => {
                               const peak = getPeakValue('temperature');
-                              return peak !== null ? (
+                              const average = getAverageValue('temperature');
+                              return peak !== null && average !== null ? (
                                 <>
                                   <span className="current-value">{peak.toFixed(1)} °C</span>
                                   <span className="value-change">Peak</span>
+                                  <span className="average-value">{average.toFixed(1)} °C avg</span>
                                 </>
                               ) : '--';
                             })()}
@@ -2828,10 +2842,12 @@ function Dashboard() {
                           <div className="graph-value">
                             {(() => {
                               const peak = getPeakValue('humidity');
-                              return peak !== null ? (
+                              const average = getAverageValue('humidity');
+                              return peak !== null && average !== null ? (
                                 <>
                                   <span className="current-value">{peak.toFixed(1)} %</span>
                                   <span className="value-change">Peak</span>
+                                  <span className="average-value">{average.toFixed(1)} % avg</span>
                                 </>
                               ) : '--';
                             })()}
@@ -2894,10 +2910,12 @@ function Dashboard() {
                         <div className="graph-value">
                           {(() => {
                             const peak = getPeakValue('pressure');
-                            return peak !== null ? (
+                            const average = getAverageValue('pressure');
+                            return peak !== null && average !== null ? (
                               <>
                                 <span className="current-value">{peak.toFixed(2)} hPa</span>
                                 <span className="value-change">Peak</span>
+                                <span className="average-value">{average.toFixed(2)} hPa avg</span>
                               </>
                             ) : '--';
                           })()}
