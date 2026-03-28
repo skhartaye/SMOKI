@@ -13,6 +13,15 @@ function CameraViewer() {
   // Use RPI backend directly for camera streams
   const CAMERA_API_URL = import.meta.env.VITE_CAMERA_API_URL || 'https://smoki-backend-rpi.onrender.com';
 
+  // Debug: Log the camera URL being used
+  useEffect(() => {
+    console.log('🔧 Camera API URL:', CAMERA_API_URL);
+    console.log('🔧 Environment variables:', {
+      VITE_CAMERA_API_URL: import.meta.env.VITE_CAMERA_API_URL,
+      VITE_API_URL: import.meta.env.VITE_API_URL
+    });
+  }, []);
+
   // Check camera health on mount
   useEffect(() => {
     checkCameraHealth();
@@ -22,20 +31,39 @@ function CameraViewer() {
     try {
       // Test if we can get the latest image
       const imageUrl = `${CAMERA_API_URL}/api/stream/latest.jpg?t=${Date.now()}`;
+      console.log('🔍 Testing camera health with URL:', imageUrl);
+      
       const img = new Image();
+      
+      // Set crossOrigin to handle CORS
+      img.crossOrigin = 'anonymous';
       
       img.onload = () => {
         setIsHealthy(true);
         setError(null);
         setIsLoading(false);
         console.log('✅ Camera health check passed - image loaded successfully');
+        console.log('📏 Image dimensions:', img.width, 'x', img.height);
       };
       
-      img.onerror = () => {
+      img.onerror = (e) => {
         setIsHealthy(false);
         setError('Camera service unavailable');
         setIsLoading(false);
         console.error('❌ Camera health check failed - could not load image');
+        console.error('❌ Error details:', e);
+        
+        // Try without CORS as fallback
+        const imgFallback = new Image();
+        imgFallback.onload = () => {
+          console.log('✅ Fallback (no CORS) image loaded successfully');
+          setIsHealthy(true);
+          setError(null);
+        };
+        imgFallback.onerror = () => {
+          console.error('❌ Fallback image also failed');
+        };
+        imgFallback.src = imageUrl;
       };
       
       img.src = imageUrl;
@@ -58,6 +86,7 @@ function CameraViewer() {
         try {
           // Get latest frame from RPI backend
           const frameUrl = `${CAMERA_API_URL}/api/stream/latest.jpg?t=${Date.now()}`;
+          console.log('🔄 Refreshing frame:', frameUrl);
           
           // Update image source to trigger refresh
           if (videoRef.current) {
@@ -74,14 +103,22 @@ function CameraViewer() {
 
       // Load initial frame
       const initialFrameUrl = `${CAMERA_API_URL}/api/stream/latest.jpg?t=${Date.now()}`;
+      console.log('📸 Loading initial frame:', initialFrameUrl);
+      
       if (videoRef.current) {
+        // Set crossOrigin for CORS
+        videoRef.current.crossOrigin = 'anonymous';
         videoRef.current.src = initialFrameUrl;
+        
         videoRef.current.onload = () => {
           console.log('✅ Initial frame loaded successfully');
+          console.log('📏 Frame dimensions:', videoRef.current.naturalWidth, 'x', videoRef.current.naturalHeight);
           setLastUpdate(new Date());
         };
+        
         videoRef.current.onerror = (e) => {
           console.error('❌ Failed to load initial frame:', e);
+          console.error('❌ Frame URL was:', initialFrameUrl);
           setError('Failed to load camera frame');
           setIsStreaming(false);
         };
@@ -143,6 +180,19 @@ function CameraViewer() {
               Stop Stream
             </button>
           )}
+          
+          {/* Debug button to test direct image URL */}
+          <button 
+            onClick={() => {
+              const testUrl = `${CAMERA_API_URL}/api/stream/latest.jpg?t=${Date.now()}`;
+              console.log('🧪 Testing direct URL:', testUrl);
+              window.open(testUrl, '_blank');
+            }}
+            className="control-btn"
+            style={{ marginLeft: '10px', fontSize: '12px' }}
+          >
+            Test Direct URL
+          </button>
         </div>
       </div>
 
