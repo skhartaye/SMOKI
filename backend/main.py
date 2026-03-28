@@ -808,10 +808,10 @@ def get_pm_smoke_correlation(limit: int = 100):
     try:
         correlation_data = []
         
-        # 1. Add historical smoke events (March 28, 2026)
+        # 1. Add historical smoke events (March 27, 2026 - CORRECT DATE)
         historical_smoke_events = [
             {
-                'timestamp': '2026-03-28T00:31:11+00:00',
+                'timestamp': '2026-03-27T04:39:28+00:00',
                 'pm25': 9,
                 'pm10': 15,
                 'smoke_events': 1,
@@ -819,7 +819,7 @@ def get_pm_smoke_correlation(limit: int = 100):
                 'is_real_event': True
             },
             {
-                'timestamp': '2026-03-28T00:33:09+00:00',
+                'timestamp': '2026-03-27T04:42:10+00:00',
                 'pm25': 9,
                 'pm10': 15,
                 'smoke_events': 1,
@@ -827,7 +827,15 @@ def get_pm_smoke_correlation(limit: int = 100):
                 'is_real_event': True
             },
             {
-                'timestamp': '2026-03-28T00:35:24+00:00',
+                'timestamp': '2026-03-27T04:42:19+00:00',
+                'pm25': 9,
+                'pm10': 15,
+                'smoke_events': 1,
+                'combined_pm': 12,
+                'is_real_event': True
+            },
+            {
+                'timestamp': '2026-03-27T04:42:25+00:00',
                 'pm25': 10,
                 'pm10': 16,
                 'smoke_events': 1,
@@ -835,11 +843,19 @@ def get_pm_smoke_correlation(limit: int = 100):
                 'is_real_event': True
             },
             {
-                'timestamp': '2026-03-28T00:38:43+00:00',
+                'timestamp': '2026-03-27T04:44:40+00:00',
                 'pm25': 10,
                 'pm10': 16,
                 'smoke_events': 1,
                 'combined_pm': 13,
+                'is_real_event': True
+            },
+            {
+                'timestamp': '2026-03-27T05:55:10+00:00',
+                'pm25': 11,
+                'pm10': 17,
+                'smoke_events': 1,
+                'combined_pm': 14,
                 'is_real_event': True
             }
         ]
@@ -917,7 +933,7 @@ def get_pm_smoke_correlation(limit: int = 100):
             "success": True,
             "data": [
                 {
-                    'timestamp': '2026-03-28T00:31:11+00:00',
+                    'timestamp': '2026-03-27T04:39:28+00:00',
                     'pm25': 9,
                     'pm10': 15,
                     'smoke_events': 1,

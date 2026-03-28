@@ -292,15 +292,20 @@ function Dashboard() {
       const result = await response.json();
       if (result.success) {
         // Format data for correlation graph (keep chronological order)
-        const formatted = result.data.map(item => ({
-          time: new Date(item.timestamp).toLocaleTimeString(),
-          fullTimestamp: new Date(item.timestamp).toLocaleString(),
-          pm25: item.pm25 || 0,
-          pm10: item.pm10 || 0,
-          smoke_events: item.smoke_events || 0,
-          combined_pm: item.combined_pm || 0,
-          is_real_event: item.is_real_event || false
-        }));
+        const formatted = result.data.map(item => {
+          const date = new Date(item.timestamp);
+          return {
+            time: date.toLocaleTimeString(),
+            date: date.toLocaleDateString(),
+            fullTimestamp: date.toLocaleString(),
+            dateTime: `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`,
+            pm25: item.pm25 || 0,
+            pm10: item.pm10 || 0,
+            smoke_events: item.smoke_events || 0,
+            combined_pm: item.combined_pm || 0,
+            is_real_event: item.is_real_event || false
+          };
+        });
         
         // Show all data points to display both historical events and trends
         setCorrelationData(formatted);
@@ -313,11 +318,56 @@ function Dashboard() {
       // Show mock data with historical smoke events for demonstration
       console.log('Using mock correlation data with historical smoke events');
       const mockData = [
-        { time: '08:31', fullTimestamp: '2026-03-28 08:31:11', pm25: 9, pm10: 15, smoke_events: 1, is_real_event: true },
-        { time: '08:33', fullTimestamp: '2026-03-28 08:33:09', pm25: 9, pm10: 15, smoke_events: 1, is_real_event: true },
-        { time: '08:35', fullTimestamp: '2026-03-28 08:35:24', pm25: 10, pm10: 16, smoke_events: 1, is_real_event: true },
-        { time: '14:00', fullTimestamp: '2026-03-28 14:00:00', pm25: 15.2, pm10: 28.5, smoke_events: 0, is_real_event: false },
-        { time: '14:30', fullTimestamp: '2026-03-28 14:30:00', pm25: 12.8, pm10: 24.1, smoke_events: 0, is_real_event: false }
+        { 
+          time: '04:39', 
+          date: '3/27/2026',
+          dateTime: '3/27/2026 04:39',
+          fullTimestamp: '2026-03-27 04:39:28', 
+          pm25: 9, 
+          pm10: 15, 
+          smoke_events: 1, 
+          is_real_event: true 
+        },
+        { 
+          time: '04:42', 
+          date: '3/27/2026',
+          dateTime: '3/27/2026 04:42',
+          fullTimestamp: '2026-03-27 04:42:25', 
+          pm25: 10, 
+          pm10: 16, 
+          smoke_events: 1, 
+          is_real_event: true 
+        },
+        { 
+          time: '05:55', 
+          date: '3/27/2026',
+          dateTime: '3/27/2026 05:55',
+          fullTimestamp: '2026-03-27 05:55:10', 
+          pm25: 11, 
+          pm10: 17, 
+          smoke_events: 1, 
+          is_real_event: true 
+        },
+        { 
+          time: '14:00', 
+          date: '3/28/2026',
+          dateTime: '3/28/2026 14:00',
+          fullTimestamp: '2026-03-28 14:00:00', 
+          pm25: 15.2, 
+          pm10: 28.5, 
+          smoke_events: 0, 
+          is_real_event: false 
+        },
+        { 
+          time: '14:30', 
+          date: '3/28/2026',
+          dateTime: '3/28/2026 14:30',
+          fullTimestamp: '2026-03-28 14:30:00', 
+          pm25: 12.8, 
+          pm10: 24.1, 
+          smoke_events: 0, 
+          is_real_event: false 
+        }
       ];
       setCorrelationData(mockData);
     }
@@ -3225,14 +3275,17 @@ function Dashboard() {
                       </div>
                       <div style={{ width: '100%', height: '280px' }}>
                         <ResponsiveContainer debounce={300}>
-                          <LineChart data={correlationData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                          <LineChart data={correlationData} margin={{ top: 10, right: 20, left: 0, bottom: 60 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
                             <XAxis 
-                              dataKey="time" 
+                              dataKey="dateTime" 
                               stroke="#999" 
-                              tick={{ fontSize: 11, fill: '#999' }}
+                              tick={{ fontSize: 9, fill: '#999' }}
                               axisLine={false}
                               tickLine={false}
+                              angle={-45}
+                              textAnchor="end"
+                              height={60}
                             />
                             <YAxis 
                               yAxisId="pm"
@@ -3269,7 +3322,8 @@ function Dashboard() {
                               }}
                               labelFormatter={(label, payload) => {
                                 if (payload && payload[0]) {
-                                  return payload[0].payload.fullTimestamp || label;
+                                  const data = payload[0].payload;
+                                  return `${data.date} ${data.time}${data.is_real_event ? ' (Historical Smoke Event)' : ' (Current Trend)'}`;
                                 }
                                 return label;
                               }}
