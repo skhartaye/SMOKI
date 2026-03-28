@@ -1,57 +1,49 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AlertCircle, Wifi, WifiOff, Play, Pause } from 'lucide-react';
 import '../styles/CameraViewer.css';
-import { fetchWithFallback } from '../utils/apiClient';
 
 function CameraViewer() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [isHealthy, setIsHealthy] = useState(false);
   const [error, setError] = useState(null);
-  const [detections, setDetections] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const videoRef = useRef(null);
   const [lastUpdate, setLastUpdate] = useState(null);
 
-  const detectionIntervalRef = useRef(null);
-  const API_URL = import.meta.env.VITE_CAMERA_API_URL || import.meta.env.VITE_API_URL || 'https://smoki-backend-rpi.onrender.com';
-  const token = localStorage.getItem('token');
+  // Use RPI backend directly for camera streams
+  const CAMERA_API_URL = import.meta.env.VITE_CAMERA_API_URL || 'https://smoki-backend-rpi.onrender.com';
 
   // Check camera health on mount
   useEffect(() => {
     checkCameraHealth();
-    const healthInterval = setInterval(checkCameraHealth, 10000);
-    return () => {
-      clearInterval(healthInterval);
-      stopStream();
-    };
   }, []);
-
-  // Start/stop detection polling
-  useEffect(() => {
-    if (isStreaming) {
-      startDetectionPolling();
-    } else {
-      stopDetectionPolling();
-    }
-    return () => stopDetectionPolling();
-  }, [isStreaming]);
 
   const checkCameraHealth = async () => {
     try {
-      const response = await fetchWithFallback('/api/camera/health');
-
-      if (response.ok) {
+      // Test if we can get the latest image
+      const imageUrl = `${CAMERA_API_URL}/api/stream/latest.jpg?t=${Date.now()}`;
+      const img = new Image();
+      
+      img.onload = () => {
         setIsHealthy(true);
         setError(null);
-      } else {
+        setIsLoading(false);
+        console.log('✅ Camera health check passed - image loaded successfully');
+      };
+      
+      img.onerror = () => {
         setIsHealthy(false);
         setError('Camera service unavailable');
-      }
+        setIsLoading(false);
+        console.error('❌ Camera health check failed - could not load image');
+      };
+      
+      img.src = imageUrl;
     } catch (err) {
       setIsHealthy(false);
       setError('Failed to connect to camera service');
-    } finally {
       setIsLoading(false);
+      console.error('❌ Camera health check error:', err);
     }
   };
 
@@ -59,19 +51,13 @@ function CameraViewer() {
     try {
       setError(null);
       setIsStreaming(true);
+      console.log('🚀 Starting camera stream...');
       
-      console.log('Starting frame refresh mode for simple detection system');
-
-      // Start polling for latest frame every 5 seconds
-      const frameInterval = setInterval(async () => {
-        if (!isStreaming) {
-          clearInterval(frameInterval);
-          return;
-        }
-
+      // Start frame refresh interval
+      const frameInterval = setInterval(() => {
         try {
-          // Get latest frame from simple detection system
-          const frameUrl = `${API_URL}/api/stream/latest.jpg?t=${Date.now()}`;
+          // Get latest frame from RPI backend
+          const frameUrl = `${CAMERA_API_URL}/api/stream/latest.jpg?t=${Date.now()}`;
           
           // Update image source to trigger refresh
           if (videoRef.current) {
@@ -81,21 +67,21 @@ function CameraViewer() {
         } catch (err) {
           console.error('Frame refresh error:', err);
         }
-      }, 5000); // Refresh every 5 seconds to match detection cycle
+      }, 3000); // Refresh every 3 seconds
 
       // Store interval reference for cleanup
       videoRef.current.frameInterval = frameInterval;
 
       // Load initial frame
-      const initialFrameUrl = `${API_URL}/api/stream/latest.jpg?t=${Date.now()}`;
+      const initialFrameUrl = `${CAMERA_API_URL}/api/stream/latest.jpg?t=${Date.now()}`;
       if (videoRef.current) {
         videoRef.current.src = initialFrameUrl;
         videoRef.current.onload = () => {
-          console.log('Initial frame loaded successfully');
+          console.log('✅ Initial frame loaded successfully');
           setLastUpdate(new Date());
         };
         videoRef.current.onerror = (e) => {
-          console.error('Failed to load initial frame:', e);
+          console.error('❌ Failed to load initial frame:', e);
           setError('Failed to load camera frame');
           setIsStreaming(false);
         };
@@ -110,94 +96,81 @@ function CameraViewer() {
 
   const stopStream = () => {
     setIsStreaming(false);
+    console.log('🛑 Stopping camera stream...');
     
-    if (videoRef.current) {
-      // Clear frame refresh interval
-      if (videoRef.current.frameInterval) {
-        clearInterval(videoRef.current.frameInterval);
-        videoRef.current.frameInterval = null;
-      }
-      
-      // Clear image source
-      videoRef.current.src = '';
-    }
-  };
-
-  const startDetectionPolling = () => {
-    detectionIntervalRef.current = setInterval(async () => {
-      try {
-        // Check stream status for detection metadata
-        let response = await fetchWithFallback('/api/stream/status');
-        
-        if (response.ok) {
-          const streamData = await response.json();
-          console.log('Stream status:', streamData);
-          
-          // If we have recent detections from stream metadata, use those
-          if (streamData.latest_detections) {
-            setDetections(streamData.latest_detections);
-            return;
-          }
-        }
-
-        // Fallback: Try vehicle detections endpoint
-        response = await fetchWithFallback('/api/detections/vehicle/recent?limit=5', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.data) {
-            setDetections(data.data);
-            return;
-          }
-        }
-        
-        // Fallback to violations endpoint
-        response = await fetchWithFallback('/api/vehicles/violations/recent?limit=5', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.data) {
-            setDetections(data.data);
-          }
-        }
-      } catch (err) {
-        console.error('Detection polling error:', err);
-      }
-    }, 2000); // Poll every 2 seconds
-  };
-
-  const stopDetectionPolling = () => {
-    if (detectionIntervalRef.current) {
-      clearInterval(detectionIntervalRef.current);
-      detectionIntervalRef.current = null;
+    // Clear frame refresh interval
+    if (videoRef.current && videoRef.current.frameInterval) {
+      clearInterval(videoRef.current.frameInterval);
+      videoRef.current.frameInterval = null;
     }
   };
 
   return (
     <div className="camera-viewer">
       <div className="camera-header">
-        <h2>Live Camera Feed</h2>
         <div className="camera-status">
-          {isHealthy ? (
+          {isLoading ? (
+            <span className="status-loading">Checking camera...</span>
+          ) : isHealthy ? (
             <>
-              <Wifi size={20} className="status-icon healthy" />
-              <span className="status-text">Connected</span>
+              <Wifi className="status-icon healthy" size={16} />
+              <span className="status-text">Camera Online</span>
             </>
           ) : (
             <>
-              <WifiOff size={20} className="status-icon unhealthy" />
-              <span className="status-text">Disconnected</span>
+              <WifiOff className="status-icon unhealthy" size={16} />
+              <span className="status-text">Camera Offline</span>
             </>
           )}
         </div>
+        
+        <div className="camera-controls">
+          {!isStreaming ? (
+            <button 
+              onClick={startStream} 
+              disabled={!isHealthy || isLoading}
+              className="control-btn start-btn"
+            >
+              <Play size={16} />
+              Start Stream
+            </button>
+          ) : (
+            <button 
+              onClick={stopStream}
+              className="control-btn stop-btn"
+            >
+              <Pause size={16} />
+              Stop Stream
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="camera-display">
+        {!isStreaming ? (
+          <div className="camera-placeholder">
+            <div className="placeholder-content">
+              <Wifi size={48} className={isHealthy ? "healthy" : "unhealthy"} />
+              <p>{isLoading ? "Checking camera status..." : isHealthy ? "Click Start Stream to view camera" : "Camera service unavailable"}</p>
+              {isHealthy && (
+                <p className="camera-url">Source: {CAMERA_API_URL}</p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="camera-frame">
+            <img 
+              ref={videoRef}
+              alt="Camera Stream"
+              className="camera-image"
+            />
+            {lastUpdate && (
+              <div className="frame-info">
+                Last updated: {lastUpdate.toLocaleTimeString()}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {error && (
@@ -205,109 +178,6 @@ function CameraViewer() {
           <AlertCircle size={20} />
           <span>{error}</span>
         </div>
-      )}
-
-      {isLoading ? (
-        <div className="camera-loading">
-          <div className="spinner"></div>
-          <p>Checking camera service...</p>
-        </div>
-      ) : (
-        <>
-          <div className="camera-stream-container">
-            {isStreaming ? (
-              <img
-                ref={videoRef}
-                className="camera-stream"
-                alt="Live camera feed with AI detections"
-              />
-            ) : (
-              <div className="camera-placeholder">
-                <div className="placeholder-icon">📹</div>
-                <p>Camera feed not active</p>
-                <p className="placeholder-hint">Click play to start frame updates</p>
-              </div>
-            )}
-          </div>
-
-          <div className="camera-controls">
-            {isHealthy && (
-              <button
-                className={`stream-button ${isStreaming ? 'active' : ''}`}
-                onClick={isStreaming ? stopStream : startStream}
-              >
-                {isStreaming ? (
-                  <>
-                    <Pause size={18} />
-                    <span>Stop Feed</span>
-                  </>
-                ) : (
-                  <>
-                    <Play size={18} />
-                    <span>Start Feed</span>
-                  </>
-                )}
-              </button>
-            )}
-            
-            {/* Last Update Indicator */}
-            {isStreaming && lastUpdate && (
-              <div className="last-update">
-                <span className="update-label">Last update:</span>
-                <span className="update-time">{lastUpdate.toLocaleTimeString()}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Detection Statistics */}
-          <div className="detection-stats">
-            <div className="stat-item">
-              <span className="stat-icon">🔥</span>
-              <span className="stat-label">Smoke</span>
-              <span className="stat-count">{detections.filter(d => d.class_name?.includes('smoke')).length}</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-icon">🚗</span>
-              <span className="stat-label">Vehicles</span>
-              <span className="stat-count">{detections.filter(d => ['passenger', 'puv', 'services', 'two_wheel'].includes(d.class_name)).length}</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-icon">🔢</span>
-              <span className="stat-label">Plates</span>
-              <span className="stat-count">{detections.filter(d => d.class_name === 'license_plate').length}</span>
-            </div>
-          </div>
-
-          {detections.length > 0 && (
-            <div className="detections-panel">
-              <h3>Detected Objects ({detections.length})</h3>
-              <div className="detections-list">
-                {detections.map((detection, idx) => (
-                  <div key={idx} className="detection-item">
-                    <div className="detection-info">
-                      <div className="detection-timestamp">
-                        {new Date(detection.timestamp).toLocaleTimeString()}
-                      </div>
-                      <div className="detection-location">
-                        📍 {detection.location}
-                      </div>
-                      {detection.metadata && detection.metadata.detections && (
-                        <div className="detection-objects">
-                          {detection.metadata.detections.map((obj, i) => (
-                            <div key={i} className="object-item">
-                              <span className="object-class">{obj.class}</span>
-                              <span className="object-conf">{(obj.conf * 100).toFixed(0)}%</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
       )}
     </div>
   );

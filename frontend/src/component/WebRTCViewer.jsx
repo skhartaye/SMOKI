@@ -19,7 +19,8 @@ function WebRTCViewer() {
   const countdownIntervalRef = useRef(null);
   const isStreamingRef = useRef(false);
 
-  const API_URL = import.meta.env.VITE_CAMERA_API_URL || import.meta.env.VITE_API_URL || 'https://smoki-backend-rpi.onrender.com';
+  // Use RPI backend directly for camera streams
+  const CAMERA_API_URL = import.meta.env.VITE_CAMERA_API_URL || 'https://smoki-backend-rpi.onrender.com';
   const token = localStorage.getItem('token');
 
   useEffect(() => {
@@ -379,7 +380,7 @@ function WebRTCViewer() {
                   <button
                     className="test-button"
                     onClick={() => {
-                      const testUrl = `${API_URL}/api/stream/latest.jpg`;
+                      const testUrl = `${CAMERA_API_URL}/api/stream/latest.jpg`;
                       console.log('🧪 Testing direct URL:', testUrl);
                       window.open(testUrl, '_blank');
                     }}
