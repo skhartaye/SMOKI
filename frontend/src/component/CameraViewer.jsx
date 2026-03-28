@@ -10,17 +10,8 @@ function CameraViewer() {
   const videoRef = useRef(null);
   const [lastUpdate, setLastUpdate] = useState(null);
 
-  // Use RPI backend directly for camera streams
-  const CAMERA_API_URL = import.meta.env.VITE_CAMERA_API_URL || 'https://smoki-backend-rpi.onrender.com';
-
-  // Debug: Log the camera URL being used
-  useEffect(() => {
-    console.log('🔧 Camera API URL:', CAMERA_API_URL);
-    console.log('🔧 Environment variables:', {
-      VITE_CAMERA_API_URL: import.meta.env.VITE_CAMERA_API_URL,
-      VITE_API_URL: import.meta.env.VITE_API_URL
-    });
-  }, []);
+  // Use RPI backend directly - CORS is enabled
+  const CAMERA_URL = 'https://smoki-backend-rpi.onrender.com/api/stream/latest.jpg';
 
   // Check camera health on mount
   useEffect(() => {
@@ -29,14 +20,9 @@ function CameraViewer() {
 
   const checkCameraHealth = async () => {
     try {
-      // Test if we can get the latest image
-      const imageUrl = `${CAMERA_API_URL}/api/stream/latest.jpg?t=${Date.now()}`;
-      console.log('🔍 Testing camera health with URL:', imageUrl);
+      console.log('� Testing camera health with URL:', CAMERA_URL);
       
       const img = new Image();
-      
-      // Set crossOrigin to handle CORS
-      img.crossOrigin = 'anonymous';
       
       img.onload = () => {
         setIsHealthy(true);
@@ -52,21 +38,9 @@ function CameraViewer() {
         setIsLoading(false);
         console.error('❌ Camera health check failed - could not load image');
         console.error('❌ Error details:', e);
-        
-        // Try without CORS as fallback
-        const imgFallback = new Image();
-        imgFallback.onload = () => {
-          console.log('✅ Fallback (no CORS) image loaded successfully');
-          setIsHealthy(true);
-          setError(null);
-        };
-        imgFallback.onerror = () => {
-          console.error('❌ Fallback image also failed');
-        };
-        imgFallback.src = imageUrl;
       };
       
-      img.src = imageUrl;
+      img.src = `${CAMERA_URL}?t=${Date.now()}`;
     } catch (err) {
       setIsHealthy(false);
       setError('Failed to connect to camera service');
@@ -84,8 +58,8 @@ function CameraViewer() {
       // Start frame refresh interval
       const frameInterval = setInterval(() => {
         try {
-          // Get latest frame from RPI backend
-          const frameUrl = `${CAMERA_API_URL}/api/stream/latest.jpg?t=${Date.now()}`;
+          // Get latest frame with cache busting
+          const frameUrl = `${CAMERA_URL}?t=${Date.now()}`;
           console.log('🔄 Refreshing frame:', frameUrl);
           
           // Update image source to trigger refresh
@@ -96,23 +70,21 @@ function CameraViewer() {
         } catch (err) {
           console.error('Frame refresh error:', err);
         }
-      }, 3000); // Refresh every 3 seconds
+      }, 2000); // Refresh every 2 seconds for better real-time
 
       // Store interval reference for cleanup
       videoRef.current.frameInterval = frameInterval;
 
       // Load initial frame
-      const initialFrameUrl = `${CAMERA_API_URL}/api/stream/latest.jpg?t=${Date.now()}`;
-      console.log('📸 Loading initial frame:', initialFrameUrl);
+      const initialFrameUrl = `${CAMERA_URL}?t=${Date.now()}`;
+      console.log('� Loading initial frame:', initialFrameUrl);
       
       if (videoRef.current) {
-        // Set crossOrigin for CORS
-        videoRef.current.crossOrigin = 'anonymous';
         videoRef.current.src = initialFrameUrl;
         
         videoRef.current.onload = () => {
           console.log('✅ Initial frame loaded successfully');
-          console.log('📏 Frame dimensions:', videoRef.current.naturalWidth, 'x', videoRef.current.naturalHeight);
+          console.log('� Frame dimensions:', videoRef.current.naturalWidth, 'x', videoRef.current.naturalHeight);
           setLastUpdate(new Date());
         };
         
@@ -133,7 +105,7 @@ function CameraViewer() {
 
   const stopStream = () => {
     setIsStreaming(false);
-    console.log('🛑 Stopping camera stream...');
+    console.log('� Stopping camera stream...');
     
     // Clear frame refresh interval
     if (videoRef.current && videoRef.current.frameInterval) {
@@ -181,17 +153,17 @@ function CameraViewer() {
             </button>
           )}
           
-          {/* Debug button to test direct image URL */}
+          {/* Test button to verify direct URL works */}
           <button 
             onClick={() => {
-              const testUrl = `${CAMERA_API_URL}/api/stream/latest.jpg?t=${Date.now()}`;
+              const testUrl = `${CAMERA_URL}?t=${Date.now()}`;
               console.log('🧪 Testing direct URL:', testUrl);
               window.open(testUrl, '_blank');
             }}
             className="control-btn"
             style={{ marginLeft: '10px', fontSize: '12px' }}
           >
-            Test Direct URL
+            Test URL
           </button>
         </div>
       </div>
@@ -202,9 +174,7 @@ function CameraViewer() {
             <div className="placeholder-content">
               <Wifi size={48} className={isHealthy ? "healthy" : "unhealthy"} />
               <p>{isLoading ? "Checking camera status..." : isHealthy ? "Click Start Stream to view camera" : "Camera service unavailable"}</p>
-              {isHealthy && (
-                <p className="camera-url">Source: {CAMERA_API_URL}</p>
-              )}
+              <p className="camera-url">Source: {CAMERA_URL}</p>
             </div>
           </div>
         ) : (
@@ -213,6 +183,7 @@ function CameraViewer() {
               ref={videoRef}
               alt="Camera Stream"
               className="camera-image"
+              style={{ maxWidth: '100%', height: 'auto' }}
             />
             {lastUpdate && (
               <div className="frame-info">
