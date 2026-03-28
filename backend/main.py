@@ -7,7 +7,8 @@ import sys
 import os
 sys.path.append('..')
 
-# Import auth functions
+# Import database and auth functions
+from postgre.database import init_db_pool, create_default_users, get_user_by_username
 from auth import (
     create_access_token, get_current_user,
     Token, User, ACCESS_TOKEN_EXPIRE_MINUTES, verify_password, get_password_hash
@@ -30,10 +31,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Startup event - NO database dependency
+# Startup event - with database connection
 @app.on_event("startup")
 async def startup_event():
     print("🚀 SMOKI Backend API starting up...")
+    try:
+        init_db_pool()
+        create_default_users()
+        print("✓ Database connected and initialized")
+    except Exception as e:
+        print(f"⚠️ Database initialization failed: {e}")
+        print("⚠️ Using fallback authentication")
     print("📊 Available endpoints: /docs")
 
 # Shutdown event
@@ -45,8 +53,8 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
-# Working credentials - these will work immediately
-WORKING_USERS = {
+# Fallback users in case database fails
+FALLBACK_USERS = {
     "admin": {
         "username": "admin",
         "password_hash": get_password_hash("admin123"),
@@ -72,22 +80,40 @@ def login(login_data: LoginRequest):
     """Authenticate user and return JWT token"""
     try:
         print(f"[LOGIN] Attempting login for user: {login_data.username}")
-        print(f"[LOGIN] Available users: {list(WORKING_USERS.keys())}")
         
-        # Check working users
-        user_data = WORKING_USERS.get(login_data.username)
+        # Try database authentication first
+        try:
+            user_data = get_user_by_username(login_data.username)
+            if user_data and verify_password(login_data.password, user_data['password_hash']):
+                print(f"[LOGIN] Database authentication successful for: {login_data.username}")
+                
+                access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+                access_token = create_access_token(
+                    data={"sub": user_data['username'], "role": user_data['role']},
+                    expires_delta=access_token_expires
+                )
+                
+                return {
+                    "access_token": access_token,
+                    "token_type": "bearer",
+                    "role": user_data['role'],
+                    "username": user_data['username']
+                }
+        except Exception as db_error:
+            print(f"[LOGIN] Database auth failed: {db_error}")
+        
+        # Fallback to hardcoded users
+        print(f"[LOGIN] Trying fallback authentication for: {login_data.username}")
+        user_data = FALLBACK_USERS.get(login_data.username)
         if not user_data:
-            print(f"[LOGIN] User {login_data.username} not found")
+            print(f"[LOGIN] User {login_data.username} not found in fallback")
             raise HTTPException(status_code=401, detail="Incorrect username or password")
         
-        print(f"[LOGIN] User found: {user_data['username']}")
-        
-        # Verify password
         if not verify_password(login_data.password, user_data['password_hash']):
             print(f"[LOGIN] Invalid password for user: {login_data.username}")
             raise HTTPException(status_code=401, detail="Incorrect username or password")
         
-        print(f"[LOGIN] Password verified for user: {login_data.username}")
+        print(f"[LOGIN] Fallback authentication successful for: {login_data.username}")
         
         # Create token
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -95,8 +121,6 @@ def login(login_data: LoginRequest):
             data={"sub": user_data['username'], "role": user_data['role']},
             expires_delta=access_token_expires
         )
-        
-        print(f"[LOGIN] Token created for user: {login_data.username}")
         
         return {
             "access_token": access_token,
@@ -140,51 +164,106 @@ def get_server_time():
         "timezone": "UTC" if datetime.now().astimezone().utcoffset().total_seconds() == 0 else str(datetime.now().astimezone().tzinfo)
     }
 
-# Mock sensor endpoints
+# Real sensor endpoints - database only
 @app.get("/api/sensors/data")
 def get_sensor_data(limit: int = 10):
-    """Get mock sensor readings"""
-    return {
-        "success": True, 
-        "data": [
-            {
-                "id": 1,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "temperature": 25.5,
-                "humidity": 60.2,
-                "pressure": 1013.25,
-                "pm25": 8.5,
-                "pm10": 12.3
-            }
-        ]
-    }
+    """Get latest sensor readings from database"""
+    try:
+        from postgre.database import get_latest_sensor_data
+        data = get_latest_sensor_data(limit=limit)
+        return {"success": True, "data": data}
+    except Exception as e:
+        print(f"[SENSORS] Database error: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @app.get("/api/sensors/latest")
 def get_latest_reading():
-    """Get mock latest sensor reading"""
-    return {
-        "success": True,
-        "data": {
-            "id": 1,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "temperature": 25.5,
-            "humidity": 60.2,
-            "pressure": 1013.25,
-            "pm25": 8.5,
-            "pm10": 12.3
-        }
-    }
+    """Get the most recent sensor reading from database"""
+    try:
+        from postgre.database import get_latest_sensor_data
+        data = get_latest_sensor_data(limit=1)
+        if data:
+            return {"success": True, "data": data[0]}
+        else:
+            return {"success": True, "data": None}
+    except Exception as e:
+        print(f"[SENSORS] Database error: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @app.get("/api/sensors/status")
 def get_sensor_status():
-    """Get mock sensor status"""
-    return {
-        "success": True,
-        "connected": True,
-        "last_update": datetime.now(timezone.utc).isoformat(),
-        "seconds_since_update": 5.2,
-        "timeout_threshold_seconds": 30
-    }
+    """Get sensor connection status and last update time"""
+    try:
+        from postgre.database import get_latest_sensor_data
+        data = get_latest_sensor_data(limit=1)
+        if data:
+            last_update = data[0].get('timestamp')
+            if last_update:
+                # Parse timestamp and check if it's older than 30 seconds
+                from datetime import datetime
+                
+                # Handle both string and datetime objects
+                if isinstance(last_update, str):
+                    last_update_dt = datetime.fromisoformat(last_update.replace('Z', '+00:00'))
+                else:
+                    last_update_dt = last_update
+                    
+                current_time = datetime.now(timezone.utc)
+                time_diff = (current_time - last_update_dt).total_seconds()  # In seconds
+                
+                is_timeout = time_diff > 30  # 30 seconds timeout
+                
+                return {
+                    "success": True,
+                    "connected": not is_timeout,
+                    "last_update": str(last_update),
+                    "seconds_since_update": round(time_diff, 2),
+                    "timeout_threshold_seconds": 30
+                }
+        
+        return {
+            "success": True,
+            "connected": False,
+            "last_update": None,
+            "seconds_since_update": None,
+            "timeout_threshold_seconds": 30
+        }
+    except Exception as e:
+        print(f"[SENSORS] Database error: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+class SensorData(BaseModel):
+    temperature: float | None = None
+    humidity: float | None = None
+    pressure: float | None = None
+    vocs: float | None = None
+    nitrogen_dioxide: float | None = None
+    carbon_monoxide: float | None = None
+    pm25: float | None = None
+    pm10: float | None = None
+
+@app.post("/api/sensors/data")
+def add_sensor_data(data: SensorData):
+    """Add new sensor reading to database (No auth required for ESP32)"""
+    try:
+        from postgre.database import insert_sensor_data
+        result = insert_sensor_data(
+            temperature=data.temperature,
+            humidity=data.humidity,
+            pressure=data.pressure,
+            vocs=data.vocs,
+            nitrogen_dioxide=data.nitrogen_dioxide,
+            carbon_monoxide=data.carbon_monoxide,
+            pm25=data.pm25,
+            pm10=data.pm10
+        )
+        if result:
+            return {"success": True, "data": result}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to insert data")
+    except Exception as e:
+        print(f"[SENSORS] Insert error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ============ CORRELATION API ENDPOINTS ============
 
