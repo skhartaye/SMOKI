@@ -6,6 +6,7 @@
 [build.environment]
   SKIP_CACHE = "false"
   VITE_API_URL = "https://smoki-backend.onrender.com"
+  VITE_CAMERA_API_URL = "https://smoki-backend-rpi.onrender.com"
 
 [[redirects]]
   from = "/*"
