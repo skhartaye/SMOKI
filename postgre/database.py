@@ -1660,3 +1660,85 @@ def get_all_images_list(limit=100):
         except Exception as e:
             print(f"Error fetching images list: {e}")
             return []
+
+# ============ USER MANAGEMENT FUNCTIONS ============
+
+def get_user_by_username(username):
+    """Get user by username for authentication"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                # Create users table if it doesn't exist
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS users (
+                        id SERIAL PRIMARY KEY,
+                        username VARCHAR(255) UNIQUE NOT NULL,
+                        password_hash VARCHAR(255) NOT NULL,
+                        role VARCHAR(50) DEFAULT 'user',
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                    );
+                """)
+                
+                # Check if admin user exists, if not create it
+                cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'admin'")
+                admin_exists = cursor.fetchone()[0]
+                
+                if admin_exists == 0:
+                    # Create default admin user (password: admin123)
+                    from auth import get_password_hash
+                    admin_hash = get_password_hash("admin123")
+                    cursor.execute("""
+                        INSERT INTO users (username, password_hash, role)
+                        VALUES ('admin', %s, 'admin')
+                    """, (admin_hash,))
+                    conn.commit()
+                    print("✅ Created default admin user (username: admin, password: admin123)")
+                
+                # Get the requested user
+                cursor.execute("""
+                    SELECT id, username, password_hash, role, created_at
+                    FROM users
+                    WHERE username = %s
+                """, (username,))
+                
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        'id': row[0],
+                        'username': row[1],
+                        'password_hash': row[2],
+                        'role': row[3],
+                        'created_at': row[4]
+                    }
+                return None
+                
+        except Exception as e:
+            print(f"Error getting user by username: {e}")
+            return None
+
+def create_user(username, password_hash, role='user'):
+    """Create a new user"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO users (username, password_hash, role)
+                    VALUES (%s, %s, %s)
+                    RETURNING id, username, role, created_at
+                """, (username, password_hash, role))
+                
+                row = cursor.fetchone()
+                conn.commit()
+                
+                if row:
+                    return {
+                        'id': row[0],
+                        'username': row[1],
+                        'role': row[2],
+                        'created_at': row[3]
+                    }
+                return None
+                
+        except Exception as e:
+            print(f"Error creating user: {e}")
+            return None

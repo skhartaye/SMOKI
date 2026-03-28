@@ -117,7 +117,8 @@ def login(login_data: LoginRequest):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Login error: {e}")
+        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
 
 @app.get("/api/auth/me")
 def get_me(current_user: User = Depends(get_current_user)):
