@@ -10,7 +10,8 @@ sys.path.insert(0, '../postgre')
 from database import (
     register_vehicle, get_top_violators, get_vehicle_ranking,
     insert_vehicle_detection, create_violation, get_recent_violations,
-    create_notification, get_unread_notifications, mark_notification_read
+    create_notification, get_unread_notifications, mark_notification_read,
+    get_recent_vehicle_detections
 )
 from auth import get_current_user
 

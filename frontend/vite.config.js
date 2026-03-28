@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://smoki-backend-rpi.onrender.com',
+        target: 'https://smoki-backend.onrender.com',
         changeOrigin: true,
         secure: true
       }

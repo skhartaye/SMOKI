@@ -19,7 +19,7 @@ function WebRTCViewer() {
   const countdownIntervalRef = useRef(null);
   const isStreamingRef = useRef(false);
 
-  const API_URL = import.meta.env.VITE_API_URL || 'https://smoki-backend-rpi.onrender.com';
+  const API_URL = import.meta.env.VITE_API_URL || 'https://smoki-backend.onrender.com';
   const token = localStorage.getItem('token');
 
   useEffect(() => {
@@ -379,7 +379,7 @@ function WebRTCViewer() {
                   <button
                     className="test-button"
                     onClick={() => {
-                      const testUrl = 'https://smoki-backend-rpi.onrender.com/api/stream/latest.jpg';
+                      const testUrl = 'https://smoki-backend.onrender.com/api/stream/latest.jpg';
                       console.log('🧪 Testing direct URL:', testUrl);
                       window.open(testUrl, '_blank');
                     }}

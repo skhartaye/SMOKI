@@ -13,7 +13,7 @@ function CameraViewer() {
   const [lastUpdate, setLastUpdate] = useState(null);
 
   const detectionIntervalRef = useRef(null);
-  const API_URL = import.meta.env.VITE_API_URL || 'https://smoki-backend-rpi.onrender.com';
+  const API_URL = import.meta.env.VITE_API_URL || 'https://smoki-backend.onrender.com';
   const token = localStorage.getItem('token');
 
   // Check camera health on mount
