@@ -5,6 +5,7 @@
 
 [build.environment]
   SKIP_CACHE = "false"
+  VITE_API_URL = "https://smoki-backend.onrender.com"
 
 [[redirects]]
   from = "/*"
