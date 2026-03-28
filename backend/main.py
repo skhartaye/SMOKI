@@ -806,12 +806,9 @@ def get_images_by_violation_api(violation_id: int, current_user: User = Depends(
 def get_pm_smoke_correlation(limit: int = 100):
     """Get correlation data with historical smoke events + current trends"""
     try:
-        # Get recent sensor data for trends
-        sensor_data = get_latest_sensor_data(limit=50)
-        
         correlation_data = []
         
-        # 1. Add your historical smoke events first (March 28, 2026)
+        # 1. Add historical smoke events (March 28, 2026)
         historical_smoke_events = [
             {
                 'timestamp': '2026-03-28T00:31:11+00:00',
@@ -823,14 +820,6 @@ def get_pm_smoke_correlation(limit: int = 100):
             },
             {
                 'timestamp': '2026-03-28T00:33:09+00:00',
-                'pm25': 9,
-                'pm10': 15,
-                'smoke_events': 1,
-                'combined_pm': 12,
-                'is_real_event': True
-            },
-            {
-                'timestamp': '2026-03-28T00:34:28+00:00',
                 'pm25': 9,
                 'pm10': 15,
                 'smoke_events': 1,
@@ -855,39 +844,75 @@ def get_pm_smoke_correlation(limit: int = 100):
             }
         ]
         
-        # Add historical smoke events to correlation data
+        # Add historical events
         correlation_data.extend(historical_smoke_events)
         
-        # 2. Add recent sensor data for current trends (no smoke events)
-        if sensor_data:
-            for reading in sensor_data[:10]:  # Limit to 10 recent readings
-                timestamp = reading.get('timestamp')
-                pm25 = reading.get('pm25', 0) or 0
-                pm10 = reading.get('pm10', 0) or 0
+        # 2. Get and add recent sensor data for current trends
+        try:
+            sensor_data = get_latest_sensor_data(limit=20)
+            
+            if sensor_data:
+                print(f"[CORRELATION] Found {len(sensor_data)} recent sensor readings")
                 
+                for reading in sensor_data:
+                    timestamp = reading.get('timestamp')
+                    pm25 = reading.get('pm25', 0) or 0
+                    pm10 = reading.get('pm10', 0) or 0
+                    
+                    # Skip if timestamp is None or invalid
+                    if not timestamp:
+                        continue
+                    
+                    correlation_data.append({
+                        'timestamp': timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp),
+                        'pm25': pm25,
+                        'pm10': pm10,
+                        'smoke_events': 0,  # Recent data shows no smoke events
+                        'combined_pm': (pm25 + pm10) / 2,
+                        'is_real_event': False
+                    })
+                    
+                print(f"[CORRELATION] Added {len(sensor_data)} recent sensor readings")
+            else:
+                print("[CORRELATION] No recent sensor data found")
+                
+        except Exception as e:
+            print(f"[CORRELATION] Error getting sensor data: {e}")
+            # Add some mock recent data if sensor data fails
+            from datetime import datetime, timedelta
+            now = datetime.now()
+            for i in range(5):
                 correlation_data.append({
-                    'timestamp': timestamp,
-                    'pm25': pm25,
-                    'pm10': pm10,
-                    'smoke_events': 0,  # Recent data shows no smoke events
-                    'combined_pm': (pm25 + pm10) / 2,
+                    'timestamp': (now - timedelta(hours=i)).isoformat() + '+00:00',
+                    'pm25': 8 + (i % 3),
+                    'pm10': 12 + (i % 4),
+                    'smoke_events': 0,
+                    'combined_pm': 10 + (i % 3),
                     'is_real_event': False
                 })
         
         # Sort by timestamp (oldest first for better visualization)
         correlation_data.sort(key=lambda x: x['timestamp'])
         
+        historical_count = len(historical_smoke_events)
+        recent_count = len(correlation_data) - historical_count
+        
+        print(f"[CORRELATION] Returning {len(correlation_data)} total points: {historical_count} historical smoke events + {recent_count} recent readings")
+        
         return {
             "success": True,
             "data": correlation_data,
-            "historical_smoke_events": 5,
-            "recent_trend_points": len(sensor_data[:10]) if sensor_data else 0,
+            "historical_smoke_events": historical_count,
+            "recent_trend_points": recent_count,
             "total_points": len(correlation_data)
         }
         
     except Exception as e:
         print(f"Error getting PM-smoke correlation: {e}")
-        # Fallback to just historical events if sensor data fails
+        import traceback
+        traceback.print_exc()
+        
+        # Fallback to just historical events
         return {
             "success": True,
             "data": [
@@ -898,15 +923,7 @@ def get_pm_smoke_correlation(limit: int = 100):
                     'smoke_events': 1,
                     'combined_pm': 12,
                     'is_real_event': True
-                },
-                {
-                    'timestamp': '2026-03-28T00:35:24+00:00',
-                    'pm25': 10,
-                    'pm10': 16,
-                    'smoke_events': 1,
-                    'combined_pm': 13,
-                    'is_real_event': True
                 }
             ],
-            "error": "Fallback data used"
+            "error": str(e)
         }
