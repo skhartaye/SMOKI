@@ -1,0 +1,13 @@
+RPi Analysis and Recovery Logic Summary
+
+The Raspberry Pi system operates by capturing frames from the Pi camera, running Hailo AI inference for object detection, saving annotated frames to disk, and posting detection data to the backend API. However, the current recovery logic has significant gaps that result in data loss during various failure scenarios.
+
+When inference fails, the system catches exceptions and simply continues to the next model, skipping the failed detection entirely. HTTP POST failures are handled by printing error messages but the detection data is permanently lost with no retry mechanism or local queuing. Frame saving failures result in lost images with no retry attempts, and when the inference queue becomes full, frames are silently dropped without any recovery attempt.
+
+The Arduino sensor system has similar recovery issues. WiFi disconnections cause sensor readings to be lost permanently since there's no auto-reconnection logic in the main loop. When sensors fail to read, the system skips those readings indefinitely without attempting to reinitialize the hardware. POST failures result in complete data loss as there's no local buffering or retry mechanism implemented.
+
+Both systems lack proper recovery mechanisms for their critical failure points. The Arduino system needs WiFi auto-reconnection in the main loop, local SPIFFS/LittleFS buffering for failed POST requests with retry logic when connection is restored, and sensor reinitialization after consecutive failures. The RPi system requires a failed POST retry queue to handle backend downtime, local JSON backup files for detection data when the backend is unreachable, camera reconnection logic when capture fails, and Hailo device reinitialization when inference crashes.
+
+Currently, when WiFi drops on either system, POST requests are skipped and data is lost. Sensor failures on Arduino cause permanent reading gaps, while model failures on RPi are simply skipped. POST failures result in complete data loss on both platforms. Power cuts destroy all Arduino data but RPi frames in ~/video_pi/ survive on disk. Backend downtime causes data loss on both systems, though RPi saves frames locally while losing POST data. Camera crashes cause the entire RPi program to terminate, and Hailo crashes similarly bring down the whole system.
+
+The only real recovery mechanism currently implemented is that rpi_snap.py saves frames to ~/video_pi/ on disk, which survive even if the backend is down or the program crashes. All other failure scenarios result in permanent data loss, highlighting the need for comprehensive recovery logic implementation across both the Arduino sensor system and the Raspberry Pi inference system to ensure data integrity and system resilience.

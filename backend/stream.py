@@ -387,3 +387,18 @@ async def debug_stream():
             "plate_crop": "/api/stream/plate-crop"
         }
     }
+
+@router.get("/plate-events")
+async def get_plate_events_endpoint(limit: int = 50):
+    """Get recent license plate OCR events from database"""
+    try:
+        from database import get_plate_events
+        events = get_plate_events(limit)
+        return {
+            "success": True,
+            "data": events,
+            "count": len(events)
+        }
+    except Exception as e:
+        print(f"[PLATE] Error fetching plate events: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
