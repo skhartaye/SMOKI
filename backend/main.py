@@ -8,13 +8,21 @@ import os
 sys.path.append('..')
 
 # Import database and auth functions
-from postgre.database import init_db_pool, create_default_users, get_user_by_username
+from database import init_db_pool, create_default_users, get_user_by_username
 from auth import (
     create_access_token, get_current_user,
     Token, User, ACCESS_TOKEN_EXPIRE_MINUTES, verify_password, get_password_hash
 )
 
+# Import routers
+from vehicles import router as vehicles_router
+from stream import router as stream_router
+
 app = FastAPI()
+
+# Include routers
+app.include_router(vehicles_router)
+app.include_router(stream_router)
 
 # Enable CORS
 app.add_middleware(
@@ -169,7 +177,7 @@ def get_server_time():
 def get_sensor_data(limit: int = 10):
     """Get latest sensor readings from database"""
     try:
-        from postgre.database import get_latest_sensor_data
+        from database import get_latest_sensor_data
         data = get_latest_sensor_data(limit=limit)
         return {"success": True, "data": data}
     except Exception as e:
@@ -180,7 +188,7 @@ def get_sensor_data(limit: int = 10):
 def get_latest_reading():
     """Get the most recent sensor reading from database"""
     try:
-        from postgre.database import get_latest_sensor_data
+        from database import get_latest_sensor_data
         data = get_latest_sensor_data(limit=1)
         if data:
             return {"success": True, "data": data[0]}
@@ -194,7 +202,7 @@ def get_latest_reading():
 def get_sensor_status():
     """Get sensor connection status and last update time"""
     try:
-        from postgre.database import get_latest_sensor_data
+        from database import get_latest_sensor_data
         data = get_latest_sensor_data(limit=1)
         if data:
             last_update = data[0].get('timestamp')
@@ -246,7 +254,7 @@ class SensorData(BaseModel):
 def add_sensor_data(data: SensorData):
     """Add new sensor reading to database (No auth required for ESP32)"""
     try:
-        from postgre.database import insert_sensor_data
+        from database import insert_sensor_data
         result = insert_sensor_data(
             temperature=data.temperature,
             humidity=data.humidity,
