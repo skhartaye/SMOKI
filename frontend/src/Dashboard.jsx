@@ -340,62 +340,8 @@ function Dashboard() {
       }
     } catch (error) {
       console.error('Error fetching correlation data:', error);
-      
-      // Show mock data with historical smoke events for demonstration
-      console.log('Using mock correlation data with historical smoke events');
-      const mockData = [
-        { 
-          time: '04:39', 
-          date: '3/27/2026',
-          dateTime: '3/27/2026 04:39',
-          fullTimestamp: '2026-03-27 04:39:28', 
-          pm25: 9, 
-          pm10: 15, 
-          smoke_events: 1, 
-          is_real_event: true 
-        },
-        { 
-          time: '04:42', 
-          date: '3/27/2026',
-          dateTime: '3/27/2026 04:42',
-          fullTimestamp: '2026-03-27 04:42:25', 
-          pm25: 10, 
-          pm10: 16, 
-          smoke_events: 1, 
-          is_real_event: true 
-        },
-        { 
-          time: '05:55', 
-          date: '3/27/2026',
-          dateTime: '3/27/2026 05:55',
-          fullTimestamp: '2026-03-27 05:55:10', 
-          pm25: 11, 
-          pm10: 17, 
-          smoke_events: 1, 
-          is_real_event: true 
-        },
-        { 
-          time: '14:00', 
-          date: '3/28/2026',
-          dateTime: '3/28/2026 14:00',
-          fullTimestamp: '2026-03-28 14:00:00', 
-          pm25: 15.2, 
-          pm10: 28.5, 
-          smoke_events: 0, 
-          is_real_event: false 
-        },
-        { 
-          time: '14:30', 
-          date: '3/28/2026',
-          dateTime: '3/28/2026 14:30',
-          fullTimestamp: '2026-03-28 14:30:00', 
-          pm25: 12.8, 
-          pm10: 24.1, 
-          smoke_events: 0, 
-          is_real_event: false 
-        }
-      ];
-      setCorrelationData(mockData);
+      // No fallback data - show empty state
+      setCorrelationData([]);
     }
   };
 
@@ -680,15 +626,8 @@ function Dashboard() {
                 const vehicleClasses = ['passenger', 'puv', 'services', 'two_wheel'];
                 if (vehicleClasses.includes(className)) {
                   detectionType = 'Vehicle';
-                  // Generate mock license plate
-                  const plateNum = String(detectionTime.getMinutes()).padStart(2, '0') + 
-                                 String(detectionTime.getSeconds()).padStart(2, '0') + index;
-                  let platePrefix = 'VEH';
-                  if (className === 'passenger') platePrefix = 'ABC';
-                  else if (className === 'puv') platePrefix = 'PUV';
-                  else if (className === 'services') platePrefix = 'SVC';
-                  else if (className === 'two_wheel') platePrefix = 'MC';
-                  plateNumber = `${platePrefix}-${plateNum}`;
+                  // Use actual license plate from detection metadata if available
+                  plateNumber = detection.plate_text || 'Not detected';
                 } 
                 // Smoke detection logic - exact class names from RPi
                 else if (className === 'smoke_black' || className === 'smoke_white') {
@@ -1550,6 +1489,14 @@ function Dashboard() {
       <main className="main-content">
           {activePage === "dashboard" && (
             <div className="dashboard-page-container">
+              {/* Real-time Data Disclaimer */}
+              <div className="data-disclaimer-banner">
+                <span className="disclaimer-icon">⚠️</span>
+                <span className="disclaimer-text">
+                  Detection data is near real-time (not live real-time) - Updates may have a delay of 1-3 seconds
+                </span>
+              </div>
+              
               <div className="dashboard-layout">
                 <div className="dashboard-camera-section">
                   <div className="camera-feed-box">
@@ -1579,39 +1526,30 @@ function Dashboard() {
                       </div>
                       <div className="detections-table-body">
                         {(() => {
-                          // Always show dummy data as base
-                          const dummyDetections = [
-                            { id: 'dummy-1', time: '14:32:15', type: 'Vehicle', object: 'passenger', confidence: '92.3', plate: 'ABC-1234' },
-                            { id: 'dummy-2', time: '14:31:58', type: 'Smoke', object: 'smoke_black', confidence: '87.6', level: 'High' },
-                            { id: 'dummy-3', time: '14:31:42', type: 'Vehicle', object: 'puv', confidence: '89.1', plate: 'PUV-5678' },
-                            { id: 'dummy-4', time: '14:31:28', type: 'License', object: 'license_plate', confidence: '94.7', plate: 'DEF-9012' },
-                            { id: 'dummy-5', time: '14:31:15', type: 'Vehicle', object: 'two_wheel', confidence: '85.4', plate: 'MC-3456' },
-                            { id: 'dummy-6', time: '14:30:59', type: 'Smoke', object: 'smoke_white', confidence: '76.2', level: 'Medium' },
-                            { id: 'dummy-7', time: '14:30:44', type: 'Vehicle', object: 'services', confidence: '91.8', plate: 'SVC-7890' },
-                            { id: 'dummy-8', time: '14:30:31', type: 'Vehicle', object: 'passenger', confidence: '88.9', plate: 'XYZ-2468' },
-                            { id: 'dummy-9', time: '14:30:18', type: 'Smoke', object: 'smoke_black', confidence: '91.2', level: 'High' },
-                            { id: 'dummy-10', time: '14:30:05', type: 'Vehicle', object: 'puv', confidence: '86.7', plate: 'PUV-9999' },
-                            { id: 'dummy-11', time: '14:29:52', type: 'License', object: 'license_plate', confidence: '93.1', plate: 'GHI-5555' },
-                            { id: 'dummy-12', time: '14:29:39', type: 'Vehicle', object: 'services', confidence: '88.4', plate: 'SVC-1111' }
-                          ];
-                          
-                          // Convert real detections to dummy format and prepend them
-                          const realDetectionsFormatted = allDetections.length > 0 ? allDetections.slice(0, 5).map((detection) => ({
+                          // Show only real detection data
+                          const realDetectionsFormatted = allDetections.length > 0 ? allDetections.slice(0, 10).map((detection) => ({
                             id: detection.id,
                             time: new Date(detection.timestamp).toLocaleTimeString(),
                             type: detection.detection_type || 'Unknown',
                             object: detection.class_name || 'Unknown',
                             confidence: detection.confidence || '0.0',
-                            plate: detection.license_plate || 'N/A',
+                            plate: detection.license_plate || 'Not detected',
                             level: detection.smoke_level || 'None',
-                            isReal: true // Mark as real data
+                            isReal: true
                           })) : [];
                           
-                          // Combine real data (first) with dummy data, limit to 10 total
-                          const combinedDetections = [...realDetectionsFormatted, ...dummyDetections].slice(0, 10);
+                          // Show message if no real data
+                          if (realDetectionsFormatted.length === 0) {
+                            return (
+                              <div className="no-data-message">
+                                <p>No recent detections available</p>
+                                <p className="data-disclaimer">⚠️ Note: Detection data is near real-time, not live real-time</p>
+                              </div>
+                            );
+                          }
                           
-                          return combinedDetections.map((detection) => (
-                            <div key={detection.id} className={`detection-row ${detection.isReal ? 'real-detection' : 'dummy-detection'}`}>
+                          return realDetectionsFormatted.map((detection) => (
+                            <div key={detection.id} className="detection-row real-detection">
                               <div className="detection-col timestamp">
                                 {detection.time}
                               </div>
@@ -1735,73 +1673,31 @@ function Dashboard() {
                     </div>
                     <div className="ranking-list">
                       {(() => {
-                        // Always show dummy data as base
-                        const dummyRanking = [
-                          { 
-                            id: 1, 
-                            plate: 'ABC-1234', 
-                            violations: 18, 
-                            status: 'critical', 
-                            lastSeen: '2 min ago', 
-                            vehicleType: 'Passenger Car',
-                            smokeLevel: 'High'
-                          },
-                          { 
-                            id: 2, 
-                            plate: 'PUV-5678', 
-                            violations: 14, 
-                            status: 'critical', 
-                            lastSeen: '5 min ago', 
-                            vehicleType: 'Public Utility Vehicle',
-                            smokeLevel: 'High'
-                          },
-                          { 
-                            id: 3, 
-                            plate: 'XYZ-9012', 
-                            violations: 11, 
-                            status: 'warning', 
-                            lastSeen: '8 min ago', 
-                            vehicleType: 'Passenger Car',
-                            smokeLevel: 'Medium'
-                          },
-                          { 
-                            id: 4, 
-                            plate: 'SVC-3456', 
-                            violations: 7, 
-                            status: 'warning', 
-                            lastSeen: '12 min ago', 
-                            vehicleType: 'Service Vehicle',
-                            smokeLevel: 'Medium'
-                          },
-                          { 
-                            id: 5, 
-                            plate: 'MC-7890', 
-                            violations: 4, 
-                            status: 'caution', 
-                            lastSeen: '15 min ago', 
-                            vehicleType: 'Motorcycle',
-                            smokeLevel: 'Low'
-                          }
-                        ];
-                        
-                        // Convert real vehicle ranking data and prepend it
+                        // Show only real vehicle ranking data
                         const hasRealData = vehicleRanking && vehicleRanking.length > 0;
-                        const realRankingFormatted = hasRealData ? vehicleRanking.slice(0, 2).map((vehicle, index) => ({
+                        
+                        if (!hasRealData) {
+                          return (
+                            <div className="no-data-message">
+                              <p>No vehicle violations recorded</p>
+                              <p className="data-disclaimer">⚠️ Note: Violation data is near real-time, not live real-time</p>
+                            </div>
+                          );
+                        }
+                        
+                        const realRankingFormatted = vehicleRanking.slice(0, 5).map((vehicle, index) => ({
                           id: `real_${vehicle.id}`,
                           plate: vehicle.license_plate,
-                          violations: vehicle.violations + 20, // Add to base violations to show as higher priority
-                          status: 'critical', // Real data gets critical status
+                          violations: vehicle.violations,
+                          status: vehicle.violations > 10 ? 'critical' : vehicle.violations > 5 ? 'warning' : 'caution',
                           lastSeen: new Date(vehicle.last_detected).toLocaleTimeString(),
                           vehicleType: vehicle.vehicle_type || 'Vehicle',
                           smokeLevel: vehicle.smoke_detected ? 'High' : 'Low',
                           isReal: true
-                        })) : [];
+                        }));
                         
-                        // Combine real data (first) with dummy data, limit to 5 total
-                        const combinedRanking = [...realRankingFormatted, ...dummyRanking].slice(0, 5);
-                        
-                        return combinedRanking.map((vehicle, index) => (
-                          <div key={vehicle.id} className={`ranking-item ${vehicle.isReal ? 'real-ranking' : 'dummy-ranking'}`}>
+                        return realRankingFormatted.map((vehicle, index) => (
+                          <div key={vehicle.id} className="ranking-item real-ranking">
                             <div className="ranking-position">#{index + 1}</div>
                             <div className="ranking-details">
                               <div className="ranking-plate">{vehicle.plate}</div>

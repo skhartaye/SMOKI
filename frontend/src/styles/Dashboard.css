@@ -5766,3 +5766,49 @@ chatgpt-sidebar {
     font-size: 10px;
   }
 }
+/* Data Disclaimer Banner */
+.data-disclaimer-banner {
+  background: linear-gradient(135deg, #fff3cd, #ffeaa7);
+  border: 1px solid #ffc107;
+  border-radius: 8px;
+  padding: 12px 20px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 2px 4px rgba(255, 193, 7, 0.1);
+}
+
+.disclaimer-icon {
+  font-size: 18px;
+  color: #856404;
+}
+
+.disclaimer-text {
+  color: #856404;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+/* No Data Messages */
+.no-data-message {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+}
+
+.no-data-message p {
+  margin: 8px 0;
+}
+
+.no-data-message .data-disclaimer {
+  font-size: 12px;
+  color: #999;
+  font-style: italic;
+}
+
+/* Remove dummy data styling since we're not using it anymore */
+.dummy-detection,
+.dummy-ranking {
+  display: none;
+}
