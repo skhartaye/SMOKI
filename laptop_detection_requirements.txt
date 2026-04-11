@@ -1,0 +1,22 @@
+# Laptop Video Detection Requirements
+# Install with: pip install -r laptop_detection_requirements.txt
+
+# Core ML and Computer Vision
+torch>=2.0.0
+torchvision>=0.15.0
+ultralytics>=8.0.0
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# OCR for License Plates
+easyocr>=1.7.0
+
+# API Communication
+requests>=2.31.0
+
+# Environment and Configuration
+python-dotenv>=1.0.0
+
+# Optional: GPU acceleration (uncomment if you have CUDA)
+# torch>=2.0.0+cu118 --index-url https://download.pytorch.org/whl/cu118
+# torchvision>=0.15.0+cu118 --index-url https://download.pytorch.org/whl/cu118
