@@ -142,7 +142,7 @@ async def process_detections(frame_data: bytes, metadata: dict):
 async def create_smoke_violations(vehicle_detections: list, location: str, timestamp: datetime):
     """Create violations for vehicles detected with smoke"""
     try:
-        for vehicle in vehicle_detections:
+        for i, vehicle in enumerate(vehicle_detections):
             # Extract license plate from OCR data if available
             vehicle_type = vehicle.get('class_name', 'unknown')
             confidence = vehicle.get('confidence', 0.0)
@@ -150,9 +150,11 @@ async def create_smoke_violations(vehicle_detections: list, location: str, times
             # Try to get license plate from detection metadata
             license_plate = vehicle.get('plate_text', '')
             if not license_plate:
-                # No license plate detected - skip this vehicle for violation creation
-                print(f"[VIOLATION] Skipping vehicle {vehicle_type} - no license plate detected")
-                continue
+                # Generate a temporary identifier for vehicles without readable plates
+                # This allows violation tracking even when OCR fails
+                time_suffix = f"{timestamp.hour:02d}{timestamp.minute:02d}{timestamp.second:02d}"
+                license_plate = f"UNREAD-{vehicle_type.upper()}-{time_suffix}-{i+1}"
+                print(f"[VIOLATION] No license plate detected, using temporary ID: {license_plate}")
             
             print(f"[VIOLATION] Creating smoke violation for {license_plate} ({vehicle_type})")
             
