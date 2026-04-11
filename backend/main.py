@@ -247,19 +247,6 @@ def get_recent_detection_summaries(limit: int = 50, current_user: User = Depends
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/vehicles/detections")
-def get_vehicle_detections(limit: int = 10, current_user: User = Depends(get_current_user)):
-    """Get recent vehicle detections"""
-    try:
-        from vehicles import get_recent_violations
-        violations = get_recent_violations(limit)
-        return {
-            "success": True,
-            "data": violations
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.get("/api/time")
 def get_server_time():
     """Get server time for debugging timezone issues"""
@@ -268,6 +255,66 @@ def get_server_time():
         "server_time_local": datetime.now().isoformat(),
         "timezone": "UTC" if datetime.now().astimezone().utcoffset().total_seconds() == 0 else str(datetime.now().astimezone().tzinfo)
     }
+
+# Temporary workaround for vehicles/detections/recent endpoint
+@app.get("/api/vehicles/detections/recent")
+def get_recent_vehicle_detections_temp(limit: int = 50):
+    """Temporary endpoint for vehicle detections until vehicles.py is fixed"""
+    try:
+        from postgre.database import get_recent_vehicle_detections
+        detections = get_recent_vehicle_detections(limit)
+        return {
+            "success": True,
+            "data": detections,
+            "count": len(detections)
+        }
+    except Exception as e:
+        print(f"Error getting vehicle detections: {e}")
+        return {
+            "success": True,
+            "data": [],
+            "count": 0
+        }
+
+# Temporary workaround for vehicles/violations/recent endpoint
+@app.get("/api/vehicles/violations/recent")
+def get_recent_violations_temp(limit: int = 50):
+    """Temporary endpoint for vehicle violations until vehicles.py is fixed"""
+    try:
+        from postgre.database import get_recent_violations
+        violations = get_recent_violations(limit)
+        return {
+            "success": True,
+            "data": violations,
+            "count": len(violations)
+        }
+    except Exception as e:
+        print(f"Error getting violations: {e}")
+        return {
+            "success": True,
+            "data": [],
+            "count": 0
+        }
+
+# Temporary workaround for vehicles/ranking endpoint
+@app.get("/api/vehicles/ranking")
+def get_vehicle_ranking_temp():
+    """Temporary endpoint for vehicle ranking until vehicles.py is fixed"""
+    try:
+        from postgre.database import get_vehicle_ranking
+        ranking = get_vehicle_ranking()
+        return {
+            "success": True,
+            "data": ranking,
+            "count": len(ranking)
+        }
+    except Exception as e:
+        print(f"Error getting vehicle ranking: {e}")
+        return {
+            "success": True,
+            "data": [],
+            "count": 0
+        }
 
 @app.post("/api/sensors/data")
 def add_sensor_data(data: SensorData):
@@ -383,6 +430,44 @@ def delete_sensor_record(record_id: int, current_user: User = Depends(get_curren
             return {"success": True, "message": f"Record {record_id} deleted"}
         else:
             raise HTTPException(status_code=404, detail="Record not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/sensors/cleanup/invalid")
+def cleanup_invalid_sensor_data(current_user: User = Depends(get_current_superadmin)):
+    """Delete all sensor records with NULL values (SuperAdmin only)"""
+    try:
+        from postgre.database import delete_invalid_sensor_data
+        deleted_count = delete_invalid_sensor_data()
+        return {
+            "success": True, 
+            "message": f"Deleted {deleted_count} invalid sensor records",
+            "deleted_count": deleted_count
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/sensors/cleanup/date-range")
+def cleanup_sensor_data_by_date(
+    start_date: str, 
+    end_date: str, 
+    current_user: User = Depends(get_current_superadmin)
+):
+    """Delete sensor records within a date range (SuperAdmin only)"""
+    try:
+        from postgre.database import delete_sensor_data_by_date_range
+        from datetime import datetime
+        
+        # Parse dates
+        start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        
+        deleted_count = delete_sensor_data_by_date_range(start_dt, end_dt)
+        return {
+            "success": True,
+            "message": f"Deleted {deleted_count} sensor records between {start_date} and {end_date}",
+            "deleted_count": deleted_count
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -580,6 +665,7 @@ def record_plate_event(event: PlateEvent):
 def record_violation_event(event: ViolationEvent):
     """Record violation event (smoke + vehicle in same frame)"""
     try:
+        print(f"[DEBUG] Recording violation event: {event}")
         from postgre.database import insert_violation_event
         event_id = insert_violation_event(
             timestamp=event.timestamp,
@@ -594,15 +680,19 @@ def record_violation_event(event: ViolationEvent):
         )
         
         if event_id:
+            print(f"[DEBUG] Violation event recorded with ID: {event_id}")
             return {
                 "success": True,
                 "event_id": event_id,
                 "message": "Violation event recorded successfully"
             }
         else:
+            print(f"[DEBUG] Failed to get event_id from database")
             raise HTTPException(status_code=500, detail="Failed to record violation event")
     except Exception as e:
         print(f"Error recording violation event: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/detections/all")
@@ -636,6 +726,21 @@ def get_smoke_events_api(limit: int = 50, current_user: User = Depends(get_curre
 @app.get("/api/detections/plate/events")
 def get_plate_events_api(limit: int = 50, current_user: User = Depends(get_current_user)):
     """Get license plate OCR events"""
+    try:
+        from postgre.database import get_plate_events
+        events = get_plate_events(limit=limit)
+        return {
+            "success": True,
+            "data": events,
+            "count": len(events)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Legacy endpoint alias for backward compatibility
+@app.get("/api/stream/plate-events")
+def get_plate_events_legacy(limit: int = 20):
+    """Legacy endpoint - redirects to /api/detections/plate/events"""
     try:
         from postgre.database import get_plate_events
         events = get_plate_events(limit=limit)
