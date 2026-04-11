@@ -168,10 +168,10 @@ async def create_targeted_violations(detections: list, location: str, timestamp:
             
             print(f"[VIOLATION] Processing plate: '{plate_text}' (confidence: {ocr_confidence:.2f})")
             
-            # Only consider plates with meaningful text and good OCR confidence
+            # Only consider plates with meaningful text and reasonable OCR confidence
             if (plate_text and 
-                len(plate_text) >= 3 and 
-                ocr_confidence >= 0.5 and  # Increased confidence threshold
+                len(plate_text) >= 2 and  # Reduced from 3 to 2 characters
+                ocr_confidence >= 0.05 and  # Reduced from 0.5 to 0.05 for more realistic threshold
                 any(c.isalnum() for c in plate_text) and  # Contains alphanumeric characters
                 not plate_text.startswith('UNREAD') and 
                 not plate_text.startswith('UNKNOWN') and 
