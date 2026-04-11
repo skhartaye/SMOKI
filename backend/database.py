@@ -1732,3 +1732,30 @@ def get_all_images_list(limit=100):
         except Exception as e:
             print(f"Error fetching images list: {e}")
             return []
+
+def get_user_by_username(username):
+    """Get user by username for authentication"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                # Get the requested user
+                cursor.execute("""
+                    SELECT id, username, hashed_password, role, created_at
+                    FROM users
+                    WHERE username = %s
+                """, (username,))
+                
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        'id': row[0],
+                        'username': row[1],
+                        'password_hash': row[2],  # Note: using 'password_hash' key to match main.py expectations
+                        'role': row[3],
+                        'created_at': row[4]
+                    }
+                return None
+                
+        except Exception as e:
+            print(f"Error getting user by username: {e}")
+            return None
