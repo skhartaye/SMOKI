@@ -3,7 +3,7 @@ Camera streaming module - serves frame-based stream
 """
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from collections import deque
 import threading
