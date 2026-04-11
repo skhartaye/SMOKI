@@ -16,14 +16,18 @@ from datetime import datetime, timezone
 # Import database functions
 import sys
 sys.path.insert(0, '../postgre')
-from database import insert_vehicle_detection_from_rpi, register_vehicle, create_violation
+from database import insert_vehicle_detection_from_rpi, register_vehicle, create_violation, create_notification
+from image_cropper import DetectionImageCropper
+
+# Import report generator
+from report_generator import SMOKiReportGenerator
 
 router = APIRouter(prefix="/api/stream", tags=["stream"])
 
 class StreamManager:
     def __init__(self):
         self.latest_frame = None
-        self.frame_buffer = deque(maxlen=60)  # Increased from 30 to 60 frames
+        self.frame_buffer = deque(maxlen=30)  # Reduced buffer size for faster updates
         self.latest_metadata = None  # Store latest detection metadata
         self.lock = threading.Lock()
         self.fps = 0
@@ -93,31 +97,14 @@ async def process_detections(frame_data: bytes, metadata: dict):
         else:
             timestamp_dt = datetime.now(timezone.utc)
         
-        # Filter for vehicle and license plate detections
-        vehicle_detections = []
-        license_plates = []
-        smoke_detected = False
+        # Count detection types for logging
+        vehicle_count = sum(1 for d in detections if d.get('class_name', '').lower() in ['passenger', 'puv', 'services', 'two_wheel', 'vehicle'])
+        plate_count = sum(1 for d in detections if 'license' in d.get('class_name', '').lower() or 'plate' in d.get('class_name', '').lower())
+        smoke_count = sum(1 for d in detections if 'smoke' in d.get('class_name', '').lower())
         
-        for detection in detections:
-            class_name = detection.get('class_name', '').lower()
-            confidence = detection.get('confidence', 0.0)
-            
-            # Check for smoke detection
-            if 'smoke' in class_name:
-                smoke_detected = True
-            
-            # Check for vehicle detection
-            elif class_name in ['passenger', 'puv', 'services', 'two_wheel', 'vehicle']:
-                vehicle_detections.append(detection)
-            
-            # Check for license plate detection
-            elif 'license' in class_name or 'plate' in class_name:
-                license_plates.append(detection)
+        print(f"[DETECTION] Processing {vehicle_count} vehicles, {plate_count} plates, {smoke_count} smoke detections")
         
         # Always save detection data to database (even if no detections for monitoring)
-        print(f"[DETECTION] Processing {len(vehicle_detections)} vehicles, {len(license_plates)} plates, smoke: {smoke_detected}")
-        
-        # Save to database using the existing function
         result = insert_vehicle_detection_from_rpi(
             timestamp=timestamp_dt,
             camera_id=camera_id,
@@ -130,52 +117,288 @@ async def process_detections(frame_data: bytes, metadata: dict):
         if result:
             print(f"[DB] Saved detection: ID={result['id']}, detections={result['detections_count']}")
             
-            # Create violations for vehicles with smoke
-            if smoke_detected and vehicle_detections:
-                await create_smoke_violations(vehicle_detections, location, timestamp_dt)
+            # Create targeted violations only for vehicles with readable plates and smoke
+            if smoke_count > 0:
+                await create_targeted_violations(detections, location, timestamp_dt, frame_data)
             
     except Exception as e:
         print(f"[ERROR] Processing detections: {e}")
         import traceback
         traceback.print_exc()
 
-async def create_smoke_violations(vehicle_detections: list, location: str, timestamp: datetime):
-    """Create violations for vehicles detected with smoke"""
+async def create_targeted_violations(detections: list, location: str, timestamp: datetime, frame_data: bytes):
+    """Create violations only for vehicles that have both smoke detection and readable license plates"""
     try:
-        for i, vehicle in enumerate(vehicle_detections):
-            # Extract license plate from OCR data if available
-            vehicle_type = vehicle.get('class_name', 'unknown')
-            confidence = vehicle.get('confidence', 0.0)
+        # Initialize image cropper
+        cropper = DetectionImageCropper(padding_pixels=50)
+        
+        # Group detections by type
+        smoke_detections = []
+        vehicle_detections = []
+        plate_detections = []
+        
+        for detection in detections:
+            class_name = detection.get('class_name', '').lower()
             
-            # Try to get license plate from detection metadata
-            license_plate = vehicle.get('plate_text', '')
-            if not license_plate:
-                # Generate a temporary identifier for vehicles without readable plates
-                # This allows violation tracking even when OCR fails
-                time_suffix = f"{timestamp.hour:02d}{timestamp.minute:02d}{timestamp.second:02d}"
-                license_plate = f"UNREAD-{vehicle_type.upper()}-{time_suffix}-{i+1}"
-                print(f"[VIOLATION] No license plate detected, using temporary ID: {license_plate}")
+            if 'smoke' in class_name:
+                smoke_detections.append(detection)
+            elif class_name in ['passenger', 'puv', 'services', 'two_wheel', 'vehicle']:
+                vehicle_detections.append(detection)
+            elif 'license' in class_name or 'plate' in class_name:
+                plate_detections.append(detection)
+        
+        print(f"[VIOLATION] Found {len(smoke_detections)} smoke, {len(vehicle_detections)} vehicles, {len(plate_detections)} plates")
+        
+        # Only create violations if we have smoke detections
+        if not smoke_detections:
+            print(f"[VIOLATION] No smoke detected - no violations created")
+            return
+        
+        # Only create violations if we have readable license plates
+        if not plate_detections:
+            print(f"[VIOLATION] No license plates detected - no violations created")
+            return
+        
+        # Find readable license plates with good OCR confidence
+        readable_plates = []
+        
+        for plate in plate_detections:
+            plate_text = plate.get('plate_text', '').strip()
+            ocr_confidence = plate.get('ocr_confidence', 0.0)
             
-            print(f"[VIOLATION] Creating smoke violation for {license_plate} ({vehicle_type})")
+            print(f"[VIOLATION] Processing plate: '{plate_text}' (confidence: {ocr_confidence:.2f})")
             
-            # Register vehicle
-            vehicle_record = register_vehicle(license_plate, vehicle_type)
+            # Only consider plates with meaningful text and good OCR confidence
+            if (plate_text and 
+                len(plate_text) >= 3 and 
+                ocr_confidence >= 0.5 and  # Increased confidence threshold
+                any(c.isalnum() for c in plate_text) and  # Contains alphanumeric characters
+                not plate_text.startswith('UNREAD') and 
+                not plate_text.startswith('UNKNOWN') and 
+                not plate_text.startswith('PLACEHOLDER') and
+                not all(c in '?-_. ' for c in plate_text)):  # Not all special chars
+                
+                readable_plates.append({
+                    'plate_text': plate_text,
+                    'ocr_confidence': ocr_confidence,
+                    'bbox': plate.get('bbox', []),
+                    'ocr_metadata': plate.get('ocr_metadata', {}),
+                    'plate_detection': plate
+                })
+                print(f"[VIOLATION] ✅ Found readable plate: {plate_text} (confidence: {ocr_confidence:.2f})")
+            else:
+                print(f"[VIOLATION] ❌ Skipping plate: '{plate_text}' (confidence: {ocr_confidence:.2f}) - not readable enough")
+        
+        # If no readable plates found, create OCR failure notification and exit
+        if not readable_plates:
+            print(f"[VIOLATION] No readable license plates found - creating OCR failure notification")
+            
+            ocr_failure_notification = create_notification(
+                violation_id=None,
+                title="OCR Detection Issue",
+                message=f"Smoke emission detected with {len(vehicle_detections)} vehicle(s) at {location}, but no license plates could be read clearly. This may indicate OCR failure or poor image quality. Manual review recommended.",
+                notification_type="ocr_failure"
+            )
+            
+            if ocr_failure_notification:
+                print(f"[NOTIFICATION] Created OCR failure notification ID={ocr_failure_notification['id']}")
+            
+            return
+        
+        # Create violations only for readable license plates
+        # Match each smoke detection to the closest vehicle with a readable plate
+        violating_vehicles = []
+        
+        print(f"[VIOLATION] Starting spatial matching for {len(smoke_detections)} smoke detection(s)")
+        
+        for i, smoke in enumerate(smoke_detections):
+            smoke_bbox = smoke.get('bbox', {})
+            smoke_center_x = (smoke_bbox.get('x1', 0) + smoke_bbox.get('x2', 0)) / 2
+            smoke_center_y = (smoke_bbox.get('y1', 0) + smoke_bbox.get('y2', 0)) / 2
+            
+            print(f"[VIOLATION] Smoke {i+1}: center=({smoke_center_x:.1f}, {smoke_center_y:.1f}), confidence={smoke.get('confidence', 0):.2f}")
+            
+            # Find the closest vehicle to this smoke detection
+            closest_vehicle = None
+            closest_distance = float('inf')
+            
+            print(f"[VIOLATION] Checking {len(vehicle_detections)} vehicles for proximity to smoke {i+1}:")
+            
+            for j, vehicle in enumerate(vehicle_detections):
+                vehicle_bbox = vehicle.get('bbox', {})
+                vehicle_center_x = (vehicle_bbox.get('x1', 0) + vehicle_bbox.get('x2', 0)) / 2
+                vehicle_center_y = (vehicle_bbox.get('y1', 0) + vehicle_bbox.get('y2', 0)) / 2
+                
+                # Calculate distance between smoke and vehicle centers
+                distance = ((smoke_center_x - vehicle_center_x) ** 2 + (smoke_center_y - vehicle_center_y) ** 2) ** 0.5
+                
+                print(f"[VIOLATION]   Vehicle {j+1} ({vehicle.get('class_name', 'unknown')}): center=({vehicle_center_x:.1f}, {vehicle_center_y:.1f}), distance={distance:.1f}px")
+                
+                if distance < closest_distance:
+                    closest_distance = distance
+                    closest_vehicle = vehicle
+            
+            print(f"[VIOLATION] → Closest vehicle to smoke {i+1}: {closest_vehicle.get('class_name', 'unknown') if closest_vehicle else 'none'} at {closest_distance:.1f}px")
+            
+            # Only create violation if vehicle is reasonably close to smoke (within 200 pixels)
+            if closest_vehicle and closest_distance < 200:
+                print(f"[VIOLATION] ✅ Vehicle is close enough ({closest_distance:.1f}px < 200px), looking for license plate...")
+                
+                # Find a readable license plate near this vehicle
+                closest_plate = None
+                closest_plate_distance = float('inf')
+                
+                vehicle_bbox = closest_vehicle.get('bbox', {})
+                vehicle_center_x = (vehicle_bbox.get('x1', 0) + vehicle_bbox.get('x2', 0)) / 2
+                vehicle_center_y = (vehicle_bbox.get('y1', 0) + vehicle_bbox.get('y2', 0)) / 2
+                
+                print(f"[VIOLATION] Checking {len(readable_plates)} readable plates for proximity to vehicle:")
+                
+                for k, plate_info in enumerate(readable_plates):
+                    plate_bbox = plate_info.get('bbox', {})
+                    plate_center_x = (plate_bbox.get('x1', 0) + plate_bbox.get('x2', 0)) / 2
+                    plate_center_y = (plate_bbox.get('y1', 0) + plate_bbox.get('y2', 0)) / 2
+                    
+                    # Calculate distance between vehicle and plate
+                    plate_distance = ((vehicle_center_x - plate_center_x) ** 2 + (vehicle_center_y - plate_center_y) ** 2) ** 0.5
+                    
+                    print(f"[VIOLATION]   Plate {k+1} ({plate_info['plate_text']}): center=({plate_center_x:.1f}, {plate_center_y:.1f}), distance={plate_distance:.1f}px")
+                    
+                    if plate_distance < closest_plate_distance:
+                        closest_plate_distance = plate_distance
+                        closest_plate = plate_info
+                
+                print(f"[VIOLATION] → Closest plate to vehicle: {closest_plate['plate_text'] if closest_plate else 'none'} at {closest_plate_distance:.1f}px")
+                
+                # Only create violation if plate is close to the vehicle (within 150 pixels)
+                if closest_plate and closest_plate_distance < 150:
+                    # Check if we already have a violation for this plate (avoid duplicates)
+                    plate_text = closest_plate['plate_text']
+                    already_added = any(v['license_plate'] == plate_text for v in violating_vehicles)
+                    
+                    if not already_added:
+                        vehicle_type = closest_vehicle.get('class_name', 'unknown')
+                        vehicle_confidence = closest_vehicle.get('confidence', 0.0)
+                        
+                        violating_vehicles.append({
+                            'license_plate': plate_text,
+                            'vehicle_type': vehicle_type,
+                            'confidence': vehicle_confidence,
+                            'ocr_confidence': closest_plate['ocr_confidence'],
+                            'smoke_confidence': smoke.get('confidence', 0.0),
+                            'ocr_metadata': closest_plate['ocr_metadata'],
+                            'vehicle_bbox': closest_vehicle.get('bbox', []),
+                            'plate_bbox': closest_plate['bbox'],
+                            'smoke_bbox': smoke.get('bbox', []),
+                            'smoke_vehicle_distance': closest_distance,
+                            'vehicle_plate_distance': closest_plate_distance
+                        })
+                        
+                        print(f"[VIOLATION] ✅ VIOLATION CREATED: {plate_text} ({vehicle_type}) - Smoke→Vehicle: {closest_distance:.1f}px, Vehicle→Plate: {closest_plate_distance:.1f}px")
+                    else:
+                        print(f"[VIOLATION] ❌ Duplicate violation avoided for {plate_text}")
+                else:
+                    if closest_plate:
+                        print(f"[VIOLATION] ❌ Plate too far from vehicle ({closest_plate_distance:.1f}px > 150px) - no violation for {closest_plate['plate_text']}")
+                    else:
+                        print(f"[VIOLATION] ❌ No readable plates found near vehicle - no violation created")
+            else:
+                if closest_vehicle:
+                    print(f"[VIOLATION] ❌ Vehicle too far from smoke ({closest_distance:.1f}px > 200px) - no violation for {closest_vehicle.get('class_name', 'unknown')}")
+                else:
+                    print(f"[VIOLATION] ❌ No vehicles found - no violation created")
+        
+        print(f"[VIOLATION] Spatial matching complete. {len(violating_vehicles)} violation(s) will be created.")
+        
+        if not violating_vehicles:
+            print(f"[VIOLATION] ❌ Smoke detected but no vehicles with readable plates found nearby - no violations created")
+            return
+        
+        # Create PENDING violations for vehicles with readable license plates
+        for violator in violating_vehicles:
+            print(f"[VIOLATION] Creating PENDING smoke violation for {violator['license_plate']} ({violator['vehicle_type']})")
+            
+            # Register vehicle (but don't increment violation count yet)
+            vehicle_record = register_vehicle(violator['license_plate'], violator['vehicle_type'])
             
             if vehicle_record:
-                # Create violation
+                # Create PENDING violation (auto_approve=False)
                 violation = create_violation(
                     vehicle_id=vehicle_record['id'],
                     detection_id=None,
                     violation_type="smoke_emission",
-                    severity="warning" if confidence < 0.7 else "critical",
-                    description=f"Smoke detected from {vehicle_type} at {location} (confidence: {confidence:.2f})"
+                    severity="warning" if violator['smoke_confidence'] < 0.7 else "critical",
+                    description=f"Smoke emission violation: {violator['vehicle_type']} {violator['license_plate']} at {location}. Smoke detected {violator.get('smoke_vehicle_distance', 0):.1f}px from vehicle (confidence: {violator['smoke_confidence']:.2f}), license plate read with {violator['ocr_confidence']:.2f} confidence.",
+                    auto_approve=False  # Requires user approval
                 )
                 
                 if violation:
-                    print(f"[VIOLATION] Created violation ID={violation['id']} for {license_plate}")
+                    print(f"[VIOLATION] Created PENDING violation ID={violation['id']} for {violator['license_plate']}")
+                    
+                    # Crop the vehicle image for evidence
+                    try:
+                        # Prepare detections for cropping (include the specific vehicle, its smoke, and plate)
+                        crop_detections = []
+                        
+                        # Add the violating vehicle
+                        if violator['vehicle_bbox']:
+                            crop_detections.append({
+                                'class_name': violator['vehicle_type'],
+                                'confidence': violator['confidence'],
+                                'bbox': violator['vehicle_bbox']
+                            })
+                        
+                        # Add the specific smoke detection that caused this violation
+                        if violator.get('smoke_bbox'):
+                            crop_detections.append({
+                                'class_name': 'smoke',
+                                'confidence': violator['smoke_confidence'],
+                                'bbox': violator['smoke_bbox']
+                            })
+                        
+                        # Add the license plate
+                        if violator['plate_bbox']:
+                            crop_detections.append({
+                                'class_name': 'license_plate',
+                                'confidence': violator['ocr_confidence'],
+                                'bbox': violator['plate_bbox']
+                            })
+                        
+                        # Crop the violation evidence
+                        crop_result = cropper.crop_detection_image(
+                            image_data=frame_data,
+                            detections=crop_detections,
+                            timestamp=timestamp,
+                            violation_id=str(violation['id'])
+                        )
+                        
+                        if crop_result['success']:
+                            print(f"[CROP] Successfully cropped violation evidence for {violator['license_plate']} (smoke-vehicle distance: {violator.get('smoke_vehicle_distance', 0):.1f}px)")
+                            print(f"[CROP] Cropped image: {crop_result['cropped_frame_path']}")
+                        else:
+                            print(f"[CROP] Failed to crop violation evidence: {crop_result.get('error', 'Unknown error')}")
+                    
+                    except Exception as crop_error:
+                        print(f"[CROP ERROR] Failed to crop vehicle image: {crop_error}")
+                    
+                    # Create notification for user approval
+                    notification = create_notification(
+                        violation_id=violation['id'],
+                        title=f"Violation Detected: {violator['license_plate']}",
+                        message=f"Smoke emission detected from {violator['vehicle_type']} {violator['license_plate']} at {location}. OCR confidence: {violator['ocr_confidence']:.2f}. Vehicle image cropped for review. Please approve/reject this violation.",
+                        notification_type="violation_approval"
+                    )
+                    
+                    if notification:
+                        print(f"[NOTIFICATION] Created approval notification ID={notification['id']}")
+        
+        if not violating_vehicles:
+            print(f"[VIOLATION] Smoke detected but no vehicles with readable license plates - no violations created")
                 
     except Exception as e:
-        print(f"[ERROR] Creating smoke violations: {e}")
+        print(f"[ERROR] Creating targeted violations: {e}")
+        import traceback
+        traceback.print_exc()
 
 # ============ ENDPOINTS ============
 
@@ -398,3 +621,173 @@ async def get_plate_events_endpoint(limit: int = 50):
     except Exception as e:
         print(f"[PLATE] Error fetching plate events: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/generate-report")
+async def generate_detection_report(report_type: str = "general"):
+    """Generate HTML report with current frame and detection data"""
+    try:
+        print(f"[REPORT] Generating {report_type} report...")
+        
+        # Initialize report generator
+        generator = SMOKiReportGenerator()
+        
+        # Generate report
+        result = generator.generate_report(report_type)
+        
+        if result['success']:
+            print(f"[REPORT] Report generated successfully: {result['report_id']}")
+            return {
+                "success": True,
+                "report_id": result['report_id'],
+                "report_path": result['report_path'],
+                "timestamp": result['timestamp'],
+                "detection_summary": result.get('detection_summary', {}),
+                "message": "Report generated successfully"
+            }
+        else:
+            print(f"[REPORT] Report generation failed: {result['error']}")
+            raise HTTPException(status_code=500, detail=result['error'])
+            
+    except Exception as e:
+        print(f"[REPORT] Error generating report: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/reports/{report_id}")
+async def serve_report(report_id: str):
+    """Serve generated HTML report for viewing"""
+    try:
+        reports_dir = Path("reports")
+        report_path = reports_dir / f"{report_id}.html"
+        
+        if not report_path.exists():
+            raise HTTPException(status_code=404, detail="Report not found")
+        
+        # Read and return HTML content for inline viewing
+        with open(report_path, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+        
+        return Response(
+            content=html_content,
+            media_type="text/html",
+            headers={
+                "Content-Disposition": "inline",
+                "Cache-Control": "no-cache"
+            }
+        )
+    except Exception as e:
+        print(f"[REPORT] Error serving report: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/reports/{report_id}/download")
+async def download_report(report_id: str):
+    """Download HTML report as file"""
+    try:
+        reports_dir = Path("reports")
+        report_path = reports_dir / f"{report_id}.html"
+        
+        if not report_path.exists():
+            raise HTTPException(status_code=404, detail="Report not found")
+        
+        return FileResponse(
+            path=str(report_path),
+            media_type="text/html",
+            filename=f"{report_id}.html",
+            headers={
+                "Content-Disposition": f"attachment; filename={report_id}.html"
+            }
+        )
+    except Exception as e:
+        print(f"[REPORT] Error downloading report: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+@router.get("/violation-evidence/{violation_id}")
+async def get_violation_evidence(violation_id: str):
+    """
+    Get cropped vehicle evidence for a specific violation
+    """
+    try:
+        cropper = DetectionImageCropper()
+        
+        # Look for cropped image files for this violation
+        cropped_frames_dir = cropper.cropped_frames_dir
+        
+        # Find files matching the violation ID
+        violation_files = []
+        if os.path.exists(cropped_frames_dir):
+            for filename in os.listdir(cropped_frames_dir):
+                if f"violation_{violation_id}_" in filename:
+                    violation_files.append(filename)
+        
+        if not violation_files:
+            raise HTTPException(status_code=404, detail="No evidence found for this violation")
+        
+        # Find the cropped image
+        cropped_image = None
+        metadata_file = None
+        
+        for filename in violation_files:
+            if filename.endswith('_CROPPED.jpg'):
+                cropped_image = filename
+            elif filename.endswith('_METADATA.json'):
+                metadata_file = filename
+        
+        if not cropped_image:
+            raise HTTPException(status_code=404, detail="Cropped evidence image not found")
+        
+        cropped_path = os.path.join(cropped_frames_dir, cropped_image)
+        
+        if not os.path.exists(cropped_path):
+            raise HTTPException(status_code=404, detail="Evidence image file not found")
+        
+        # Return the cropped image
+        return FileResponse(
+            path=cropped_path,
+            media_type="image/jpeg",
+            filename=f"violation_{violation_id}_evidence.jpg"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving violation evidence: {str(e)}")
+
+@router.get("/violation-metadata/{violation_id}")
+async def get_violation_metadata(violation_id: str):
+    """
+    Get metadata for violation evidence
+    """
+    try:
+        cropper = DetectionImageCropper()
+        cropped_frames_dir = cropper.cropped_frames_dir
+        
+        # Find metadata file
+        metadata_file = None
+        if os.path.exists(cropped_frames_dir):
+            for filename in os.listdir(cropped_frames_dir):
+                if f"violation_{violation_id}_" in filename and filename.endswith('_METADATA.json'):
+                    metadata_file = filename
+                    break
+        
+        if not metadata_file:
+            raise HTTPException(status_code=404, detail="Metadata not found for this violation")
+        
+        metadata_path = os.path.join(cropped_frames_dir, metadata_file)
+        
+        if not os.path.exists(metadata_path):
+            raise HTTPException(status_code=404, detail="Metadata file not found")
+        
+        # Read and return metadata
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+        
+        return {
+            "success": True,
+            "violation_id": violation_id,
+            "metadata": metadata
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving violation metadata: {str(e)}")

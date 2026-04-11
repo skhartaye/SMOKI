@@ -613,3 +613,68 @@
   0% { opacity: 0.8; }
   100% { opacity: 1; }
 }
+
+/* Report Button Styling */
+.control-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.control-btn.start-btn {
+  background: #28a745;
+  color: white;
+}
+
+.control-btn.start-btn:hover:not(:disabled) {
+  background: #218838;
+}
+
+.control-btn.stop-btn {
+  background: #dc3545;
+  color: white;
+}
+
+.control-btn.stop-btn:hover:not(:disabled) {
+  background: #c82333;
+}
+
+.control-btn.report-btn {
+  background: #17a2b8;
+  color: white;
+}
+
+.control-btn.report-btn:hover:not(:disabled) {
+  background: #138496;
+}
+
+.control-btn.view-report-btn {
+  background: #6f42c1;
+  color: white;
+}
+
+.control-btn.view-report-btn:hover:not(:disabled) {
+  background: #5a32a3;
+}
+
+.control-btn.download-report-btn {
+  background: #28a745;
+  color: white;
+}
+
+.control-btn.download-report-btn:hover:not(:disabled) {
+  background: #218838;
+}
+
+.control-btn:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+  opacity: 0.6;
+}

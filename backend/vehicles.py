@@ -6,12 +6,14 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 import sys
+import psycopg
 sys.path.insert(0, '../postgre')
 from database import (
     register_vehicle, get_top_violators, get_vehicle_ranking,
     insert_vehicle_detection, create_violation, get_recent_violations,
     create_notification, get_unread_notifications, mark_notification_read,
-    get_recent_vehicle_detections
+    get_recent_vehicle_detections, approve_violation, reject_violation, get_pending_violations,
+    get_connection_string
 )
 from auth import get_current_user
 
@@ -212,5 +214,127 @@ async def mark_notification_read_endpoint(notification_id: int, current_user = D
             "success": True,
             "notification_id": notification_id
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============ VIOLATION APPROVAL ENDPOINTS ============
+
+@router.get("/violations/pending")
+async def get_pending_violations_endpoint(limit: int = 10, current_user = Depends(get_current_user)):
+    """
+    Get pending violations that need approval
+    """
+    try:
+        violations = get_pending_violations(limit)
+        return {
+            "success": True,
+            "data": violations,
+            "count": len(violations)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/violations/{violation_id}/approve")
+async def approve_violation_endpoint(violation_id: int, current_user = Depends(get_current_user)):
+    """
+    Approve a pending violation
+    """
+    try:
+        result = approve_violation(violation_id, current_user.get('id'))
+        
+        if 'error' in result:
+            raise HTTPException(status_code=400, detail=result['error'])
+        
+        return {
+            "success": True,
+            "message": f"Violation {violation_id} approved successfully",
+            "data": result
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/violations/{violation_id}/reject")
+async def reject_violation_endpoint(violation_id: int, current_user = Depends(get_current_user)):
+    """
+    Reject a pending violation
+    """
+    try:
+        result = reject_violation(violation_id, current_user.get('id'))
+        
+        if 'error' in result:
+            raise HTTPException(status_code=400, detail=result['error'])
+        
+        return {
+            "success": True,
+            "message": f"Violation {violation_id} rejected successfully",
+            "data": result
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+@router.get("/notifications/ocr-failures")
+async def get_ocr_failure_notifications_endpoint(limit: int = 10, current_user = Depends(get_current_user)):
+    """
+    Get OCR failure notifications
+    """
+    try:
+        # Get OCR failure notifications
+        with psycopg.connect(get_connection_string()) as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT n.id, n.title, n.message, n.notification_type,
+                           n.timestamp, n.is_read
+                    FROM notifications n
+                    WHERE n.notification_type IN ('ocr_failure', 'ocr_partial_failure')
+                    ORDER BY n.timestamp DESC
+                    LIMIT %s;
+                """, (limit,))
+                
+                columns = ['id', 'title', 'message', 'notification_type', 
+                           'timestamp', 'is_read']
+                results = []
+                for row in cursor.fetchall():
+                    results.append(dict(zip(columns, row)))
+                
+                return {
+                    "success": True,
+                    "data": results,
+                    "count": len(results)
+                }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/notifications/all-types")
+async def get_all_notifications_endpoint(limit: int = 20, current_user = Depends(get_current_user)):
+    """
+    Get all types of notifications (violations, OCR failures, etc.)
+    """
+    try:
+        with psycopg.connect(get_connection_string()) as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT n.id, n.title, n.message, n.notification_type,
+                           n.timestamp, n.is_read, v.severity, veh.license_plate
+                    FROM notifications n
+                    LEFT JOIN violations v ON n.violation_id = v.id
+                    LEFT JOIN vehicles veh ON v.vehicle_id = veh.id
+                    ORDER BY n.timestamp DESC
+                    LIMIT %s;
+                """, (limit,))
+                
+                columns = ['id', 'title', 'message', 'notification_type', 
+                           'timestamp', 'is_read', 'severity', 'license_plate']
+                results = []
+                for row in cursor.fetchall():
+                    results.append(dict(zip(columns, row)))
+                
+                return {
+                    "success": True,
+                    "data": results,
+                    "count": len(results)
+                }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

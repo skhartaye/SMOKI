@@ -341,39 +341,84 @@ def classify_smoke_opacity(det, frame_bgr=None):
 # ─── PLATE OCR ────────────────────────────────────────────────────────────────
 def load_ocr():
     try:
-        import easyocr
-        reader = easyocr.Reader(['en'], gpu=False, verbose=False)
-        print("[OK] EasyOCR ready")
-        return reader
+        import sys
+        import os
+        # Add the parent directory to path to import enhanced_plate_ocr
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from enhanced_plate_ocr import EnhancedPlateOCR
+        
+        enhanced_ocr = EnhancedPlateOCR(gpu_enabled=False)  # RPI typically doesn't have GPU
+        print("[OK] Enhanced EasyOCR ready for RPI")
+        return enhanced_ocr
     except Exception as e:
-        print(f"[WARNING] EasyOCR: {e}")
-        return None
+        print(f"[WARNING] Enhanced OCR failed, falling back to basic EasyOCR: {e}")
+        try:
+            import easyocr
+            reader = easyocr.Reader(['en'], gpu=False, verbose=False)
+            print("[OK] Basic EasyOCR ready")
+            return reader
+        except Exception as e2:
+            print(f"[WARNING] EasyOCR: {e2}")
+            return None
 
 def read_plate(reader, crop_bgr):
     if reader is None or crop_bgr is None:
-        return "", 0.0
+        return "", 0.0, {}
+    
     try:
-        h, w = crop_bgr.shape[:2]
-        if h < 100:
-            crop_bgr = cv2.resize(crop_bgr, (int(w*100/h), 100),
-                                  interpolation=cv2.INTER_CUBIC)
-        gray = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2GRAY)
-        thresh = cv2.adaptiveThreshold(gray, 255,
-                                       cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                       cv2.THRESH_BINARY, 11, 2)
-        proc = cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
-        res = reader.readtext(proc,
-                              allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
-                              width_ths=0.7, height_ths=0.7,
-                              detail=1, paragraph=False, batch_size=1)
-        if not res:
-            return "", 0.0
-        res = sorted(res, key=lambda r: r[2], reverse=True)
-        text = ''.join(c for c in ''.join(r[1] for r in res) if c.isalnum())
-        return text.strip(), float(res[0][2])
+        # Check if it's the enhanced OCR system
+        if hasattr(reader, 'process_license_plate'):
+            # Use enhanced OCR
+            h, w = crop_bgr.shape[:2]
+            bbox = {'x1': 0, 'y1': 0, 'x2': w, 'y2': h}
+            
+            metadata = reader.process_license_plate(crop_bgr, bbox)
+            
+            # Extract key information
+            text = metadata.detected_text_clean
+            confidence = metadata.ocr_confidence
+            
+            # Create metadata dictionary for API
+            ocr_metadata = {
+                'image_quality_score': metadata.image_quality_score,
+                'blur_score': metadata.blur_score,
+                'contrast_score': metadata.contrast_score,
+                'brightness_score': metadata.brightness_score,
+                'aspect_ratio': metadata.aspect_ratio,
+                'plate_angle': metadata.plate_angle,
+                'preprocessing_steps': metadata.preprocessing_steps,
+                'processing_time_ms': metadata.ocr_processing_time_ms,
+                'character_confidences': metadata.character_confidences,
+                'detected_text_raw': metadata.detected_text_raw,
+                'cropped_size': metadata.cropped_size,
+                'processed_size': metadata.processed_size
+            }
+            
+            return text, confidence, ocr_metadata
+        else:
+            # Fallback to basic OCR
+            h, w = crop_bgr.shape[:2]
+            if h < 100:
+                crop_bgr = cv2.resize(crop_bgr, (int(w*100/h), 100),
+                                      interpolation=cv2.INTER_CUBIC)
+            gray = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2GRAY)
+            thresh = cv2.adaptiveThreshold(gray, 255,
+                                           cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                           cv2.THRESH_BINARY, 11, 2)
+            proc = cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
+            res = reader.readtext(proc,
+                                  allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+                                  width_ths=0.7, height_ths=0.7,
+                                  detail=1, paragraph=False, batch_size=1)
+            if not res:
+                return "", 0.0, {}
+            res = sorted(res, key=lambda r: r[2], reverse=True)
+            text = ''.join(c for c in ''.join(r[1] for r in res) if c.isalnum())
+            return text.strip(), float(res[0][2]), {}
+            
     except Exception as e:
         print(f"[OCR] {e}")
-        return "", 0.0
+        return "", 0.0, {}
 
 # ─── FRAME SERVER (port 8001) ─────────────────────────────────────────────────
 import threading
@@ -640,14 +685,15 @@ def main():
                 x2c, y2c = min(ow-1,x2), min(oh-1,y2)
                 if x2c > x1c and y2c > y1c:
                     crop = frame_bgr[y1c:y2c, x1c:x2c].copy()
-                    text, oconf = read_plate(ocr, crop)
+                    text, oconf, ocr_metadata = read_plate(ocr, crop)
                     if text:
                         plate_results.append({
                             "text": text, "confidence": round(oconf,3),
-                            "bbox": {"x1":x1,"y1":y1,"x2":x2,"y2":y2}})
+                            "bbox": {"x1":x1,"y1":y1,"x2":x2,"y2":y2},
+                            "ocr_metadata": ocr_metadata})
                         cv2.putText(vis_frame, text, (x1, y2+18),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,255), 2)
-                        submit(send_plate, ts, text, oconf, (x1,y1,x2,y2), crop, inf_ms)
+                        submit(send_plate, ts, text, oconf, (x1,y1,x2,y2), crop, inf_ms, ocr_metadata)
 
             # 4. Send smoke events
             for det in smoke_dets:

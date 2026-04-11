@@ -122,8 +122,15 @@ def create_tables():
                         ocr_confidence FLOAT,
                         bbox JSONB,
                         inference_ms INT,
+                        ocr_metadata JSONB,
                         created_at TIMESTAMPTZ DEFAULT NOW()
                     );
+                """)
+                
+                # Add ocr_metadata column if it doesn't exist (for existing databases)
+                cursor.execute("""
+                    ALTER TABLE plate_events
+                    ADD COLUMN IF NOT EXISTS ocr_metadata JSONB;
                 """)
                 
                 print("[DB] Creating violations table...")
@@ -572,16 +579,20 @@ def get_top_violators(limit=5):
             return []
 
 def get_vehicle_ranking():
-    """Get all vehicles ranked by violations from detection data"""
+    """Get all vehicles ranked by APPROVED violations only"""
     with psycopg.connect(get_connection_string()) as conn:
         try:
             with conn.cursor() as cursor:
-                # Get registered vehicles first
+                # Get registered vehicles with only approved violations
                 cursor.execute("""
-                    SELECT v.id, v.license_plate, v.vehicle_type, v.total_violations,
+                    SELECT v.id, v.license_plate, v.vehicle_type, 
+                           COUNT(viol.id) as approved_violations,
                            v.last_detected, v.status
                     FROM vehicles v
-                    ORDER BY v.total_violations DESC, v.last_detected DESC;
+                    LEFT JOIN violations viol ON v.id = viol.vehicle_id AND viol.status = 'approved'
+                    GROUP BY v.id, v.license_plate, v.vehicle_type, v.last_detected, v.status
+                    HAVING COUNT(viol.id) > 0
+                    ORDER BY approved_violations DESC, v.last_detected DESC;
                 """)
                 
                 columns = ['id', 'license_plate', 'vehicle_type', 'violations', 
@@ -590,62 +601,7 @@ def get_vehicle_ranking():
                 for row in cursor.fetchall():
                     results.append(dict(zip(columns, row)))
                 
-                # If no registered vehicles, create ranking from recent detections
-                if not results:
-                    cursor.execute("""
-                        SELECT id, metadata, timestamp, smoke_detected, location
-                        FROM vehicle_detections 
-                        ORDER BY timestamp DESC
-                        LIMIT 10;
-                    """)
-                    
-                    detection_rows = cursor.fetchall()
-                    vehicle_counts = {}
-                    
-                    for row in detection_rows:
-                        metadata = json.loads(row[1]) if row[1] else {}
-                        detections = metadata.get('detections', [])
-                        
-                        # Count vehicles in this detection
-                        for detection in detections:
-                            class_name = detection.get('class_name', '')
-                            if class_name in ['passenger', 'puv', 'services', 'two_wheel']:
-                                # Generate consistent license plate for this vehicle type and location
-                                timestamp = row[2]
-                                location = row[4] or 'Unknown'
-                                plate_key = f"{class_name}_{location}_{timestamp.hour}"
-                                
-                                if plate_key not in vehicle_counts:
-                                    plate_suffix = f"{timestamp.hour:02d}{timestamp.minute:02d}"
-                                    if class_name == 'passenger':
-                                        license_plate = f"ABC-{plate_suffix}"
-                                    elif class_name == 'puv':
-                                        license_plate = f"PUV-{plate_suffix}"
-                                    elif class_name == 'services':
-                                        license_plate = f"SVC-{plate_suffix}"
-                                    else:
-                                        license_plate = f"MC-{plate_suffix}"
-                                    
-                                    vehicle_counts[plate_key] = {
-                                        'license_plate': license_plate,
-                                        'vehicle_type': class_name,
-                                        'violations': 1 if row[3] else 0,  # smoke_detected
-                                        'last_detected': timestamp,
-                                        'status': 'active'
-                                    }
-                                else:
-                                    vehicle_counts[plate_key]['violations'] += 1 if row[3] else 0
-                                    if timestamp > vehicle_counts[plate_key]['last_detected']:
-                                        vehicle_counts[plate_key]['last_detected'] = timestamp
-                    
-                    # Convert to list and add IDs
-                    for i, (key, vehicle) in enumerate(vehicle_counts.items()):
-                        vehicle['id'] = f"detected_{i+1}"
-                        results.append(vehicle)
-                    
-                    # Sort by violations
-                    results.sort(key=lambda x: x['violations'], reverse=True)
-                
+                # Only return real registered vehicles with approved violations
                 return results
         except Exception as e:
             print(f"Error fetching vehicle ranking: {e}")
@@ -676,22 +632,69 @@ def insert_vehicle_detection(vehicle_id, location, confidence, smoke_detected=Fa
 
 # ============ VIOLATION FUNCTIONS ============
 
-def create_violation(vehicle_id, detection_id, violation_type, severity, description=None):
-    """Create a violation record"""
+def create_violation(vehicle_id, detection_id, violation_type, severity, description=None, auto_approve=False):
+    """Create a violation record with approval workflow"""
     with psycopg.connect(get_connection_string()) as conn:
         try:
             with conn.cursor() as cursor:
-                # Insert violation
+                # Insert violation with pending status by default
+                status = 'approved' if auto_approve else 'pending'
                 cursor.execute("""
                     INSERT INTO violations 
-                    (vehicle_id, detection_id, violation_type, severity, description)
-                    VALUES (%s, %s, %s, %s, %s)
+                    (vehicle_id, detection_id, violation_type, severity, description, status)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                     RETURNING id;
-                """, (vehicle_id, detection_id, violation_type, severity, description))
+                """, (vehicle_id, detection_id, violation_type, severity, description, status))
                 
                 violation_id = cursor.fetchone()[0]
                 
-                # Update vehicle violation count
+                # Only update vehicle violation count if auto-approved
+                if auto_approve:
+                    cursor.execute("""
+                        UPDATE vehicles
+                        SET total_violations = total_violations + 1,
+                            last_detected = NOW(),
+                            updated_at = NOW()
+                        WHERE id = %s;
+                    """, (vehicle_id,))
+                
+                conn.commit()
+                return {"id": violation_id, "status": status}
+        except Exception as e:
+            print(f"Error creating violation: {e}")
+            conn.rollback()
+            return None
+
+def approve_violation(violation_id, user_id=None):
+    """Approve a pending violation"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                # Get violation details
+                cursor.execute("""
+                    SELECT vehicle_id, status FROM violations WHERE id = %s;
+                """, (violation_id,))
+                
+                result = cursor.fetchone()
+                if not result:
+                    return {"error": "Violation not found"}
+                
+                vehicle_id, current_status = result
+                
+                if current_status == 'approved':
+                    return {"error": "Violation already approved"}
+                
+                # Update violation status
+                cursor.execute("""
+                    UPDATE violations 
+                    SET status = 'approved', 
+                        approved_by = %s, 
+                        approved_at = NOW(),
+                        updated_at = NOW()
+                    WHERE id = %s;
+                """, (user_id, violation_id))
+                
+                # Increment vehicle violation count
                 cursor.execute("""
                     UPDATE vehicles
                     SET total_violations = total_violations + 1,
@@ -701,11 +704,65 @@ def create_violation(vehicle_id, detection_id, violation_type, severity, descrip
                 """, (vehicle_id,))
                 
                 conn.commit()
-                return {"id": violation_id}
+                return {"success": True, "status": "approved"}
         except Exception as e:
-            print(f"Error creating violation: {e}")
+            print(f"Error approving violation: {e}")
             conn.rollback()
-            return None
+            return {"error": str(e)}
+
+def reject_violation(violation_id, user_id=None):
+    """Reject a pending violation"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                # Update violation status
+                cursor.execute("""
+                    UPDATE violations 
+                    SET status = 'rejected', 
+                        approved_by = %s, 
+                        approved_at = NOW(),
+                        updated_at = NOW()
+                    WHERE id = %s
+                    RETURNING vehicle_id;
+                """, (user_id, violation_id))
+                
+                result = cursor.fetchone()
+                if not result:
+                    return {"error": "Violation not found"}
+                
+                conn.commit()
+                return {"success": True, "status": "rejected"}
+        except Exception as e:
+            print(f"Error rejecting violation: {e}")
+            conn.rollback()
+            return {"error": str(e)}
+
+def get_pending_violations(limit=10):
+    """Get pending violations that need approval"""
+    with psycopg.connect(get_connection_string()) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT v.id, v.violation_type, v.severity, v.description,
+                           v.created_at, veh.license_plate, veh.vehicle_type,
+                           v.camera_id, v.timestamp
+                    FROM violations v
+                    LEFT JOIN vehicles veh ON v.vehicle_id = veh.id
+                    WHERE v.status = 'pending'
+                    ORDER BY v.created_at DESC
+                    LIMIT %s;
+                """, (limit,))
+                
+                columns = ['id', 'violation_type', 'severity', 'description', 
+                           'created_at', 'license_plate', 'vehicle_type',
+                           'camera_id', 'timestamp']
+                results = []
+                for row in cursor.fetchall():
+                    results.append(dict(zip(columns, row)))
+                return results
+        except Exception as e:
+            print(f"Error fetching pending violations: {e}")
+            return []
 
 def get_recent_violations(limit=10):
     """Get recent violations"""
@@ -1424,19 +1481,20 @@ def insert_smoke_event(timestamp, camera_id, location=None, smoke_type=None,
 
 
 def insert_plate_event(timestamp, camera_id, location=None, plate_text=None, 
-                      ocr_confidence=None, bbox=None, inference_ms=None):
-    """Insert license plate OCR event"""
+                      ocr_confidence=None, bbox=None, inference_ms=None, ocr_metadata=None):
+    """Insert license plate OCR event with enhanced metadata"""
     with psycopg.connect(get_connection_string()) as conn:
         try:
             with conn.cursor() as cursor:
                 cursor.execute("""
                     INSERT INTO plate_events 
-                    (timestamp, camera_id, location, plate_text, ocr_confidence, bbox, inference_ms)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    (timestamp, camera_id, location, plate_text, ocr_confidence, bbox, inference_ms, ocr_metadata)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id;
                 """, (
                     timestamp, camera_id, location, plate_text, ocr_confidence,
-                    json.dumps(bbox) if bbox else None, inference_ms
+                    json.dumps(bbox) if bbox else None, inference_ms,
+                    json.dumps(ocr_metadata) if ocr_metadata else None
                 ))
                 
                 result = cursor.fetchone()
@@ -1573,13 +1631,13 @@ def get_smoke_events(limit=50):
 
 
 def get_plate_events(limit=50):
-    """Get license plate OCR events"""
+    """Get license plate OCR events with enhanced metadata"""
     with psycopg.connect(get_connection_string()) as conn:
         try:
             with conn.cursor() as cursor:
                 cursor.execute("""
                     SELECT id, timestamp, camera_id, location, plate_text, ocr_confidence, 
-                           bbox, inference_ms
+                           bbox, inference_ms, ocr_metadata
                     FROM plate_events
                     ORDER BY timestamp DESC
                     LIMIT %s;
@@ -1590,7 +1648,9 @@ def get_plate_events(limit=50):
                 
                 for row in rows:
                     bbox = json.loads(row[6]) if row[6] else {}
-                    events.append({
+                    ocr_metadata = json.loads(row[8]) if row[8] else {}
+                    
+                    event = {
                         "id": row[0],
                         "timestamp": row[1].isoformat() if row[1] else None,
                         "camera_id": row[2],
@@ -1598,8 +1658,19 @@ def get_plate_events(limit=50):
                         "plate_text": row[4],
                         "ocr_confidence": row[5],
                         "bbox": bbox,
-                        "inference_ms": row[7]
-                    })
+                        "inference_ms": row[7],
+                        "ocr_metadata": ocr_metadata
+                    }
+                    
+                    # Add key quality metrics to top level for easy access
+                    if ocr_metadata:
+                        event["image_quality_score"] = ocr_metadata.get("image_quality_score", 0.0)
+                        event["blur_score"] = ocr_metadata.get("blur_score", 0.0)
+                        event["contrast_score"] = ocr_metadata.get("contrast_score", 0.0)
+                        event["plate_angle"] = ocr_metadata.get("plate_angle", 0.0)
+                        event["processing_time_ms"] = ocr_metadata.get("processing_time_ms", 0)
+                    
+                    events.append(event)
                 
                 return events
         except Exception as e:

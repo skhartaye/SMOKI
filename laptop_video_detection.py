@@ -19,6 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 import easyocr
 from ultralytics import YOLO
 from dotenv import load_dotenv
+from enhanced_plate_ocr import EnhancedPlateOCR, PlateMetadata
 
 # Load environment variables
 load_dotenv()
@@ -83,17 +84,64 @@ def load_models():
 
 # ── OCR Functions ─────────────────────────────────────────────────────────────
 def load_ocr():
-    """Initialize EasyOCR reader for license plate recognition"""
+    """Initialize Enhanced EasyOCR reader for license plate recognition"""
     try:
-        reader = easyocr.Reader(['en'], gpu=torch.cuda.is_available(), verbose=False)
-        print("[OK] EasyOCR initialized for license plate recognition")
-        return reader
+        enhanced_ocr = EnhancedPlateOCR(gpu_enabled=torch.cuda.is_available())
+        print("[OK] Enhanced EasyOCR initialized for license plate recognition")
+        return enhanced_ocr
     except Exception as e:
-        print(f"[ERROR] OCR initialization failed: {e}")
+        print(f"[ERROR] Enhanced OCR initialization failed: {e}")
         return None
 
+def read_plate_enhanced(enhanced_ocr, crop, bbox):
+    """Extract text using Enhanced EasyOCR with metadata"""
+    if not enhanced_ocr or crop is None or crop.size == 0:
+        return "", 0.0, {}
+        
+    try:
+        # Use the enhanced OCR system
+        metadata = enhanced_ocr.process_license_plate(crop, bbox)
+        
+        # Extract the key information
+        text = metadata.detected_text_clean
+        confidence = metadata.ocr_confidence
+        
+        # Create metadata dictionary for database storage
+        ocr_metadata = {
+            'image_quality_score': metadata.image_quality_score,
+            'blur_score': metadata.blur_score,
+            'contrast_score': metadata.contrast_score,
+            'brightness_score': metadata.brightness_score,
+            'aspect_ratio': metadata.aspect_ratio,
+            'plate_angle': metadata.plate_angle,
+            'preprocessing_steps': metadata.preprocessing_steps,
+            'processing_time_ms': metadata.ocr_processing_time_ms,
+            'character_confidences': metadata.character_confidences,
+            'detected_text_raw': metadata.detected_text_raw,
+            'cropped_size': metadata.cropped_size,
+            'processed_size': metadata.processed_size
+        }
+        
+        return text, confidence, ocr_metadata
+        
+    except Exception as e:
+        print(f"[Enhanced OCR ERROR] {e}")
+        return "", 0.0, {}
+
+# Legacy function for backward compatibility
 def read_plate_easyocr(reader, crop):
-    """Extract text using EasyOCR"""
+    """Legacy function - redirects to enhanced OCR"""
+    if hasattr(reader, 'process_license_plate'):
+        # It's the enhanced OCR
+        bbox = {'x1': 0, 'y1': 0, 'x2': crop.shape[1], 'y2': crop.shape[0]}
+        text, confidence, _ = read_plate_enhanced(reader, crop, bbox)
+        return text, confidence
+    else:
+        # Fallback to original implementation
+        return read_plate_easyocr_original(reader, crop)
+
+def read_plate_easyocr_original(reader, crop):
+    """Original EasyOCR implementation as fallback"""
     if not reader or crop is None or crop.size == 0:
         return "", 0.0
         
@@ -215,9 +263,11 @@ def send_detection_data(frame, smoke_dets, vehicle_dets, plate_dets, frame_numbe
         return
     
     try:
+        # Draw detection boxes on the frame before sending
+        frame_with_boxes = draw_boxes(frame.copy(), smoke_dets, vehicle_dets, plate_dets)
+        
         # Encode frame as JPEG
-        _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-        frame_b64 = base64.b64encode(buffer).decode('utf-8')
+        _, buffer = cv2.imencode('.jpg', frame_with_boxes, [cv2.IMWRITE_JPEG_QUALITY, 85])
         
         # Prepare detection metadata
         all_detections = []
@@ -227,8 +277,11 @@ def send_detection_data(frame, smoke_dets, vehicle_dets, plate_dets, frame_numbe
             all_detections.append({
                 "model_name": "smoke_detection",
                 "class_name": det["class"],
+                "class": det["class"],  # Backend expects 'class' field
+                "conf": det["confidence"],  # Backend expects 'conf' field
                 "confidence": det["confidence"],
                 "bounding_box": det["bbox"],
+                "bbox": det["bbox"],  # Backend expects 'bbox' field
                 "opacity_level": det.get("opacity_level", "unknown"),
                 "opacity_score": det.get("opacity_score", 0.0)
             })
@@ -238,28 +291,50 @@ def send_detection_data(frame, smoke_dets, vehicle_dets, plate_dets, frame_numbe
             all_detections.append({
                 "model_name": "vehicle_detection",
                 "class_name": det["class"],
+                "class": det["class"],  # Backend expects 'class' field
+                "conf": det["confidence"],  # Backend expects 'conf' field
                 "confidence": det["confidence"],
-                "bounding_box": det["bbox"]
+                "bounding_box": det["bbox"],
+                "bbox": det["bbox"]  # Backend expects 'bbox' field
             })
         
         # Add plate detections
         for det in plate_dets:
-            all_detections.append({
+            plate_detection = {
                 "model_name": "license_plate",
                 "class_name": "license_plate",
+                "class": "license_plate",  # Backend expects 'class' field
+                "conf": det["confidence"],  # Backend expects 'conf' field
                 "confidence": det["confidence"],
                 "bounding_box": det["bbox"],
+                "bbox": det["bbox"],  # Backend expects 'bbox' field
                 "plate_text": det.get("text", ""),
                 "ocr_confidence": det.get("ocr_confidence", 0.0)
-            })
+            }
+            
+            # Add enhanced OCR metadata if available
+            ocr_metadata = det.get("ocr_metadata", {})
+            if ocr_metadata:
+                plate_detection["ocr_metadata"] = ocr_metadata
+                # Add key quality metrics to top level for easy access
+                plate_detection["image_quality_score"] = ocr_metadata.get("image_quality_score", 0.0)
+                plate_detection["blur_score"] = ocr_metadata.get("blur_score", 0.0)
+                plate_detection["contrast_score"] = ocr_metadata.get("contrast_score", 0.0)
+                plate_detection["plate_angle"] = ocr_metadata.get("plate_angle", 0.0)
+                plate_detection["processing_time_ms"] = ocr_metadata.get("processing_time_ms", 0)
+            
+            all_detections.append(plate_detection)
         
-        # Prepare metadata
+        # Prepare metadata in the format backend expects
         metadata = {
             "timestamp": timestamp,
             "camera_id": DEVICE_ID,
             "location": CAMERA_LOCATION,
             "frame_number": frame_number,
             "detections": all_detections,
+            "smoke_count": len(smoke_dets),
+            "vehicle_count": len(vehicle_dets),
+            "plate_count": len(plate_dets),
             "detection_counts": {
                 "smoke": len(smoke_dets),
                 "vehicle": len(vehicle_dets),
@@ -269,25 +344,32 @@ def send_detection_data(frame, smoke_dets, vehicle_dets, plate_dets, frame_numbe
             "source": "laptop_video_processing"
         }
         
-        # Send to stream endpoint (similar to RPi)
-        payload = {
-            "frame_data": frame_b64,
-            "metadata": json.dumps(metadata)
+        # Send as multipart form data (like RPi does)
+        files = {
+            'frame': ('frame.jpg', buffer.tobytes(), 'image/jpeg')
+        }
+        data = {
+            'metadata': json.dumps(metadata)
         }
         
         response = requests.post(
             f"{API_URL}/api/stream/frame",
-            data=payload,
+            files=files,
+            data=data,
             timeout=10
         )
         
         if response.status_code == 200:
-            print(f"[API] ✓ Sent frame {frame_number} - S:{len(smoke_dets)} V:{len(vehicle_dets)} P:{len(plate_dets)}")
+            print(f"[API] ✓ Sent frame {frame_number} with boxes - S:{len(smoke_dets)} V:{len(vehicle_dets)} P:{len(plate_dets)}")
         else:
             print(f"[API] ✗ Failed to send frame {frame_number}: {response.status_code}")
+            if response.text:
+                print(f"[API] Response: {response.text}")
             
     except Exception as e:
         print(f"[API ERROR] {e}")
+        import traceback
+        traceback.print_exc()
 
 def api_sender_worker():
     """Background worker for sending API data"""
@@ -426,15 +508,24 @@ def infer_worker(models, ocr_reader):
                     bbox = det["bbox"]
                     x1, y1, x2, y2 = bbox["x1"], bbox["y1"], bbox["x2"], bbox["y2"]
                     
-                    # Crop and OCR
+                    # Crop and OCR with enhanced metadata
                     crop = frame[max(0, y1):min(oh, y2), max(0, x1):min(ow, x2)].copy()
                     if crop.size > 0:
-                        text, confidence = read_plate_easyocr(ocr_reader, crop)
+                        # Use enhanced OCR with metadata
+                        text, confidence, ocr_metadata = read_plate_enhanced(ocr_reader, crop, bbox)
                         det['text'] = text
                         det['ocr_confidence'] = confidence
+                        det['ocr_metadata'] = ocr_metadata
+                        
+                        # Log enhanced OCR results
+                        if text and confidence > 0.5:
+                            quality_score = ocr_metadata.get('image_quality_score', 0)
+                            blur_score = ocr_metadata.get('blur_score', 0)
+                            print(f"[Enhanced OCR] Plate: {text} | Conf: {confidence:.2f} | Quality: {quality_score:.1f} | Blur: {blur_score:.1f}")
                     else:
                         det['text'] = ""
                         det['ocr_confidence'] = 0.0
+                        det['ocr_metadata'] = {}
                     
                     plate_dets.append(det)
                     all_dets.append(det)

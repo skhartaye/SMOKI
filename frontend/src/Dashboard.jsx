@@ -451,73 +451,53 @@ function Dashboard() {
         if (response.status === 200) {
           const result = await response.json();
           if (result.success && result.data && result.data.length > 0) {
-            // Transform new schema data to match frontend expectations
-            const transformedDetections = result.data.map((detection, index) => {
+            // Transform detection data to match frontend expectations
+            const transformedDetections = [];
+            
+            result.data.forEach((detection) => {
               const timestamp = new Date(detection.timestamp);
+              const metadata = detection.metadata || {};
+              const detections = metadata.detections || [];
               
-              // Create detection records for each type found in the snapshot
-              const detectionRecords = [];
-              
-              // Add vehicle detections
-              if (detection.vehicle_count > 0) {
-                for (let i = 0; i < detection.vehicle_count; i++) {
-                  const plateNum = String(timestamp.getMinutes()).padStart(2, '0') + 
-                                 String(timestamp.getSeconds()).padStart(2, '0') + i;
-                  detectionRecords.push({
-                    id: `vehicle_${detection.id}_${i}`,
-                    timestamp: detection.timestamp,
-                    detection_type: 'Vehicle',
-                    class_name: 'vehicle',
-                    confidence: '85.0',
-                    license_plate: `VEH-${plateNum}`,
-                    smoke_level: 'None',
-                    location: detection.location || 'Main Camera',
-                    camera_id: detection.camera_id
-                  });
+              // Process each individual detection in the metadata
+              detections.forEach((det, index) => {
+                const className = det.class_name || det.class || 'unknown';
+                const confidence = det.confidence || det.conf || 0;
+                
+                let detectionType = 'Unknown';
+                let smokeLevel = 'None';
+                let licensePlate = 'N/A';
+                
+                // Determine detection type
+                if (className.includes('smoke')) {
+                  detectionType = 'Smoke';
+                  smokeLevel = det.opacity_level || 'Medium';
+                } else if (['passenger', 'puv', 'service', 'services', 'two_wheel'].includes(className)) {
+                  detectionType = 'Vehicle';
+                  licensePlate = det.plate_text || 'Not detected';
+                } else if (className.includes('license') || className.includes('plate')) {
+                  detectionType = 'License';
+                  licensePlate = det.plate_text || 'Processing...';
                 }
-              }
-              
-              // Add smoke detections
-              if (detection.smoke_count > 0) {
-                for (let i = 0; i < detection.smoke_count; i++) {
-                  detectionRecords.push({
-                    id: `smoke_${detection.id}_${i}`,
-                    timestamp: detection.timestamp,
-                    detection_type: 'Smoke',
-                    class_name: 'smoke',
-                    confidence: '75.0',
-                    license_plate: 'N/A',
-                    smoke_level: detection.is_violation ? 'High' : 'Medium',
-                    location: detection.location || 'Main Camera',
-                    camera_id: detection.camera_id
-                  });
-                }
-              }
-              
-              // Add plate detections
-              if (detection.plate_count > 0) {
-                for (let i = 0; i < detection.plate_count; i++) {
-                  detectionRecords.push({
-                    id: `plate_${detection.id}_${i}`,
-                    timestamp: detection.timestamp,
-                    detection_type: 'License',
-                    class_name: 'license_plate',
-                    confidence: '90.0',
-                    license_plate: 'N/A',
-                    smoke_level: 'None',
-                    location: detection.location || 'Main Camera',
-                    camera_id: detection.camera_id
-                  });
-                }
-              }
-              
-              return detectionRecords;
-            }).flat();
+                
+                transformedDetections.push({
+                  id: `${detection.id}_${index}`,
+                  timestamp: detection.timestamp,
+                  detection_type: detectionType,
+                  class_name: className,
+                  confidence: (confidence * 100).toFixed(1),
+                  license_plate: licensePlate,
+                  smoke_level: smokeLevel,
+                  location: detection.location || metadata.location || 'Main Camera',
+                  camera_id: metadata.camera_id || 'unknown'
+                });
+              });
+            });
             
             // Sort by timestamp (newest first)
             transformedDetections.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
             
-            console.log(`[DETECTIONS] Loaded ${transformedDetections.length} detection records from new schema`);
+            console.log(`[DETECTIONS] Loaded ${transformedDetections.length} detection records from API`);
             setAllDetections(transformedDetections);
             return;
           }
@@ -700,9 +680,10 @@ function Dashboard() {
         headers['Authorization'] = `Bearer ${token}`;
       }
       
-      // Try the ranking endpoint first (public)
+      // Try the ranking endpoint first (public) with cache busting
       try {
-        const response = await fetchWithFallback('/api/vehicles/ranking');
+        const cacheBuster = Date.now();
+        const response = await fetchWithFallback(`/api/vehicles/ranking?_cb=${cacheBuster}`);
         
         if (response.status === 200) {
           const result = await response.json();
@@ -712,103 +693,12 @@ function Dashboard() {
           }
         }
       } catch (error) {
-        console.log('Ranking endpoint not available, using live detection processing...');
+        console.log('Ranking endpoint not available');
       }
       
-      // Enhanced Fallback: Process live detection data for vehicle ranking
-      try {
-        const streamResponse = await fetchWithFallback('/api/stream/status');
-        if (streamResponse.status === 200) {
-          const streamData = await streamResponse.json();
-          
-          // Process detection metadata for vehicle ranking
-          if (streamData.latest_detections && streamData.latest_detections.length > 0) {
-            const detections = streamData.latest_detections;
-            
-            // Advanced detection analysis
-            const vehicleDetections = detections.filter(d => 
-              ['passenger', 'puv', 'services', 'two_wheel'].includes(d.class_name)
-            );
-            const smokeDetections = detections.filter(d => 
-              d.class_name && (d.class_name.includes('smoke') || d.class_name.includes('fire'))
-            );
-            
-            console.log(`[RANKING] Processing: ${vehicleDetections.length} vehicles, ${smokeDetections.length} smoke detections`);
-            
-            if (vehicleDetections.length > 0) {
-              const ranking = [];
-              
-              // Create comprehensive vehicle ranking
-              vehicleDetections.forEach((vehicle, index) => {
-                const timestamp = new Date();
-                const plateNum = String(timestamp.getMinutes()).padStart(2, '0') + 
-                               String(timestamp.getSeconds()).padStart(2, '0');
-                
-                // Generate realistic license plates and vehicle info
-                let platePrefix = 'VEH';
-                let vehicleType = vehicle.class_name;
-                let baseViolations = Math.floor(vehicle.confidence * 8);
-                
-                if (vehicle.class_name === 'passenger') {
-                  platePrefix = 'ABC';
-                  vehicleType = 'Passenger Car';
-                  baseViolations += 2; // Passenger cars tend to have more violations
-                } else if (vehicle.class_name === 'puv') {
-                  platePrefix = 'PUV';
-                  vehicleType = 'Public Utility Vehicle';
-                  baseViolations += 4; // PUVs often have higher emissions
-                } else if (vehicle.class_name === 'services') {
-                  platePrefix = 'SVC';
-                  vehicleType = 'Service Vehicle';
-                  baseViolations += 1;
-                } else if (vehicle.class_name === 'two_wheel') {
-                  platePrefix = 'MC';
-                  vehicleType = 'Motorcycle';
-                  baseViolations = Math.floor(baseViolations * 0.6); // Motorcycles typically have fewer violations
-                }
-                
-                // Add smoke-based violations
-                let smokeViolations = 0;
-                if (smokeDetections.length > 0) {
-                  const maxSmokeConf = Math.max(...smokeDetections.map(s => s.confidence || 0));
-                  smokeViolations = Math.floor(maxSmokeConf * 8) + smokeDetections.length;
-                }
-                
-                const totalViolations = Math.max(1, baseViolations + smokeViolations);
-                
-                // Determine status based on violations
-                let status = 'safe';
-                if (totalViolations > 15) status = 'critical';
-                else if (totalViolations > 8) status = 'warning';
-                else if (totalViolations > 3) status = 'caution';
-                
-                ranking.push({
-                  id: `rank_vehicle_${index}`,
-                  license_plate: `${platePrefix}-${plateNum}`,
-                  vehicle_type: vehicleType,
-                  violations: totalViolations,
-                  status: status,
-                  last_detected: timestamp.toISOString(),
-                  smoke_detected: smokeDetections.length > 0,
-                  confidence: vehicle.confidence,
-                  detection_source: 'live_ai'
-                });
-              });
-              
-              // Only use live detection data - no mock data
-              console.log(`[RANKING] Generated ranking with ${ranking.length} live vehicles`);
-              setVehicleRanking(ranking);
-              return;
-            }
-          }
-          
-          // If no current detections, show empty ranking
-          console.log(`[RANKING] No live detections available - showing empty ranking`);
-          setVehicleRanking([]);
-        }
-      } catch (error) {
-        console.log('Stream ranking processing failed:', error.message);
-      }
+      // No real ranking data available - show empty state
+      console.log(`[RANKING] No real ranking data available - setting empty array`);
+      setVehicleRanking([]);
       
     } catch (error) {
       console.log('Ranking fetch failed:', error.message);
@@ -819,6 +709,10 @@ function Dashboard() {
   // Fetch detections data when dashboard page is active
   useEffect(() => {
     if (activePage === "dashboard") {
+      // Clear any existing data first
+      setAllDetections([]);
+      setVehicleRanking([]);
+      
       fetchAllDetections();
       fetchVehicleRanking();
       const interval = setInterval(() => {
@@ -1489,14 +1383,6 @@ function Dashboard() {
       <main className="main-content">
           {activePage === "dashboard" && (
             <div className="dashboard-page-container">
-              {/* Real-time Data Disclaimer */}
-              <div className="data-disclaimer-banner">
-                <span className="disclaimer-icon">⚠️</span>
-                <span className="disclaimer-text">
-                  Detection data is near real-time (not live real-time) - Updates may have a delay of 1-3 seconds
-                </span>
-              </div>
-              
               <div className="dashboard-layout">
                 <div className="dashboard-camera-section">
                   <div className="camera-feed-box">
@@ -1511,7 +1397,7 @@ function Dashboard() {
                       <div className="section-title-row">
                         <div>
                           <h2>Live Detections</h2>
-                          <p className="section-subtitle">Real-time AI detection results</p>
+                          <p className="section-subtitle">Near real-time AI detection results (~2-5s latency)</p>
                         </div>
                       </div>
                     </div>
@@ -1543,7 +1429,6 @@ function Dashboard() {
                             return (
                               <div className="no-data-message">
                                 <p>No recent detections available</p>
-                                <p className="data-disclaimer">⚠️ Note: Detection data is near real-time, not live real-time</p>
                               </div>
                             );
                           }
@@ -1624,41 +1509,25 @@ function Dashboard() {
                     <div className="detection-summary-grid">
                       <div className="summary-card">
                         <div className="summary-number">
-                          {(() => {
-                            const realVehicles = allDetections.length > 0 ? allDetections.filter(d => d.detection_type === 'Vehicle').length : 0;
-                            const dummyVehicles = 24; // Base dummy count
-                            return realVehicles + dummyVehicles;
-                          })()}
+                          {allDetections.length > 0 ? allDetections.filter(d => d.detection_type === 'Vehicle').length : 0}
                         </div>
                         <div className="summary-label">Vehicles</div>
                       </div>
                       <div className="summary-card">
                         <div className="summary-number">
-                          {(() => {
-                            const realSmoke = allDetections.length > 0 ? allDetections.filter(d => d.detection_type === 'Smoke').length : 0;
-                            const dummySmoke = 8; // Base dummy count
-                            return realSmoke + dummySmoke;
-                          })()}
+                          {allDetections.length > 0 ? allDetections.filter(d => d.detection_type === 'Smoke').length : 0}
                         </div>
                         <div className="summary-label">Smoke Events</div>
                       </div>
                       <div className="summary-card">
                         <div className="summary-number">
-                          {(() => {
-                            const realPlates = allDetections.length > 0 ? allDetections.filter(d => d.detection_type === 'License').length : 0;
-                            const dummyPlates = 18; // Base dummy count
-                            return realPlates + dummyPlates;
-                          })()}
+                          {allDetections.length > 0 ? allDetections.filter(d => d.detection_type === 'License').length : 0}
                         </div>
                         <div className="summary-label">Plates Read</div>
                       </div>
                       <div className="summary-card">
                         <div className="summary-number">
-                          {(() => {
-                            const realTotal = allDetections.length > 0 ? allDetections.length : 0;
-                            const dummyTotal = 50; // Base dummy count
-                            return realTotal + dummyTotal;
-                          })()}
+                          {allDetections.length > 0 ? allDetections.length : 0}
                         </div>
                         <div className="summary-label">Total Detections</div>
                       </div>
@@ -1680,7 +1549,6 @@ function Dashboard() {
                           return (
                             <div className="no-data-message">
                               <p>No vehicle violations recorded</p>
-                              <p className="data-disclaimer">⚠️ Note: Violation data is near real-time, not live real-time</p>
                             </div>
                           );
                         }
@@ -2273,7 +2141,7 @@ function Dashboard() {
                 <div className="data-logs-header">
                   <div className="data-logs-title">
                     <h2>Data Logs</h2>
-                    <p>Real-time and historical sensor measurements</p>
+                    <p>Near real-time and historical sensor measurements</p>
                   </div>
                   <button 
                     className="download-csv-btn"

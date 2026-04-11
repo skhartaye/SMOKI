@@ -7,6 +7,8 @@ function CameraViewer() {
   const [isHealthy, setIsHealthy] = useState(false);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [lastGeneratedReport, setLastGeneratedReport] = useState(null);
   const videoRef = useRef(null);
   const [lastUpdate, setLastUpdate] = useState(null);
 
@@ -70,7 +72,7 @@ function CameraViewer() {
         } catch (err) {
           console.error('Frame refresh error:', err);
         }
-      }, 2000); // Refresh every 2 seconds for better real-time
+      }, 1000); // Refresh every 1 second for faster updates
 
       // Store interval reference for cleanup
       videoRef.current.frameInterval = frameInterval;
@@ -114,6 +116,80 @@ function CameraViewer() {
     }
   };
 
+  const generateReport = async () => {
+    try {
+      setIsGeneratingReport(true);
+      setError(null);
+      console.log('📄 Generating detection report...');
+      
+      // Call backend to generate report
+      const response = await fetch('https://smoki-backend-rpi.onrender.com/api/stream/generate-report', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          report_type: 'detection_snapshot'
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Report generation failed: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log('✅ Report generated successfully:', result.report_id);
+        
+        // Store the report info for later viewing
+        setLastGeneratedReport({
+          id: result.report_id,
+          timestamp: new Date().toLocaleTimeString(),
+          detectionSummary: result.detection_summary || {}
+        });
+        
+        // Show success message with report details instead of auto-opening
+        const reportPath = `reports/${result.report_id}.html`;
+        const detectionSummary = result.detection_summary || {};
+        const smokeCount = detectionSummary.smoke_detections || 0;
+        const vehicleCount = detectionSummary.vehicle_detections || 0;
+        const plateCount = detectionSummary.plate_detections || 0;
+        
+        console.log('📄 Report created successfully!');
+        console.log(`📊 Detection Summary: ${smokeCount} smoke, ${vehicleCount} vehicles, ${plateCount} plates`);
+        console.log(`📁 Report saved as: ${reportPath}`);
+        
+        // Show success notification with option to open
+        alert(
+          `✅ Report Generated Successfully!\n\n` +
+          `Report ID: ${result.report_id}\n` +
+          `Generated: ${new Date().toLocaleString()}\n` +
+          `Detections: ${smokeCount} smoke, ${vehicleCount} vehicles, ${plateCount} plates\n\n` +
+          `The report has been created and saved. Use the "View Report" button to open it.`
+        );
+        
+        // Optional: Show a toast notification if available
+        if (window.showToast) {
+          window.showToast(`Report ${result.report_id} created successfully!`, 'success');
+        }
+      } else {
+        throw new Error(result.message || 'Report generation failed');
+      }
+      
+    } catch (err) {
+      console.error('❌ Report generation error:', err);
+      setError('Failed to generate report: ' + err.message);
+      
+      // Optional: Show error toast if available
+      if (window.showToast) {
+        window.showToast('Failed to generate report', 'error');
+      }
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
+
   return (
     <div className="camera-viewer">
       <div className="camera-header">
@@ -151,6 +227,51 @@ function CameraViewer() {
               <Pause size={16} />
               Stop Stream
             </button>
+          )}
+          
+          {/* Report button - only show when streaming */}
+          {isStreaming && (
+            <button 
+              onClick={generateReport}
+              className="control-btn report-btn"
+              disabled={isGeneratingReport}
+              title="Generate HTML report with current frame"
+            >
+              {isGeneratingReport ? 'Generating...' : '📄 Report'}
+            </button>
+          )}
+          
+          {/* View Report button - only show when a report has been generated */}
+          {lastGeneratedReport && (
+            <>
+              <button 
+                onClick={() => {
+                  const reportUrl = `https://smoki-backend-rpi.onrender.com/api/stream/reports/${lastGeneratedReport.id}`;
+                  window.open(reportUrl, '_blank');
+                }}
+                className="control-btn view-report-btn"
+                title={`View report ${lastGeneratedReport.id} (generated at ${lastGeneratedReport.timestamp})`}
+              >
+                👁️ View Report
+              </button>
+              
+              <button 
+                onClick={() => {
+                  const downloadUrl = `https://smoki-backend-rpi.onrender.com/api/stream/reports/${lastGeneratedReport.id}/download`;
+                  // Create a temporary link to trigger download
+                  const link = document.createElement('a');
+                  link.href = downloadUrl;
+                  link.download = `${lastGeneratedReport.id}.html`;
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                }}
+                className="control-btn download-report-btn"
+                title={`Download report ${lastGeneratedReport.id} as HTML file`}
+              >
+                💾 Download HTML
+              </button>
+            </>
           )}
           
           {/* Test button to verify direct URL works */}
