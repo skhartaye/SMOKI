@@ -25,7 +25,44 @@ class SMOKiReportGenerator:
         self.local_reports_dir.mkdir(exist_ok=True)
     
     def get_current_frame_and_data(self) -> Dict:
-        """Get current frame and detection data from the API"""
+        """Get current frame and detection data from the local stream manager"""
+        try:
+            # Import here to avoid circular imports
+            from stream import stream_manager
+            
+            # Get current frame from local stream manager
+            frame_data = None
+            latest_frame = stream_manager.get_latest_frame()
+            if latest_frame:
+                frame_data = base64.b64encode(latest_frame).decode('utf-8')
+            
+            # Get current detection data from stream manager
+            detection_data = {
+                'status': 'active',
+                'fps': getattr(stream_manager, 'fps', 1),
+                'buffered_frames': len(getattr(stream_manager, 'frames', [])),
+                'latest_frame_size': len(latest_frame) if latest_frame else 0,
+                'latest_detections': getattr(stream_manager, 'latest_detections', []),
+                'detection_summary': self._calculate_detection_summary(getattr(stream_manager, 'latest_detections', [])),
+                'camera_info': {
+                    'camera_id': 'SMOKi_Camera_01',
+                    'location': 'Main Camera Station',
+                    'timestamp': datetime.now(timezone.utc).isoformat()
+                }
+            }
+            
+            return {
+                'frame_data': frame_data,
+                'detection_data': detection_data,
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            }
+        except Exception as e:
+            print(f"Error fetching current data from stream manager: {e}")
+            # Fallback to API call
+            return self._get_data_from_api()
+    
+    def _get_data_from_api(self) -> Dict:
+        """Fallback method to get data from API"""
         try:
             # Get current frame
             frame_response = requests.get(f"{self.api_base_url}/api/stream/latest.jpg", timeout=10)
@@ -45,13 +82,33 @@ class SMOKiReportGenerator:
                 'timestamp': datetime.now(timezone.utc).isoformat()
             }
         except Exception as e:
-            print(f"Error fetching current data: {e}")
+            print(f"Error fetching current data from API: {e}")
             return {
                 'frame_data': None,
                 'detection_data': {},
                 'timestamp': datetime.now(timezone.utc).isoformat(),
                 'error': str(e)
             }
+    
+    def _calculate_detection_summary(self, detections: list) -> Dict:
+        """Calculate detection summary from detections list"""
+        summary = {
+            'total_detections': len(detections),
+            'smoke_detections': 0,
+            'vehicle_detections': 0,
+            'plate_detections': 0
+        }
+        
+        for detection in detections:
+            class_name = detection.get('class_name', '').lower()
+            if 'smoke' in class_name:
+                summary['smoke_detections'] += 1
+            elif class_name in ['passenger', 'puv', 'services', 'two_wheel']:
+                summary['vehicle_detections'] += 1
+            elif 'license' in class_name or 'plate' in class_name:
+                summary['plate_detections'] += 1
+        
+        return summary
     
     def generate_html_report(self, report_data: Dict, report_type: str = "general") -> str:
         """Generate HTML report with current frame and detection data"""
