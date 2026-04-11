@@ -1468,24 +1468,49 @@ function Dashboard() {
                                 {detection.type === 'Smoke' ? (
                                   <button 
                                     className="report-smoke-btn"
-                                    onClick={() => {
-                                      const subject = detection.isReal ? 
-                                        `Smoke Detection Report - ${detection.time}` :
-                                        `Smoke Detection Report - ${detection.time}`;
-                                      const body = detection.isReal ?
-                                        `Smoke Detection Alert%0A%0ATimestamp: ${detection.time}%0ASmoke Level: ${detection.level}%0AConfidence: ${detection.confidence}%25%0AObject Type: ${detection.object}%0A%0AThis is an automated smoke detection report from the SMOKi monitoring system.` :
-                                        `Smoke Detection Alert%0A%0ATimestamp: ${detection.time}%0ASmoke Level: ${detection.level}%0AConfidence: ${detection.confidence}%25%0AObject Type: ${detection.object}%0A%0AThis is a demo smoke detection report from the SMOKi monitoring system.`;
-                                      const mailtoLink = `mailto:enforcement@smoki.gov?subject=${subject}&body=${body}`;
-                                      
+                                    onClick={async () => {
                                       try {
-                                        window.open(mailtoLink, '_blank');
-                                        showToast(`Email client opened for smoke report ${detection.isReal ? '' : '(Demo)'}`, 'success');
+                                        setReportingSmoke(detection.id);
+                                        
+                                        // Generate HTML report instead of opening email
+                                        const response = await fetch('https://smoki-backend-rpi.onrender.com/api/stream/generate-report', {
+                                          method: 'POST',
+                                          headers: {
+                                            'Content-Type': 'application/json',
+                                          },
+                                          body: JSON.stringify({
+                                            report_type: 'smoke_detection'
+                                          })
+                                        });
+                                        
+                                        if (response.ok) {
+                                          const result = await response.json();
+                                          if (result.success) {
+                                            // Download the report
+                                            const downloadUrl = `https://smoki-backend-rpi.onrender.com/api/stream/reports/${result.report_id}/download`;
+                                            const link = document.createElement('a');
+                                            link.href = downloadUrl;
+                                            link.download = `Smoke_Report_${result.report_id}.html`;
+                                            document.body.appendChild(link);
+                                            link.click();
+                                            document.body.removeChild(link);
+                                            
+                                            showToast(`Smoke report downloaded: ${result.report_id}.html`, 'success');
+                                          } else {
+                                            throw new Error(result.message || 'Report generation failed');
+                                          }
+                                        } else {
+                                          throw new Error(`Report generation failed: ${response.status}`);
+                                        }
                                       } catch (error) {
-                                        window.location.href = mailtoLink;
+                                        console.error('Error generating smoke report:', error);
+                                        showToast('Failed to generate smoke report', 'error');
+                                      } finally {
+                                        setReportingSmoke(null);
                                       }
                                     }}
                                     disabled={reportingSmoke === detection.id}
-                                    title="Report this smoke event"
+                                    title="Generate HTML report for this smoke detection"
                                   >
                                     {reportingSmoke === detection.id ? 'Reporting...' : 'Report'}
                                   </button>
@@ -1589,21 +1614,52 @@ function Dashboard() {
                             <div className="ranking-actions">
                               <button 
                                 className="report-btn"
-                                onClick={() => {
-                                  const subject = `Vehicle Emission Violation Report - ${vehicle.plate}`;
-                                  const body = vehicle.isReal ?
-                                    `Vehicle Emission Violation Report%0A%0ALicense Plate: ${vehicle.plate}%0AVehicle Type: ${vehicle.vehicleType}%0ATotal Violations: ${vehicle.violations}%0AStatus: ${vehicle.status}%0ASmoke Level: ${vehicle.smokeLevel}%0ALast Detected: ${vehicle.lastSeen}%0A%0AThis vehicle has been flagged for excessive emissions and requires immediate attention.%0A%0APlease take appropriate enforcement action.` :
-                                    `Vehicle Emission Violation Report%0A%0ALicense Plate: ${vehicle.plate}%0AVehicle Type: ${vehicle.vehicleType}%0ATotal Violations: ${vehicle.violations}%0AStatus: ${vehicle.status}%0ASmoke Level: ${vehicle.smokeLevel}%0ALast Detected: ${vehicle.lastSeen}%0A%0AThis is a demo vehicle emission report from the SMOKi monitoring system.`;
-                                  const mailtoLink = `mailto:enforcement@smoki.gov?subject=${subject}&body=${body}`;
-                                  
+                                onClick={async () => {
                                   try {
-                                    window.open(mailtoLink, '_blank');
-                                    showToast(`Email client opened for violation report ${vehicle.isReal ? '' : '(Demo)'}`, 'success');
+                                    // Generate HTML report instead of opening email
+                                    const response = await fetch('https://smoki-backend-rpi.onrender.com/api/stream/generate-report', {
+                                      method: 'POST',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                      },
+                                      body: JSON.stringify({
+                                        report_type: 'vehicle_violation',
+                                        vehicle_data: {
+                                          plate: vehicle.plate,
+                                          vehicleType: vehicle.vehicleType,
+                                          violations: vehicle.violations,
+                                          status: vehicle.status,
+                                          smokeLevel: vehicle.smokeLevel,
+                                          lastSeen: vehicle.lastSeen
+                                        }
+                                      })
+                                    });
+                                    
+                                    if (response.ok) {
+                                      const result = await response.json();
+                                      if (result.success) {
+                                        // Download the report
+                                        const downloadUrl = `https://smoki-backend-rpi.onrender.com/api/stream/reports/${result.report_id}/download`;
+                                        const link = document.createElement('a');
+                                        link.href = downloadUrl;
+                                        link.download = `Vehicle_Report_${vehicle.plate}_${result.report_id}.html`;
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        document.body.removeChild(link);
+                                        
+                                        showToast(`Vehicle report downloaded: ${vehicle.plate}_${result.report_id}.html`, 'success');
+                                      } else {
+                                        throw new Error(result.message || 'Report generation failed');
+                                      }
+                                    } else {
+                                      throw new Error(`Report generation failed: ${response.status}`);
+                                    }
                                   } catch (error) {
-                                    window.location.href = mailtoLink;
+                                    console.error('Error generating vehicle report:', error);
+                                    showToast('Failed to generate vehicle report', 'error');
                                   }
                                 }}
-                                title="Report to authorities"
+                                title="Generate HTML report for this vehicle violation"
                               >
                                 Report
                               </button>
