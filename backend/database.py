@@ -563,32 +563,8 @@ def get_top_violators(limit=5):
                 for row in cursor.fetchall():
                     results.append(dict(zip(columns, row)))
                 
-                # If no registered vehicles with violations, create mock data from recent detections
-                if not results:
-                    cursor.execute("""
-                        SELECT id, metadata, timestamp, smoke_detected
-                        FROM vehicle_detections 
-                        WHERE smoke_detected = true
-                        ORDER BY timestamp DESC
-                        LIMIT %s;
-                    """, (limit,))
-                    
-                    detection_rows = cursor.fetchall()
-                    for i, row in enumerate(detection_rows):
-                        metadata = json.loads(row[1]) if row[1] else {}
-                        # Generate mock license plate from timestamp
-                        timestamp = row[2]
-                        plate_suffix = f"{timestamp.hour:02d}{timestamp.minute:02d}"
-                        
-                        results.append({
-                            'id': f"mock_{row[0]}",
-                            'license_plate': f"SMK-{plate_suffix}",
-                            'vehicle_type': 'passenger',
-                            'violations': 1,
-                            'last_detected': timestamp,
-                            'emission_level': 'high',
-                            'smoke_detected': True
-                        })
+                # If no registered vehicles with violations, return empty results
+                # Real system should only show actual registered vehicles with violations
                 
                 return results
         except Exception as e:

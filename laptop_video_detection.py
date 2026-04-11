@@ -24,7 +24,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configuration
-VIDEO_FILE = os.getenv('VIDEO_FILE', r'esp32/rotonda_trim.mp4')
+VIDEO_FILE = os.getenv('VIDEO_FILE', r'D:\embed\SMOKI\esp32\rotonda_trim.mp4')
 API_URL = os.getenv('API_URL', 'https://smoki-backend-rpi.onrender.com')
 DEVICE_ID = os.getenv('DEVICE_ID', 'laptop_cam_001')
 CAMERA_LOCATION = os.getenv('CAMERA_LOCATION', 'Laptop_Detection')
@@ -40,11 +40,11 @@ SMOKE_CONF = 0.25
 PLATE_CONF = 0.15
 VEHICLE_CONF = 0.30
 
-# Model paths
+# Model paths - Updated to use correct PT model locations
 MODELS = {
-    'smoke': 'esp32/models/yolov8n-smoke-seg.pt',
-    'plate': 'esp32/license-plate.pt', 
-    'vehicle': 'esp32/vehicle-class.pt'
+    'smoke': r'D:\embed\SMOKI\esp32\yolov8n-smoke-seg.pt',
+    'plate': r'D:\embed\SMOKI\esp32\license-plate.pt', 
+    'vehicle': r'D:\embed\SMOKI\esp32\vehicle-class.pt'
 }
 
 # Global variables

@@ -143,22 +143,16 @@ async def create_smoke_violations(vehicle_detections: list, location: str, times
     """Create violations for vehicles detected with smoke"""
     try:
         for vehicle in vehicle_detections:
-            # Generate a mock license plate for now (in real system, this would come from OCR)
+            # Extract license plate from OCR data if available
             vehicle_type = vehicle.get('class_name', 'unknown')
             confidence = vehicle.get('confidence', 0.0)
             
-            # Generate mock license plate based on vehicle type and timestamp
-            plate_suffix = str(timestamp.minute).zfill(2) + str(timestamp.second).zfill(2)
-            if vehicle_type == 'passenger':
-                license_plate = f"ABC-{plate_suffix}"
-            elif vehicle_type == 'puv':
-                license_plate = f"PUV-{plate_suffix}"
-            elif vehicle_type == 'services':
-                license_plate = f"SVC-{plate_suffix}"
-            elif vehicle_type == 'two_wheel':
-                license_plate = f"MC-{plate_suffix}"
-            else:
-                license_plate = f"VEH-{plate_suffix}"
+            # Try to get license plate from detection metadata
+            license_plate = vehicle.get('plate_text', '')
+            if not license_plate:
+                # No license plate detected - skip this vehicle for violation creation
+                print(f"[VIOLATION] Skipping vehicle {vehicle_type} - no license plate detected")
+                continue
             
             print(f"[VIOLATION] Creating smoke violation for {license_plate} ({vehicle_type})")
             
@@ -296,19 +290,19 @@ async def get_stream_status():
         
         # If no detections in new format, try to extract from old format
         if not detections:
-            # Check if we have detection counts and create detection objects
+            # Check if we have detection counts and create basic detection info
             smoke_count = latest_metadata.get('smoke_count', 0)
             vehicle_count = latest_metadata.get('vehicle_count', 0) 
             plate_count = latest_metadata.get('plate_count', 0)
             
-            # Create mock detection objects based on counts for compatibility
+            # Create basic detection info based on counts (no mock data)
             detections = []
-            for i in range(smoke_count):
-                detections.append({"class": "smoke_black", "conf": 0.75})
-            for i in range(vehicle_count):
-                detections.append({"class": "passenger", "conf": 0.85})
-            for i in range(plate_count):
-                detections.append({"class": "license_plate", "conf": 0.90})
+            if smoke_count > 0:
+                detections.append({"type": "smoke", "count": smoke_count})
+            if vehicle_count > 0:
+                detections.append({"type": "vehicle", "count": vehicle_count})
+            if plate_count > 0:
+                detections.append({"type": "plate", "count": plate_count})
         
         status_data["latest_detections"] = detections
         
