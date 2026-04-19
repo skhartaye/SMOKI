@@ -844,13 +844,86 @@ async def serve_report(report_id: str):
             html_content = f.read()
         
         # Strip evidence gallery section — evidence is reviewed via the local frontend modal.
-        # The gallery div runs from its opening tag to end of body, so split on it and
-        # re-attach the closing tags.
         GALLERY_MARKER = '<div class="evidence-gallery-section">'
         if GALLERY_MARKER in html_content:
             before = html_content.split(GALLERY_MARKER)[0]
             html_content = before + "\n</div>\n</div>\n</body>\n</html>"
-        
+
+        # Inject Gmail/Outlook email button and fix shareReport to open email clients
+        email_injection = f"""
+<style>
+.email-report-bar {{
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #1a1a2e;
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 9999;
+    box-shadow: 0 -4px 16px rgba(0,0,0,0.4);
+    flex-wrap: wrap;
+}}
+.email-report-bar span {{
+    color: #aaa;
+    font-size: 0.9rem;
+    margin-right: 8px;
+}}
+.email-btn {{
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: opacity 0.2s ease;
+}}
+.email-btn:hover {{ opacity: 0.85; }}
+.gmail-btn {{ background: #EA4335; color: white; }}
+.outlook-btn {{ background: #0078D4; color: white; }}
+.print-btn {{ background: #444; color: white; }}
+body {{ padding-bottom: 70px; }}
+</style>
+<div class="email-report-bar">
+    <span>📋 Report: {report_id}</span>
+    <button class="email-btn gmail-btn" onclick="openGmail()">✉️ Gmail</button>
+    <button class="email-btn outlook-btn" onclick="openOutlook()">✉️ Outlook</button>
+    <button class="email-btn print-btn" onclick="window.print()">🖨️ Print / Save PDF</button>
+</div>
+<script>
+function _buildEmailContent() {{
+    var subject = encodeURIComponent('SMOKi Violation Report - {report_id}');
+    var body = encodeURIComponent(
+        'SMOKi Violation Evidence Report\\n\\n' +
+        'Report ID: {report_id}\\n' +
+        'URL: ' + window.location.href + '\\n\\n' +
+        'Please review the attached report for violation details.\\n\\n' +
+        '-- SMOKi Detection System'
+    );
+    return {{ subject: subject, body: body }};
+}}
+function openGmail() {{
+    var e = _buildEmailContent();
+    window.open('https://mail.google.com/mail/?view=cm&fs=1&su=' + e.subject + '&body=' + e.body, '_blank');
+}}
+function openOutlook() {{
+    var e = _buildEmailContent();
+    window.open('https://outlook.live.com/mail/0/deeplink/compose?subject=' + e.subject + '&body=' + e.body, '_blank');
+}}
+</script>
+"""
+        # Inject before </body>
+        if '</body>' in html_content:
+            html_content = html_content.replace('</body>', email_injection + '\n</body>', 1)
+        else:
+            html_content += email_injection
+
         return Response(
             content=html_content,
             media_type="text/html",
