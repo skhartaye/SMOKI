@@ -215,8 +215,8 @@ class SMOKiReportGenerator:
             severity = "LOW"
             severity_color = "#28a745"
         
-        # Generate evidence gallery from D:\embed\SMOKI\esp32\evidence
-        evidence_gallery_html = self._generate_evidence_gallery()
+        # Evidence gallery removed — evidence is reviewed via the local frontend modal
+        evidence_gallery_html = ""
         
         # Generate violation evidence HTML
         violation_evidence_html = ""

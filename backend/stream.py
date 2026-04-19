@@ -740,6 +740,50 @@ async def get_plate_events_endpoint(limit: int = 50):
         print(f"[PLATE] Error fetching plate events: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/generate-local-report")
+async def generate_local_report(request_data: dict):
+    """Generate LOCAL HTML report with embedded evidence images"""
+    try:
+        report_type = request_data.get("report_type", "general")
+        notification_id = request_data.get("notification_id")
+        violation_id = request_data.get("violation_id")
+        
+        print(f"[LOCAL REPORT] Generating {report_type} report with local evidence access...")
+        if notification_id:
+            print(f"[LOCAL REPORT] Notification ID: {notification_id}")
+        if violation_id:
+            print(f"[LOCAL REPORT] Violation ID: {violation_id}")
+        
+        # Initialize report generator
+        generator = SMOKiReportGenerator()
+        
+        # Get current data with local evidence access
+        report_data = generator.get_current_frame_and_data_local()
+        
+        # Generate LOCAL HTML report with embedded images
+        report_path = generator.generate_html_report_local(report_data, report_type)
+        
+        if report_path and not report_path.startswith("Error"):
+            print(f"[LOCAL REPORT] Report generated successfully at: {report_path}")
+            return {
+                "success": True,
+                "report_path": report_path,
+                "report_id": Path(report_path).stem,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "evidence_count": len(report_data.get('violations', [])),
+                "message": "Local report generated successfully with embedded evidence images"
+            }
+        else:
+            error_msg = report_path if report_path.startswith("Error") else "Unknown error generating local report"
+            print(f"[LOCAL REPORT] Report generation failed: {error_msg}")
+            raise HTTPException(status_code=500, detail=error_msg)
+            
+    except Exception as e:
+        print(f"[LOCAL REPORT] Error generating local report: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/generate-report")
 async def generate_detection_report(request_data: dict):
     """Generate HTML report with current frame and detection data"""
@@ -796,9 +840,16 @@ async def serve_report(report_id: str):
         if not report_path.exists():
             raise HTTPException(status_code=404, detail="Report not found")
         
-        # Read and return HTML content for inline viewing
         with open(report_path, 'r', encoding='utf-8') as f:
             html_content = f.read()
+        
+        # Strip evidence gallery section — evidence is reviewed via the local frontend modal.
+        # The gallery div runs from its opening tag to end of body, so split on it and
+        # re-attach the closing tags.
+        GALLERY_MARKER = '<div class="evidence-gallery-section">'
+        if GALLERY_MARKER in html_content:
+            before = html_content.split(GALLERY_MARKER)[0]
+            html_content = before + "\n</div>\n</div>\n</body>\n</html>"
         
         return Response(
             content=html_content,
