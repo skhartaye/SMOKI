@@ -650,6 +650,7 @@ function Dashboard() {
             detectionRecords.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
             
             console.log(`[DETECTIONS] Generated ${detectionRecords.length} detection records from live data`);
+            console.log('[DEBUG] Detection records:', detectionRecords);
             setAllDetections(detectionRecords);
             return;
           } else {
@@ -663,7 +664,7 @@ function Dashboard() {
       }
       
       // If no real data is available, set empty array
-      console.log('[DEBUG] No real detection data available');
+      console.log('[DEBUG] No real detection data available - setting empty array');
       setAllDetections([]);
       
     } catch (error) {
@@ -1412,17 +1413,30 @@ function Dashboard() {
                       </div>
                       <div className="detections-table-body">
                         {(() => {
-                          // Show only real detection data
-                          const realDetectionsFormatted = allDetections.length > 0 ? allDetections.slice(0, 10).map((detection) => ({
-                            id: detection.id,
-                            time: new Date(detection.timestamp).toLocaleTimeString(),
-                            type: detection.detection_type || 'Unknown',
-                            object: detection.class_name || 'Unknown',
-                            confidence: detection.confidence || '0.0',
-                            plate: detection.license_plate || 'Not detected',
-                            level: detection.smoke_level || 'None',
-                            isReal: true
-                          })) : [];
+                          // Show only real detection data with validation
+                          const realDetectionsFormatted = allDetections.length > 0 ? allDetections
+                            .filter(detection => {
+                              // Filter out invalid/undefined detections
+                              return detection && 
+                                     detection.detection_type && 
+                                     detection.detection_type !== 'Unknown' &&
+                                     detection.class_name && 
+                                     detection.class_name !== 'Unknown' &&
+                                     detection.confidence && 
+                                     detection.confidence !== '0.0' &&
+                                     parseFloat(detection.confidence) > 0;
+                            })
+                            .slice(0, 10)
+                            .map((detection) => ({
+                              id: detection.id,
+                              time: new Date(detection.timestamp).toLocaleTimeString(),
+                              type: detection.detection_type || 'Unknown',
+                              object: detection.class_name || 'Unknown',
+                              confidence: detection.confidence || '0.0',
+                              plate: detection.license_plate || 'Not detected',
+                              level: detection.smoke_level || 'None',
+                              isReal: true
+                            })) : [];
                           
                           // Show message if no real data
                           if (realDetectionsFormatted.length === 0) {
@@ -1472,30 +1486,34 @@ function Dashboard() {
                                       try {
                                         setReportingSmoke(detection.id);
                                         
-                                        // Generate HTML report instead of opening email
+                                        // Generate HTML report for this specific detection time
                                         const response = await fetch('https://smoki-backend-rpi.onrender.com/api/stream/generate-report', {
                                           method: 'POST',
                                           headers: {
                                             'Content-Type': 'application/json',
                                           },
                                           body: JSON.stringify({
-                                            report_type: 'smoke_detection'
+                                            report_type: 'smoke_detection',
+                                            detection_timestamp: detection.timestamp,
+                                            detection_id: detection.id,
+                                            detection_data: {
+                                              time: detection.time,
+                                              type: detection.type,
+                                              object: detection.object,
+                                              confidence: detection.confidence,
+                                              details: detection.details
+                                            }
                                           })
                                         });
                                         
                                         if (response.ok) {
                                           const result = await response.json();
                                           if (result.success) {
-                                            // Download the report
-                                            const downloadUrl = `https://smoki-backend-rpi.onrender.com/api/stream/reports/${result.report_id}/download`;
-                                            const link = document.createElement('a');
-                                            link.href = downloadUrl;
-                                            link.download = `Smoke_Report_${result.report_id}.html`;
-                                            document.body.appendChild(link);
-                                            link.click();
-                                            document.body.removeChild(link);
+                                            // Open the enhanced report with evidence gallery in a new tab
+                                            const reportUrl = `https://smoki-backend-rpi.onrender.com/api/stream/reports/${result.report_id}`;
+                                            window.open(reportUrl, '_blank');
                                             
-                                            showToast(`Smoke report downloaded: ${result.report_id}.html`, 'success');
+                                            showToast(`Smoke report opened: ${result.report_id}`, 'success');
                                           } else {
                                             throw new Error(result.message || 'Report generation failed');
                                           }
@@ -1586,6 +1604,7 @@ function Dashboard() {
                           lastSeen: new Date(vehicle.last_detected).toLocaleTimeString(),
                           vehicleType: vehicle.vehicle_type || 'Vehicle',
                           smokeLevel: vehicle.smoke_detected ? 'High' : 'Low',
+                          latest_violation_id: vehicle.latest_violation_id,
                           isReal: true
                         }));
                         
@@ -1616,7 +1635,7 @@ function Dashboard() {
                                 className="report-btn"
                                 onClick={async () => {
                                   try {
-                                    // Generate HTML report instead of opening email
+                                    // Generate HTML report with violation-specific frame using enhanced report generator
                                     const response = await fetch('https://smoki-backend-rpi.onrender.com/api/stream/generate-report', {
                                       method: 'POST',
                                       headers: {
@@ -1624,6 +1643,7 @@ function Dashboard() {
                                       },
                                       body: JSON.stringify({
                                         report_type: 'vehicle_violation',
+                                        violation_id: vehicle.latest_violation_id ? vehicle.latest_violation_id.toString() : null,
                                         vehicle_data: {
                                           plate: vehicle.plate,
                                           vehicleType: vehicle.vehicleType,
@@ -1638,16 +1658,11 @@ function Dashboard() {
                                     if (response.ok) {
                                       const result = await response.json();
                                       if (result.success) {
-                                        // Download the report
-                                        const downloadUrl = `https://smoki-backend-rpi.onrender.com/api/stream/reports/${result.report_id}/download`;
-                                        const link = document.createElement('a');
-                                        link.href = downloadUrl;
-                                        link.download = `Vehicle_Report_${vehicle.plate}_${result.report_id}.html`;
-                                        document.body.appendChild(link);
-                                        link.click();
-                                        document.body.removeChild(link);
+                                        // Open the enhanced report with evidence gallery in a new tab
+                                        const reportUrl = `https://smoki-backend-rpi.onrender.com/api/stream/reports/${result.report_id}`;
+                                        window.open(reportUrl, '_blank');
                                         
-                                        showToast(`Vehicle report downloaded: ${vehicle.plate}_${result.report_id}.html`, 'success');
+                                        showToast(`Vehicle report opened: ${vehicle.plate}`, 'success');
                                       } else {
                                         throw new Error(result.message || 'Report generation failed');
                                       }
@@ -1659,7 +1674,7 @@ function Dashboard() {
                                     showToast('Failed to generate vehicle report', 'error');
                                   }
                                 }}
-                                title="Generate HTML report for this vehicle violation"
+                                title="Generate and view enhanced HTML report with evidence gallery for this vehicle"
                               >
                                 Report
                               </button>

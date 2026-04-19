@@ -18,6 +18,7 @@ import sys
 sys.path.insert(0, '../postgre')
 from database import insert_vehicle_detection_from_rpi, register_vehicle, create_violation, create_notification
 from image_cropper import DetectionImageCropper
+from frame_storage import frame_storage
 
 # Import report generator
 from report_generator import SMOKiReportGenerator
@@ -29,6 +30,8 @@ class StreamManager:
         self.latest_frame = None
         self.frame_buffer = deque(maxlen=30)  # Reduced buffer size for faster updates
         self.latest_metadata = None  # Store latest detection metadata
+        self.latest_detections = []  # Store latest detections
+        self.latest_violations = []  # Store latest violations
         self.lock = threading.Lock()
         self.fps = 0
         self.frame_count = 0
@@ -42,6 +45,9 @@ class StreamManager:
                 self.frame_buffer.append(frame_data)
                 if metadata:
                     self.latest_metadata = metadata
+                    # Extract detections and violations from metadata
+                    self.latest_detections = metadata.get('detections', [])
+                    self.latest_violations = metadata.get('violations', [])
                 self.frame_count += 1
                 
                 # Calculate FPS
@@ -59,6 +65,11 @@ class StreamManager:
         """Get latest frame"""
         with self.lock:
             return self.latest_frame
+    
+    def get_latest_violations(self):
+        """Get latest violations"""
+        with self.lock:
+            return self.latest_violations.copy() if self.latest_violations else []
     
     def get_mjpeg_stream(self):
         """Generate MJPEG stream at 60 FPS"""
@@ -104,6 +115,17 @@ async def process_detections(frame_data: bytes, metadata: dict):
         
         print(f"[DETECTION] Processing {vehicle_count} vehicles, {plate_count} plates, {smoke_count} smoke detections")
         
+        # Save frame locally for later retrieval
+        frame_path = frame_storage.save_detection_frame(
+            frame_data=frame_data,
+            timestamp=timestamp_dt,
+            detections=detections,
+            metadata=metadata
+        )
+        
+        if frame_path:
+            print(f"[FRAME_STORAGE] Saved detection frame: {os.path.basename(frame_path)}")
+        
         # Always save detection data to database (even if no detections for monitoring)
         result = insert_vehicle_detection_from_rpi(
             timestamp=timestamp_dt,
@@ -116,17 +138,104 @@ async def process_detections(frame_data: bytes, metadata: dict):
         
         if result:
             print(f"[DB] Saved detection: ID={result['id']}, detections={result['detections_count']}")
+            detection_id = result['id']  # Store detection ID for linking violations
             
-            # Create targeted violations only for vehicles with readable plates and smoke
-            if smoke_count > 0:
-                await create_targeted_violations(detections, location, timestamp_dt, frame_data)
+            # Check if violations are already provided by laptop_snap.py
+            provided_violations = metadata.get('violations', [])
+            
+            if provided_violations:
+                print(f"[VIOLATION] Found {len(provided_violations)} pre-detected violations from laptop_snap.py")
+                # Process violations that were already detected by laptop_snap.py
+                await process_laptop_snap_violations(provided_violations, location, timestamp_dt, frame_data, detection_id)
+            elif smoke_count > 0:
+                print(f"[VIOLATION] No pre-detected violations, using backend detection logic")
+                # Fall back to backend violation detection (creates PENDING violations)
+                await create_targeted_violations(detections, location, timestamp_dt, frame_data, detection_id)
             
     except Exception as e:
         print(f"[ERROR] Processing detections: {e}")
         import traceback
         traceback.print_exc()
 
-async def create_targeted_violations(detections: list, location: str, timestamp: datetime, frame_data: bytes):
+async def process_laptop_snap_violations(violations: list, location: str, timestamp: datetime, frame_data: bytes, detection_id: int):
+    """Process violations that were already detected by laptop_snap.py - create as APPROVED"""
+    try:
+        print(f"[LAPTOP_SNAP] Processing {len(violations)} pre-detected violations")
+        
+        for i, violation in enumerate(violations):
+            license_plate = violation.get('license_plate', 'UNKNOWN')
+            vehicle_type = violation.get('vehicle_type', 'unknown')
+            smoke_type = violation.get('smoke_type', 'smoke')
+            distance = violation.get('distance', 0)
+            has_readable_plate = violation.get('has_readable_plate', False)
+            vehicle_confidence = violation.get('vehicle_confidence', 0.0)
+            smoke_confidence = violation.get('smoke_confidence', 0.0)
+            ocr_confidence = violation.get('ocr_confidence', 0.0)
+            
+            print(f"[LAPTOP_SNAP] Violation {i+1}: {license_plate} ({vehicle_type}) - {distance:.1f}px from {smoke_type}")
+            
+            # Register vehicle in database
+            vehicle_record = register_vehicle(license_plate, vehicle_type)
+            
+            if vehicle_record:
+                # Create PENDING violation (auto_approve=False for user approval)
+                violation_record = create_violation(
+                    vehicle_id=vehicle_record['id'],
+                    detection_id=detection_id,
+                    violation_type="smoke_emission",
+                    severity="warning" if smoke_confidence < 0.7 else "critical",
+                    description=f"Smoke emission violation detected by laptop_snap.py: {vehicle_type} {license_plate} at {location}. Smoke detected {distance:.1f}px from vehicle (confidence: {smoke_confidence:.2f}). {'License plate readable' if has_readable_plate else 'License plate unreadable'} (OCR confidence: {ocr_confidence:.2f}).",
+                    auto_approve=False  # Require user approval for laptop_snap violations
+                )
+                
+                if violation_record:
+                    print(f"[LAPTOP_SNAP] ✅ Created PENDING violation ID={violation_record['id']} for {license_plate} - requires user approval")
+                    
+                    # Check if evidence file exists and copy it to backend
+                    evidence_path = violation.get('evidence_path')
+                    if evidence_path and os.path.exists(evidence_path):
+                        try:
+                            # Copy evidence file to backend detection_frames directory
+                            import shutil
+                            backend_evidence_dir = "backend/detection_frames"
+                            os.makedirs(backend_evidence_dir, exist_ok=True)
+                            
+                            evidence_filename = os.path.basename(evidence_path)
+                            backend_evidence_path = os.path.join(backend_evidence_dir, evidence_filename)
+                            
+                            shutil.copy2(evidence_path, backend_evidence_path)
+                            print(f"[LAPTOP_SNAP] 📸 Copied evidence: {evidence_path} → {backend_evidence_path}")
+                            
+                        except Exception as copy_error:
+                            print(f"[LAPTOP_SNAP] ⚠️ Could not copy evidence file: {copy_error}")
+                    
+                    # Create approval notification for pending violation - skip for test plates
+                    if license_plate not in ['ABC123', 'TEST123', 'DEMO123', 'SAMPLE123']:
+                        notification = create_notification(
+                            violation_id=violation_record['id'],
+                            title=f"Violation Detected: {license_plate}",
+                            message=f"Smoke emission detected from {vehicle_type} {license_plate} at {location}. Distance: {distance:.1f}px. Evidence available for review. Please approve/reject this violation.",
+                            notification_type="violation_approval"
+                        )
+                        
+                        if notification:
+                            print(f"[LAPTOP_SNAP] 📢 Created approval notification ID={notification['id']} for {license_plate}")
+                    else:
+                        print(f"[LAPTOP_SNAP] Skipped notification for test plate: {license_plate}")
+                else:
+                    print(f"[LAPTOP_SNAP] ❌ Failed to create violation for {license_plate}")
+            else:
+                print(f"[LAPTOP_SNAP] ❌ Failed to register vehicle {license_plate}")
+        
+        print(f"[LAPTOP_SNAP] ✅ Processed {len(violations)} violations from laptop_snap.py")
+        
+    except Exception as e:
+        print(f"[ERROR] Processing laptop_snap violations: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+async def create_targeted_violations(detections: list, location: str, timestamp: datetime, frame_data: bytes, detection_id: int):
     """Create violations only for vehicles that have both smoke detection and readable license plates"""
     try:
         # Initialize image cropper
@@ -189,19 +298,24 @@ async def create_targeted_violations(detections: list, location: str, timestamp:
             else:
                 print(f"[VIOLATION] ❌ Skipping plate: '{plate_text}' (confidence: {ocr_confidence:.2f}) - not readable enough")
         
-        # If no readable plates found, create OCR failure notification and exit
+        # If no readable plates found, create OCR failure notification for manual review
         if not readable_plates:
             print(f"[VIOLATION] No readable license plates found - creating OCR failure notification")
             
-            ocr_failure_notification = create_notification(
-                violation_id=None,
-                title="OCR Detection Issue",
-                message=f"Smoke emission detected with {len(vehicle_detections)} vehicle(s) at {location}, but no license plates could be read clearly. This may indicate OCR failure or poor image quality. Manual review recommended.",
-                notification_type="ocr_failure"
-            )
+            # Count vehicles detected
+            vehicle_count = len([d for d in detections if d.get('class_name', '').lower() in ['passenger', 'puv', 'service', 'two_wheel']])
             
-            if ocr_failure_notification:
-                print(f"[NOTIFICATION] Created OCR failure notification ID={ocr_failure_notification['id']}")
+            # Create OCR failure notification for manual review
+            if vehicle_count > 0:
+                ocr_notification = create_notification(
+                    violation_id=None,  # No violation created yet
+                    title="OCR Detection Issue",
+                    message=f"Smoke emission detected with {vehicle_count} vehicle(s) at {location}, but no license plates could be read clearly. This may indicate OCR failure or poor image quality. Manual review recommended.",
+                    notification_type="ocr_failure"
+                )
+                
+                if ocr_notification:
+                    print(f"[VIOLATION] 📢 Created OCR failure notification ID={ocr_notification['id']} for manual review")
             
             return
         
@@ -325,7 +439,7 @@ async def create_targeted_violations(detections: list, location: str, timestamp:
                 # Create PENDING violation (auto_approve=False)
                 violation = create_violation(
                     vehicle_id=vehicle_record['id'],
-                    detection_id=None,
+                    detection_id=detection_id,
                     violation_type="smoke_emission",
                     severity="warning" if violator['smoke_confidence'] < 0.7 else "critical",
                     description=f"Smoke emission violation: {violator['vehicle_type']} {violator['license_plate']} at {location}. Smoke detected {violator.get('smoke_vehicle_distance', 0):.1f}px from vehicle (confidence: {violator['smoke_confidence']:.2f}), license plate read with {violator['ocr_confidence']:.2f} confidence.",
@@ -381,16 +495,20 @@ async def create_targeted_violations(detections: list, location: str, timestamp:
                     except Exception as crop_error:
                         print(f"[CROP ERROR] Failed to crop vehicle image: {crop_error}")
                     
-                    # Create notification for user approval
-                    notification = create_notification(
-                        violation_id=violation['id'],
-                        title=f"Violation Detected: {violator['license_plate']}",
-                        message=f"Smoke emission detected from {violator['vehicle_type']} {violator['license_plate']} at {location}. OCR confidence: {violator['ocr_confidence']:.2f}. Vehicle image cropped for review. Please approve/reject this violation.",
-                        notification_type="violation_approval"
-                    )
-                    
-                    if notification:
-                        print(f"[NOTIFICATION] Created approval notification ID={notification['id']}")
+                    # Create notification for user approval (only for real violations)
+                    # Skip notification for test plates
+                    if violator['license_plate'] not in ['ABC123', 'TEST123', 'DEMO123', 'SAMPLE123']:
+                        notification = create_notification(
+                            violation_id=violation['id'],
+                            title=f"Violation Detected: {violator['license_plate']}",
+                            message=f"Smoke emission detected from {violator['vehicle_type']} {violator['license_plate']} at {location}. OCR confidence: {violator['ocr_confidence']:.2f}. Vehicle image cropped for review. Please approve/reject this violation.",
+                            notification_type="violation_approval"
+                        )
+                        
+                        if notification:
+                            print(f"[NOTIFICATION] Created approval notification ID={notification['id']} for {violator['license_plate']}")
+                    else:
+                        print(f"[NOTIFICATION] Skipped notification for test plate: {violator['license_plate']}")
         
         if not violating_vehicles:
             print(f"[VIOLATION] Smoke detected but no vehicles with readable license plates - no violations created")
@@ -623,16 +741,28 @@ async def get_plate_events_endpoint(limit: int = 50):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/generate-report")
-async def generate_detection_report(report_type: str = "general"):
+async def generate_detection_report(request_data: dict):
     """Generate HTML report with current frame and detection data"""
     try:
+        report_type = request_data.get("report_type", "general")
+        violation_id = request_data.get("violation_id")
+        vehicle_data = request_data.get("vehicle_data")
+        detection_timestamp = request_data.get("detection_timestamp")
+        detection_data = request_data.get("detection_data")
+        
         print(f"[REPORT] Generating {report_type} report...")
+        if violation_id:
+            print(f"[REPORT] Violation ID: {violation_id}")
+        if vehicle_data:
+            print(f"[REPORT] Vehicle data: {vehicle_data.get('plate', 'Unknown')}")
+        if detection_timestamp:
+            print(f"[REPORT] Detection timestamp: {detection_timestamp}")
         
         # Initialize report generator
         generator = SMOKiReportGenerator()
         
         # Generate report
-        result = generator.generate_report(report_type)
+        result = generator.generate_report(report_type, violation_id, vehicle_data, detection_timestamp, detection_data)
         
         if result['success']:
             print(f"[REPORT] Report generated successfully: {result['report_id']}")
@@ -642,6 +772,8 @@ async def generate_detection_report(report_type: str = "general"):
                 "report_path": result['report_path'],
                 "timestamp": result['timestamp'],
                 "detection_summary": result.get('detection_summary', {}),
+                "violation_id": violation_id,
+                "detection_timestamp": detection_timestamp,
                 "message": "Report generated successfully"
             }
         else:

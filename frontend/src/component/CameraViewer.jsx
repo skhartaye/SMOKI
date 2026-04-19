@@ -166,7 +166,7 @@ function CameraViewer() {
           `Report ID: ${result.report_id}\n` +
           `Generated: ${new Date().toLocaleString()}\n` +
           `Detections: ${smokeCount} smoke, ${vehicleCount} vehicles, ${plateCount} plates\n\n` +
-          `The report has been created and saved. Use the "View Report" button to open it.`
+          `The report has been created and is ready for download. Click "Download Report" to save the HTML file.`
         );
         
         // Optional: Show a toast notification if available
@@ -241,37 +241,30 @@ function CameraViewer() {
             </button>
           )}
           
-          {/* View Report button - only show when a report has been generated */}
+          {/* Download Report button - only show when a report has been generated */}
           {lastGeneratedReport && (
-            <>
-              <button 
-                onClick={() => {
-                  const reportUrl = `https://smoki-backend-rpi.onrender.com/api/stream/reports/${lastGeneratedReport.id}`;
-                  window.open(reportUrl, '_blank');
-                }}
-                className="control-btn view-report-btn"
-                title={`View report ${lastGeneratedReport.id} (generated at ${lastGeneratedReport.timestamp})`}
-              >
-                👁️ View Report
-              </button>
-              
-              <button 
-                onClick={() => {
-                  const downloadUrl = `https://smoki-backend-rpi.onrender.com/api/stream/reports/${lastGeneratedReport.id}/download`;
-                  // Create a temporary link to trigger download
-                  const link = document.createElement('a');
-                  link.href = downloadUrl;
-                  link.download = `${lastGeneratedReport.id}.html`;
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
-                }}
-                className="control-btn download-report-btn"
-                title={`Download report ${lastGeneratedReport.id} as HTML file`}
-              >
-                💾 Download HTML
-              </button>
-            </>
+            <button 
+              onClick={() => {
+                const downloadUrl = `https://smoki-backend-rpi.onrender.com/api/stream/reports/${lastGeneratedReport.id}/download`;
+                // Create a temporary link to trigger download
+                const link = document.createElement('a');
+                link.href = downloadUrl;
+                link.download = `${lastGeneratedReport.id}.html`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // Show success message
+                console.log(`📄 Downloading report: ${lastGeneratedReport.id}.html`);
+                if (window.showToast) {
+                  window.showToast(`Report ${lastGeneratedReport.id} downloaded successfully!`, 'success');
+                }
+              }}
+              className="control-btn download-report-btn"
+              title={`Download report ${lastGeneratedReport.id} as HTML file`}
+            >
+              📄 Download Report
+            </button>
           )}
           
           {/* Test button to verify direct URL works */}
