@@ -106,14 +106,24 @@ export default function NotificationRibbon() {
         const reportResponse = await fetchWithFallback('/api/stream/generate-report', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
+            'Content-Type': 'application/json',
           },
-          body: `report_type=violation_verification&violation_id=${violationId}`
+          body: JSON.stringify({
+            report_type: 'violation_verification',
+            violation_id: violationId
+          })
         });
 
         if (reportResponse.ok) {
           const reportResult = await reportResponse.json();
           console.log('Verification report generated:', reportResult);
+          
+          // Open the report in a new tab immediately
+          if (reportResult.report_id) {
+            const reportUrl = `https://smoki-backend-rpi.onrender.com/api/stream/reports/${reportResult.report_id}`;
+            window.open(reportUrl, '_blank');
+            console.log('Verification report opened in new tab:', reportUrl);
+          }
           
           // Update notification to show verification options
           setVisibleNotifications(prev => prev.map(notif => 
@@ -122,9 +132,11 @@ export default function NotificationRibbon() {
               : notif
           ));
           
-          console.log('Verification report ready. Please review and then approve/reject.');
         } else {
           console.error('Failed to generate verification report:', reportResponse.status);
+          const errorText = await reportResponse.text();
+          console.error('Error details:', errorText);
+          alert('Failed to generate verification report. Please try again.');
         }
       } else {
         // Step 2: Actually approve or reject after verification
