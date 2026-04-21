@@ -1,11 +1,22 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi import Response
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timezone, timedelta
 import sys
 import os
 sys.path.append('..')
+
+# Custom StaticFiles class with CORS headers
+class CORSStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        return response
 
 # Import database and auth functions
 from database import init_db_pool, create_default_users, get_user_by_username
@@ -19,6 +30,33 @@ from vehicles import router as vehicles_router
 from stream import router as stream_router
 
 app = FastAPI()
+
+# Mount static files for reports
+reports_dir = os.path.join(os.path.dirname(__file__), "reports")
+if os.path.exists(reports_dir):
+    app.mount("/reports", StaticFiles(directory=reports_dir), name="reports")
+    print(f"✓ Serving reports from: {reports_dir}")
+
+# Mount static files for backend evidence
+backend_evidence_dir = os.path.join(os.path.dirname(__file__), "detection_frames", "evidence")
+if os.path.exists(backend_evidence_dir):
+    app.mount("/evidence/backend", CORSStaticFiles(directory=backend_evidence_dir), name="backend_evidence")
+    print(f"✓ Serving backend evidence from: {backend_evidence_dir}")
+
+# Mount static files for ESP32 evidence
+# Try absolute path first (Windows development environment)
+esp32_evidence_dir_absolute = r"D:\embed\SMOKI\esp32\evidence"
+if os.path.exists(esp32_evidence_dir_absolute):
+    app.mount("/evidence/esp32", CORSStaticFiles(directory=esp32_evidence_dir_absolute), name="esp32_evidence")
+    print(f"✓ Serving ESP32 evidence from: {esp32_evidence_dir_absolute}")
+else:
+    # Fallback to relative path (production/other environments)
+    esp32_evidence_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "esp32", "evidence"))
+    if os.path.exists(esp32_evidence_dir):
+        app.mount("/evidence/esp32", CORSStaticFiles(directory=esp32_evidence_dir), name="esp32_evidence")
+        print(f"✓ Serving ESP32 evidence from: {esp32_evidence_dir}")
+    else:
+        print(f"⚠ ESP32 evidence directory not found: {esp32_evidence_dir}")
 
 # Include routers
 app.include_router(vehicles_router)
@@ -271,6 +309,52 @@ def add_sensor_data(data: SensorData):
             raise HTTPException(status_code=500, detail="Failed to insert data")
     except Exception as e:
         print(f"[SENSORS] Insert error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/sensors/data/{record_id}")
+def update_sensor_data_endpoint(record_id: int, data: SensorData, current_user: User = Depends(get_current_user)):
+    """Update a sensor reading (superadmin only)"""
+    try:
+        if current_user.role not in ['superadmin', 'admin']:
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        from database import update_sensor_data
+        result = update_sensor_data(
+            record_id=record_id,
+            temperature=data.temperature,
+            humidity=data.humidity,
+            pressure=data.pressure,
+            vocs=data.vocs,
+            nitrogen_dioxide=data.nitrogen_dioxide,
+            carbon_monoxide=data.carbon_monoxide,
+            pm25=data.pm25,
+            pm10=data.pm10
+        )
+        if result:
+            return {"success": True, "data": result}
+        else:
+            raise HTTPException(status_code=404, detail="Record not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[SENSORS] Update error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/sensors/data/{record_id}")
+def delete_sensor_data_endpoint(record_id: int, current_user: User = Depends(get_current_user)):
+    """Delete a sensor reading (superadmin only)"""
+    try:
+        if current_user.role not in ['superadmin', 'admin']:
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        from database import delete_sensor_data
+        success = delete_sensor_data(record_id)
+        if success:
+            return {"success": True, "message": f"Record {record_id} deleted"}
+        else:
+            raise HTTPException(status_code=404, detail="Record not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[SENSORS] Delete error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============ CORRELATION API ENDPOINTS ============

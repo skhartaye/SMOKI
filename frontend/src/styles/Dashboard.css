@@ -1197,17 +1197,26 @@ chatgpt-sidebar {
 .records-table-wrapper {
   background: white;
   border-radius: 8px;
-  overflow: hidden;
-  max-height: 500px;
-  overflow-y: auto;
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 500px;
 }
 
 .records-table {
   width: 100%;
+  min-width: 900px; /* prevents columns from squishing */
   border-collapse: collapse;
 }
 
+/* Lock the Actions column width */
+.records-table th:last-child,
+.records-table td:last-child {
+  min-width: 100px;
+  width: 100px;
+  white-space: nowrap;
+  text-align: center;
+  padding: 8px 6px;
+}
 .records-table thead {
   background: #d8d8d8;
   position: sticky;
@@ -2917,32 +2926,62 @@ chatgpt-sidebar {
   }
 }
 
+/* Action Buttons Container */
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: nowrap;
+  min-width: 80px;
+}
+
+/* Base Action Button */
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.action-btn svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+  flex-shrink: 0;
+}
+
 /* Delete Button */
-.delete-btn {
+.action-btn.delete-btn {
   background: #ff4444;
   color: white;
   border: none;
-  padding: 6px 12px;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 16px;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
 }
 
-.delete-btn:hover {
+.action-btn.delete-btn:hover {
   background: #cc0000;
-  transform: scale(1.1);
+  transform: scale(1.05);
 }
 
-.delete-btn:active {
+.action-btn.delete-btn:active {
   transform: scale(0.95);
 }
 
-.dashboard.dark-mode .delete-btn {
+.dashboard.dark-mode .action-btn.delete-btn {
   background: #d32f2f;
 }
 
-.dashboard.dark-mode .delete-btn:hover {
+.dashboard.dark-mode .action-btn.delete-btn:hover {
   background: #b71c1c;
 }
 
@@ -2967,6 +3006,16 @@ chatgpt-sidebar {
 }
 
 /* Create Action Button in Table Header */
+/* Actions th — keep label and New button on one line */
+.records-table th:last-child {
+  white-space: nowrap;
+  min-width: 110px;
+}
+
+.records-table th:last-child .create-action-btn {
+  vertical-align: middle;
+}
+
 .create-action-btn {
   background: #4CAF50;
   color: white;
@@ -2974,9 +3023,13 @@ chatgpt-sidebar {
   padding: 4px 10px;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 16px;
-  margin-left: 10px;
-  transition: all 0.3s ease;
+  font-size: 13px;
+  margin-left: 8px;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  vertical-align: middle;
 }
 
 .create-action-btn:hover {
@@ -2993,28 +3046,25 @@ chatgpt-sidebar {
 }
 
 /* Edit Button */
-.edit-btn {
+.action-btn.edit-btn {
   background: #2196F3;
   color: white;
   border: none;
-  padding: 6px 12px;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 16px;
-  margin-right: 8px;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
 }
 
-.edit-btn:hover {
+.action-btn.edit-btn:hover {
   background: #0b7dda;
-  transform: scale(1.1);
+  transform: scale(1.05);
 }
 
-.dashboard.dark-mode .edit-btn {
+.dashboard.dark-mode .action-btn.edit-btn {
   background: #1976D2;
 }
 
-.dashboard.dark-mode .edit-btn:hover {
+.dashboard.dark-mode .action-btn.edit-btn:hover {
   background: #1565C0;
 }
 

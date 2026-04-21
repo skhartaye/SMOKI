@@ -681,7 +681,38 @@ function Dashboard() {
         headers['Authorization'] = `Bearer ${token}`;
       }
       
-      // Try the ranking endpoint first (public) with cache busting
+      // First, load locally approved violations from localStorage
+      const localViolations = JSON.parse(localStorage.getItem('approved_violations') || '[]');
+      
+      // Convert local violations to ranking format
+      const localRanking = {};
+      localViolations.forEach(violation => {
+        const plate = violation.license_plate;
+        if (!localRanking[plate]) {
+          localRanking[plate] = {
+            license_plate: plate,
+            violation_count: 0,
+            total_emissions: 0,
+            vehicle_type: violation.vehicle_type || 'unknown',
+            last_violation: violation.timestamp,
+            violations: []
+          };
+        }
+        localRanking[plate].violation_count++;
+        localRanking[plate].total_emissions += (violation.confidence || 0.5) * 100;
+        localRanking[plate].violations.push(violation);
+        
+        // Update last violation if this one is more recent
+        if (new Date(violation.timestamp) > new Date(localRanking[plate].last_violation)) {
+          localRanking[plate].last_violation = violation.timestamp;
+        }
+      });
+      
+      // Convert to array and sort by violation count
+      const localRankingArray = Object.values(localRanking)
+        .sort((a, b) => b.violation_count - a.violation_count);
+      
+      // Try the ranking endpoint (public) with cache busting
       try {
         const cacheBuster = Date.now();
         const response = await fetchWithFallback(`/api/vehicles/ranking?_cb=${cacheBuster}`);
@@ -689,17 +720,45 @@ function Dashboard() {
         if (response.status === 200) {
           const result = await response.json();
           if (result.success && result.data && result.data.length > 0) {
-            setVehicleRanking(result.data);
+            // Merge API data with local data
+            const mergedRanking = [...result.data];
+            
+            // Add local violations that aren't in API data
+            localRankingArray.forEach(localItem => {
+              const existingIndex = mergedRanking.findIndex(
+                item => item.license_plate === localItem.license_plate
+              );
+              
+              if (existingIndex >= 0) {
+                // Merge with existing
+                mergedRanking[existingIndex].violation_count += localItem.violation_count;
+                mergedRanking[existingIndex].total_emissions += localItem.total_emissions;
+              } else {
+                // Add new
+                mergedRanking.push(localItem);
+              }
+            });
+            
+            // Sort merged data
+            mergedRanking.sort((a, b) => b.violation_count - a.violation_count);
+            
+            setVehicleRanking(mergedRanking);
+            console.log(`[RANKING] Loaded ${mergedRanking.length} vehicles (${localRankingArray.length} from local storage)`);
             return;
           }
         }
       } catch (error) {
-        console.log('Ranking endpoint not available');
+        console.log('Ranking endpoint not available, using local data only');
       }
       
-      // No real ranking data available - show empty state
-      console.log(`[RANKING] No real ranking data available - setting empty array`);
-      setVehicleRanking([]);
+      // Use only local data if API is not available
+      if (localRankingArray.length > 0) {
+        setVehicleRanking(localRankingArray);
+        console.log(`[RANKING] Loaded ${localRankingArray.length} vehicles from local storage`);
+      } else {
+        console.log(`[RANKING] No ranking data available`);
+        setVehicleRanking([]);
+      }
       
     } catch (error) {
       console.log('Ranking fetch failed:', error.message);
@@ -1597,11 +1656,11 @@ function Dashboard() {
                         }
                         
                         const realRankingFormatted = vehicleRanking.slice(0, 5).map((vehicle, index) => ({
-                          id: `real_${vehicle.id}`,
+                          id: `real_${vehicle.id || vehicle.license_plate}`,
                           plate: vehicle.license_plate,
-                          violations: vehicle.violations,
-                          status: vehicle.violations > 10 ? 'critical' : vehicle.violations > 5 ? 'warning' : 'caution',
-                          lastSeen: new Date(vehicle.last_detected).toLocaleTimeString(),
+                          violations: vehicle.violation_count || (Array.isArray(vehicle.violations) ? vehicle.violations.length : vehicle.violations) || 0,
+                          status: (vehicle.violation_count || 0) > 10 ? 'critical' : (vehicle.violation_count || 0) > 5 ? 'warning' : 'caution',
+                          lastSeen: vehicle.last_detected ? new Date(vehicle.last_detected).toLocaleTimeString() : (vehicle.last_violation ? new Date(vehicle.last_violation).toLocaleTimeString() : 'Unknown'),
                           vehicleType: vehicle.vehicle_type || 'Vehicle',
                           smokeLevel: vehicle.smoke_detected ? 'High' : 'Low',
                           latest_violation_id: vehicle.latest_violation_id,
@@ -1614,7 +1673,9 @@ function Dashboard() {
                             <div className="ranking-details">
                               <div className="ranking-plate">{vehicle.plate}</div>
                               <div className="ranking-info">
-                                <span className="violations-count">{vehicle.violations} violations</span>
+                                <span className="violations-count">
+                                  {typeof vehicle.violations === 'number' ? vehicle.violations : 0} violations
+                                </span>
                                 <span className="vehicle-type">{vehicle.vehicleType}</span>
                                 <span className="last-seen">{vehicle.lastSeen}</span>
                               </div>
@@ -2214,18 +2275,31 @@ function Dashboard() {
                     <h2>Data Logs</h2>
                     <p>Near real-time and historical sensor measurements</p>
                   </div>
-                  <button 
-                    className="download-csv-btn"
-                    onClick={downloadDataAsCSV}
-                    title="Download all data as CSV"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                      <polyline points="7 10 12 15 17 10"></polyline>
-                      <line x1="12" y1="15" x2="12" y2="3"></line>
-                    </svg>
-                    Download CSV
-                  </button>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    {userRole === 'superadmin' && (
+                      <button
+                        className="create-action-btn"
+                        onClick={() => setShowCreateModal(true)}
+                        title="Create new record"
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '14px' }}
+                      >
+                        <PlusIcon />
+                        <span>New</span>
+                      </button>
+                    )}
+                    <button 
+                      className="download-csv-btn"
+                      onClick={downloadDataAsCSV}
+                      title="Download all data as CSV"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                      </svg>
+                      Download CSV
+                    </button>
+                  </div>
                 </div>
                 
                 {records.length === 0 ? (
@@ -2251,16 +2325,8 @@ function Dashboard() {
                             <th>AQI (PH BASED)</th>
                             <th>Status</th>
                             {userRole === 'superadmin' && (
-                              <th>
+                              <th style={{ minWidth: '100px', textAlign: 'center' }}>
                                 Actions
-                                <button 
-                                  className="create-action-btn"
-                                  onClick={() => setShowCreateModal(true)}
-                                  title="Create new record"
-                                >
-                                  <PlusIcon />
-                                  <span>New</span>
-                                </button>
                               </th>
                             )}
                           </tr>
@@ -2313,21 +2379,29 @@ function Dashboard() {
                                 </span>
                               </td>
                               {userRole === 'superadmin' && (
-                                <td>
-                                  <div className="action-buttons">
+                                <td style={{ whiteSpace: 'nowrap', width: '90px', minWidth: '90px', padding: '8px 6px' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'row', gap: '6px', alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap' }}>
                                     <button 
-                                      className="action-btn edit-btn"
                                       onClick={() => openEditModal(record)}
                                       title="Edit record"
+                                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', background: '#2196F3', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', flexShrink: 0 }}
                                     >
-                                      <EditIcon />
+                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                      </svg>
                                     </button>
                                     <button 
-                                      className="action-btn delete-btn"
                                       onClick={() => handleDeleteRecord(record.id)}
                                       title="Delete record"
+                                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', background: '#f44336', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', flexShrink: 0 }}
                                     >
-                                      <DeleteIcon />
+                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                                      </svg>
                                     </button>
                                   </div>
                                 </td>

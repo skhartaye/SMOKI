@@ -1,8 +1,10 @@
 /* Action Buttons - Minimalistic iOS Style */
 .action-buttons {
   display: flex;
-  gap: 12px;
+  gap: 6px;
   align-items: center;
+  flex-wrap: nowrap;
+  justify-content: center;
 }
 
 .action-btn {
