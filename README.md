@@ -1,6 +1,8 @@
-# 💨 SMOKi - Air Quality Monitoring System
+# 💨 SMOKi - Design and Development of an IoT-Driven Vehicle Smoke Emission Classification System Using Convolutional Neural Network with 
+Data Analytics Management
 
-An IoT-based air quality monitoring system that collects sensor data from ESP32 devices and displays real-time environmental metrics through a web dashboard.
+Design and Development of an IoT-Driven Vehicle Smoke Emission Classification System Using Convolutional Neural Network with 
+Data Analytics Management
 
 **Repository**: [skhartaye/SMOKI](https://github.com/skhartaye/SMOKI)  
 **Web Design**: [miiikunnn/SMOKi_web_design_3](https://github.com/miiikunnn/SMOKi_web_design_3)
