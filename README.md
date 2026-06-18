@@ -1,5 +1,4 @@
-# 💨 SMOKi - Design and Development of an IoT-Driven Vehicle Smoke Emission Classification System Using Convolutional Neural Network with 
-Data Analytics Management
+# 💨 SMOKi - Design and Development of an IoT-Driven Vehicle Smoke Emission Classification System Using Convolutional Neural Network with Data Analytics Management
 
 Design and Development of an IoT-Driven Vehicle Smoke Emission Classification System Using Convolutional Neural Network with 
 Data Analytics Management
